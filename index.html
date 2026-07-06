@@ -255,11 +255,12 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 window.addEventListener('error', e=>{
   const b=document.getElementById('errBanner');
   b.style.display='block';
-  b.textContent='ENGINE FAULT: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
+  b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
+const BUILD_TAG='v20i';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
-  b.style.display='block'; b.textContent='ENGINE FAULT: '+msg;
+  b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
   throw new Error(msg);
 }
 
@@ -1798,7 +1799,7 @@ function itemWorldJS(x,y,z,ry,pitch){ const q=rotXJS(x,y,z,pitch); return rotYJS
 
 // world-side verbs — tap E/□: set down · grab (sipping ammo from it) · else reload from the rucksack
 let _hoverT=0;
-const _hoverCache={idx:-1,t:0};
+const _hoverCache={idx:-1,t:0,w:null};   // w: the wrapper we saw — identity guard
 let _promptLast=null;
 function setPrompt(prompt,html,show){
   const sig=show?html:'';
@@ -1811,24 +1812,32 @@ function updateInteract(dt){
   // the crosshair probe is a full world march — 12Hz is plenty for a prompt;
   // real interactions re-probe fresh below
   _hoverT-=dt;
-  if(heldWorld){ _hoverCache.idx=-1; _hoverCache.t=0; }
+  if(heldWorld){ _hoverCache.idx=-1; _hoverCache.t=0; _hoverCache.w=null; }
   else if(_hoverT<=0 || pressed('interact')){
     _hoverT=0.08;
     const h=itemUnderCrosshair(3.2);
     _hoverCache.idx=h.idx; _hoverCache.t=h.t;
+    _hoverCache.w=h.idx>=0?worldItems[h.idx]:null;
+  }
+  // the cache holds an INDEX into a mutable array — anything (pickup, sip,
+  // item cap, despawn) can shift or remove entries between probes. Only trust
+  // it if the same wrapper still sits at that index; otherwise drop the hover
+  // and re-probe next frame.
+  if(_hoverCache.idx>=0 && worldItems[_hoverCache.idx]!==_hoverCache.w){
+    _hoverCache.idx=-1; _hoverCache.w=null; _hoverT=0;
   }
   const hover=_hoverCache;
   const prompt=document.getElementById('interactPrompt');
   if(heldWorld){
     setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow',true);
-  }else if(hover.idx>=0){
+  }else if(hover.idx>=0 && worldItems[hover.idx]){
     const it=worldItems[hover.idx].item;
     setPrompt(prompt,'<b>E</b> grab '+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
   }else setPrompt(prompt,'',false);
 
   if(pressed('interact')){
     if(heldWorld){ releaseHeld(false); }
-    else if(hover.idx>=0){ grabWorld(hover.idx, clamp(hover.t,1.2,2.6), 'hands'); sipFromHeld(); }
+    else if(hover.idx>=0 && worldItems[hover.idx]){ grabWorld(hover.idx, clamp(hover.t,1.2,2.6), 'hands'); sipFromHeld(); }
     else tryReload();
   }
 }
@@ -3048,8 +3057,14 @@ function menuNav(){
 let lastT=performance.now(), fpsEma=60, hudT=0;
 const renderItemsBuf=[];
 
+const FRAME_MS=1000/60;
+let lastRender=0;
 function frame(){
   const now=performance.now();
+  // 60fps cap: cheaper, cooler, steadier. Phase-carried so high-refresh
+  // displays average a true 60 instead of snapping to a divisor.
+  if(now-lastRender<FRAME_MS-0.5){ requestAnimationFrame(frame); return; }
+  lastRender=Math.max(lastRender+FRAME_MS, now-FRAME_MS);
   const dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
   fpsEma=lerp(fpsEma,1/Math.max(dt,1e-4),0.04);
   pollGamepad();
