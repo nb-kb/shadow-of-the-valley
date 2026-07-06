@@ -274,7 +274,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20n';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20o';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -883,6 +883,21 @@ vec2 map(vec3 p){
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0,-0.215), uAim);
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, 0.46-uBob.z);
       float g=sdGun(vl,true);
+      // the rack, worn: same column data as the menu prop, first-person scale.
+      // lengths compressed and clamped so a legendary chain reads long without
+      // swallowing the screen; wing columns hug tighter than the menu fan.
+      for(int ci=0;ci<8;ci++){
+        if(ci>=uColCount) break;
+        float side=uCols[ci].y*0.026;
+        float len=0.10+min(uCols[ci].x*0.022, 0.24);       // deeper column = longer gun
+        vec3 a=vec3(side,0.075,0.18), b=vec3(side,0.075,0.18+len);
+        float bd=sdCapsule(vl, a, b, ci==0?0.021:0.014);
+        if(uCols[ci].w>0.5){                                // fitted muzzle: the collar
+          float mz=sdCapsule(vl, b, b+vec3(0.0,0.0,0.03), ci==0?0.029:0.021);
+          bd=min(bd,mz);
+        }
+        if(bd<g) g=bd;
+      }
       if(g<res.x) res=vec2(g,20.0);
       float arm=sdCapsule(vl, vec3(0.14,-0.30,-0.36), vec3(0.005,-0.10,-0.055), 0.052);
       if(arm<res.x) res=vec2(arm,21.0);
@@ -3145,6 +3160,7 @@ function refreshInvUI(){
   if(isInventoryOpen) renderGrid('bagGrid',bagGrid,BAG_COLS,BAG_ROWS,0);
   if(isToolMenuOpen){
     if(activeTool){
+      activeTool._cols=null;                              // rack may have changed shape
       activeTool._res=resolveTool(activeTool);
       const sig=rackSig(activeTool);
       if(activeTool._seqSig!==undefined && activeTool._seqSig!==sig)
@@ -3643,9 +3659,9 @@ function frame(){
   gl.uniform1f(U.fov,playerPos.currentFov*(1-0.22*menuAnim));
   gl.uniform1f(U.uMenu,menuAnim);
   gl.uniform1i(U.uMenuMode,menuMode);
-  // rack presentation: column silhouettes under the HTML overlay
-  if(menuAnim>0.001 && menuMode===2 && activeTool){
-    const cols=toolColumns(activeTool);
+  // rack presentation: menu prop AND the held viewmodel share this data
+  if(activeTool){
+    const cols=activeTool._cols||(activeTool._cols=toolColumns(activeTool));   // no per-frame churn
     const n=Math.min(8,cols.length);
     gl.uniform1i(U.uColCount,n);
     for(let i=0;i<n;i++){
