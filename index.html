@@ -1080,8 +1080,9 @@ U.decN     = locArray('decalNorm',    RLIM.DECALS);
 U.dynP     = locArray('dynPos',       RLIM.DYN);
 U.dynC     = locArray('dynCol',       RLIM.DYN);
 
+let dynScale=1.0, dynResT=0;            // auto resolution: rides under the Optics Dial
 function resize(){
-  const s=P('renderScale');
+  const s=P('renderScale')*Math.round(dynScale*20)/20;   // quantized: no per-frame canvas churn
   const w=Math.max(2,Math.floor(window.innerWidth * Math.min(window.devicePixelRatio,1.5) * s));
   const h=Math.max(2,Math.floor(window.innerHeight* Math.min(window.devicePixelRatio,1.5) * s));
   if(canvas.width!==w||canvas.height!==h){
@@ -1746,12 +1747,15 @@ function dropItemToWorld(item,dist,vy){
   spawnWorldItem(item, playerPos.x+f.x*dist, playerPos.y+1.0, playerPos.z+f.z*dist,
     new Vec3(f.x*2.5, vy||1.5, f.z*2.5));
 }
-function camForward(){
+const _camFwd=new Vec3(0,0,1);
+function camForward(){                                 // scratch — never hold across frames
   const cy=Math.cos(cameraYaw),sy=Math.sin(cameraYaw);
   const cp=Math.cos(cameraPitch),sp=Math.sin(cameraPitch);
-  return new Vec3(sy*cp,sp,cy*cp);
+  _camFwd.x=sy*cp; _camFwd.y=sp; _camFwd.z=cy*cp;
+  return _camFwd;
 }
-function camPos(){ return new Vec3(playerPos.x+Math.cos(cameraYaw)*playerPos.currentLean,
+const _camPosV=new Vec3(0,0,0);
+function camPos(){ return _camPosV.set(playerPos.x+Math.cos(cameraYaw)*playerPos.currentLean,
   playerPos.y+playerPos.baseHeight, playerPos.z-Math.sin(cameraYaw)*playerPos.currentLean); }
 function camBasis(){
   const cy=Math.cos(cameraYaw),sy=Math.sin(cameraYaw);
@@ -1793,17 +1797,34 @@ function itemLocalJS(x,y,z,ry,pitch){ const q=rotYJS(x,y,z,-ry); return rotXJS(q
 function itemWorldJS(x,y,z,ry,pitch){ const q=rotXJS(x,y,z,pitch); return rotYJS(q.x,q.y,q.z,ry); }
 
 // world-side verbs — tap E/□: set down · grab (sipping ammo from it) · else reload from the rucksack
+let _hoverT=0;
+const _hoverCache={idx:-1,t:0};
+let _promptLast=null;
+function setPrompt(prompt,html,show){
+  const sig=show?html:'';
+  if(sig===_promptLast) return;                        // identical -> zero DOM churn
+  _promptLast=sig;
+  if(show){ prompt.innerHTML=html; prompt.classList.add('show'); }
+  else prompt.classList.remove('show');
+}
 function updateInteract(dt){
-  const hover=heldWorld?{idx:-1,t:0}:itemUnderCrosshair(3.2);
+  // the crosshair probe is a full world march — 12Hz is plenty for a prompt;
+  // real interactions re-probe fresh below
+  _hoverT-=dt;
+  if(heldWorld){ _hoverCache.idx=-1; _hoverCache.t=0; }
+  else if(_hoverT<=0 || pressed('interact')){
+    _hoverT=0.08;
+    const h=itemUnderCrosshair(3.2);
+    _hoverCache.idx=h.idx; _hoverCache.t=h.t;
+  }
+  const hover=_hoverCache;
   const prompt=document.getElementById('interactPrompt');
   if(heldWorld){
-    prompt.innerHTML='<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow';
-    prompt.classList.add('show');
+    setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow',true);
   }else if(hover.idx>=0){
     const it=worldItems[hover.idx].item;
-    prompt.innerHTML='<b>E</b> grab '+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':'');
-    prompt.classList.add('show');
-  }else prompt.classList.remove('show');
+    setPrompt(prompt,'<b>E</b> grab '+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
+  }else setPrompt(prompt,'',false);
 
   if(pressed('interact')){
     if(heldWorld){ releaseHeld(false); }
@@ -1992,8 +2013,10 @@ function emitProjectile(owner,origin,dir,shot,base){
 function toolNoise(silent){ return silent?4:22; }
 
 let fireCooldown=0, reloadTimer=0;
+let BARE_RES=null;
+function bareRes(){ return BARE_RES||(BARE_RES=resolveTool(null)); }
 function tryFirePlayer(dt){
-  const res=activeTool?activeTool._res:resolveTool(null);
+  const res=activeTool?activeTool._res:bareRes();
   const wantFire=down('fire');
   const shot=res.shots[activeTool?activeTool.cycle%res.shots.length:0];
 
@@ -2954,7 +2977,7 @@ function updatePlayer(dt){
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
   // aim fov
-  const res=activeTool?(activeTool._res||(activeTool._res=resolveTool(activeTool))):resolveTool(null);
+  const res=activeTool?(activeTool._res||(activeTool._res=resolveTool(activeTool))):bareRes();
   const targetFov=playerPos.isAiming?res.fovAim:1.0;
   playerPos.currentFov+=(targetFov-playerPos.currentFov)*14*dt;
 
@@ -3168,7 +3191,8 @@ function frame(){
     gl.uniform4f(U.decP[i],decals[i].pos.x,decals[i].pos.y,decals[i].pos.z,decals[i].size);
     gl.uniform3f(U.decN[i],decals[i].norm.x,decals[i].norm.y,decals[i].norm.z);
   }
-  const dsorted=[...dynLights].sort((a,b)=>b.intensity-a.intensity);
+  dynLights.sort((a,b)=>b.intensity-a.intensity);     // in place — order carries no other meaning
+  const dsorted=dynLights;
   const nd=Math.min(RLIM.DYN,dsorted.length);
   gl.uniform1i(U.uEditCount,SDF_EDITS.length);
   for(let i=0;i<SDF_EDITS.length;i++){
@@ -3183,6 +3207,16 @@ function frame(){
   }
 
   gl.drawArrays(gl.TRIANGLES,0,6);
+
+  // ---- auto resolution: if the GPU can't keep pace, shrink the ray count ----
+  dynResT-=dt;
+  if(dynResT<=0 && gameState==='play'){
+    dynResT=0.5;
+    const before=Math.round(dynScale*20)/20;
+    if(fpsEma<50) dynScale=Math.max(0.55,dynScale*0.92);       // losing pace: shed pixels
+    else if(fpsEma>58) dynScale=Math.min(1.0,dynScale*1.04);   // headroom: claw them back
+    if(Math.round(dynScale*20)/20!==before) resize();
+  }
 
   // ---- HUD ----
   hudT-=dt;
