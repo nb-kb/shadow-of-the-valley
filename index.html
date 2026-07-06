@@ -48,6 +48,9 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #toolReadout{position:absolute;right:14px;bottom:14px;z-index:10;pointer-events:none;text-align:right;padding:10px 12px;}
 #toolReadout .big{font-size:13px;letter-spacing:.2em;color:var(--bone);}
 #toolReadout .sub{font-size:10px;letter-spacing:.16em;color:var(--dust);margin-top:3px;}
+.seqVent{opacity:.38;filter:grayscale(1);}
+.seqCost{margin-left:5px;color:#cda54a;font-size:9px;letter-spacing:.05em;}
+#trPips .on{color:var(--gate);} #trPips .off{color:var(--dust);opacity:.7;} #trPips span{margin-left:7px;}
 #chargeMeter{width:130px;height:5px;background:#000;border:1px solid var(--line);margin-top:5px;margin-left:auto;}
 #chargeFill{height:100%;background:var(--charge);width:100%;}
 
@@ -159,6 +162,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="toolReadout" class="panel">
   <div class="big" id="trName">—</div>
   <div class="sub" id="trMode">BARE</div>
+  <div class="sub" id="trPips"></div>
   <div class="sub"><span id="trAmmo">0/0</span></div>
   <div id="chargeMeter"><div id="chargeFill"></div></div>
 </div>
@@ -564,6 +568,8 @@ uniform vec4  decalPos[${RLIM.DECALS}];      // xyz + size
 uniform vec3  decalNorm[${RLIM.DECALS}];
 
 uniform int   dynCount;
+uniform vec4  uEdits[16];   // xyz center, w radius — w<0 carves, w>0 adds
+uniform int   uEditCount;
 uniform vec4  dynPos[${RLIM.DYN}];           // xyz + intensity
 uniform vec3  dynCol[${RLIM.DYN}];
 
@@ -714,6 +720,13 @@ vec2 mapStatic(vec3 p){
   }
   float beacon=sdCapsule(p, vec3(uGatePos.x,0.0,uGatePos.z), vec3(uGatePos.x,70.0,uGatePos.z), 0.30);
   if(beacon<res.x) res=vec2(beacon,7.0);
+  for(int i=0;i<16;i++){                          // world edits — keep in lockstep with applySdfEditsJS
+    if(i>=uEditCount) break;
+    vec4 ed=uEdits[i];
+    float sph=length(p-ed.xyz)-abs(ed.w);
+    if(ed.w<0.0){ res.x=max(res.x,-sph); }
+    else if(sph<res.x){ res=vec2(sph,2.0); }
+  }
   return res;
 }
 
@@ -1051,9 +1064,10 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog',
- 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount']
+ 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
+U.edits    = locArray('uEdits', 16);
 U.itemPos  = locArray('worldItemPos', RLIM.ITEMS);
 U.itemData = locArray('worldItemData',RLIM.ITEMS);
 U.enemyPos = locArray('enemyPos',     RLIM.ENEMIES);
@@ -1107,7 +1121,7 @@ function terrainHJS(x,z){
   return h;
 }
 
-function mapWorldJS(px,py,pz){
+function mapWorldBase(px,py,pz){
   let res=(py-terrainHJS(px,pz))*0.62;
   { // gate beacon column (shader draws it solid; capsule y:0..70 r:0.30)
     const bdy=Math.max(0,Math.abs(py-35)-35);
@@ -1182,6 +1196,28 @@ function mapWorldJS(px,py,pz){
     d=Math.min(d, sdBoxJS(qx-lx,qy-4.12,qz-lz,0.34,0.1,0.34));
   }
   return d;
+}
+// PICK carves and (future) BASTION builds live here: a ring of sphere edits.
+// The shader iterates uEdits; mapWorldJS iterates THIS array. Same values,
+// fround'd at creation, so picture and collision cannot disagree.
+const SDF_EDITS=[];
+const SDF_EDIT_CAP=16;
+function addSdfEdit(x,y,z,r,carve){
+  const fr=Math.fround;
+  SDF_EDITS.push({x:fr(x),y:fr(y),z:fr(z),w:fr(carve?-r:r)});
+  if(SDF_EDITS.length>SDF_EDIT_CAP) SDF_EDITS.shift();
+}
+function applySdfEditsJS(px,py,pz,res){
+  for(let i=0;i<SDF_EDITS.length;i++){
+    const e=SDF_EDITS[i], dx=px-e.x, dy=py-e.y, dz=pz-e.z;
+    const dd=Math.sqrt(dx*dx+dy*dy+dz*dz);
+    if(e.w<0){ const sc=-(dd+e.w); if(sc>res) res=sc; } // carve: max(res, r-dd)
+    else{ const sa=dd-e.w; if(sa<res) res=sa; }          // add: min(res, dd-r)
+  }
+  return res;
+}
+function mapWorldJS(px,py,pz){
+  return applySdfEditsJS(px,py,pz, mapWorldBase(px,py,pz));
 }
 function worldNormalJS(x,y,z,out){
   const e=0.02;
@@ -1341,7 +1377,8 @@ class Item{
   desc(){ return ''; }
 }
 class ToolMod extends Item{
-  constructor(name,w,h,color,cat,effect,blurb){ super(name,w,h,color); this.cat=cat; this.effect=effect; this.blurb=blurb||''; }
+  // all rack mods are 1x1 — callers pass (name,color,cat,effect,blurb)
+  constructor(name,color,cat,effect,blurb){ super(name,1,1,color); this.cat=cat; this.effect=effect||{}; this.blurb=blurb||''; }
   get renderType(){ return this.cat==='proj'||this.cat==='mod'||this.cat==='util' ? 6 : 4; }
   desc(){ return this.blurb; }
 }
@@ -1377,26 +1414,29 @@ const ITEM_DEFS={
   magDrum:    ()=>new Magazine('Drum','#2c3138','9mm',28),
   tool:       ()=>new Tool('Covenant Tool','#3a4048'),
   // --- basic rack mods (order-independent stats) ---
-  reflex:     ()=>new ToolMod('Reflex','#3949ab','stat',{fov:0.78},'Aim view ×0.78'),
-  scope:      ()=>new ToolMod('Long Glass','#283593','stat',{fov:0.42},'Aim view ×0.42 — patient work'),
+  reflex:     ()=>new ToolMod('Reflex','#3949ab','stat',{fov:0.78,unique:'fov'},'Aim view ×0.78 · one optic only'),
+  scope:      ()=>new ToolMod('Long Glass','#283593','stat',{fov:0.42,unique:'fov'},'Aim view ×0.42 — patient work · one optic only'),
   suppressor: ()=>new ToolMod('Suppressor','#37474f','stat',{silenced:true},'Shots whisper instead of shout'),
   heavyBarrel:()=>new ToolMod('Heavy Barrel','#4e5a63','stat',{dmg:8,spread:0.85},'+8 hurt, steadier'),
   compensator:()=>new ToolMod('Compensator','#546e7a','stat',{spread:0.55},'Spread ×0.55'),
   autoSear:   ()=>new ToolMod('Auto Sear','#6d4c41','stat',{auto:true,fireRate:-0.22},'Hold to keep firing'),
-  burstCam:   ()=>new ToolMod('Burst Cam','#5d4037','stat',{burst:3},'Three-round prayer'),
+  burstCam:   ()=>new ToolMod('Burst Cam','#5d4037','stat',{burst:3,unique:'burst'},'Three-round prayer · one cam only'),
   hairTrigger:()=>new ToolMod('Hair Trigger','#795548','stat',{fireRate:-0.14},'Faster follow-ups'),
   // --- sequence: projectile cores ---
-  boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt'},'Core · fires a slug from the magazine'),
-  sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark'},'Core · bursting ember, drinks 18 charge'),
-  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','proj',{kind:'beam'},'Core · a held line of light, drinks charge'),
+  boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt',base:0},'Core · fires a slug from the magazine'),
+  sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18},'Core · bursting ember · 18⚡'),
+  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','proj',{kind:'beam',base:0},'Core · a held line of light, drinks charge'),
+  pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
-  dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10},'Next core +10 hurt'),
-  velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:1.6},'Next core ×1.6 speed'),
-  bounce:     ()=>new ToolMod('RICOCHET','#3c8f7c','mod',{bounce:2},'Next core bounces twice'),
-  pierce:     ()=>new ToolMod('DRILL','#8f6a3c','mod',{pierce:2},'Next core passes through two bodies'),
-  heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6},'Next core arcs and lands harder'),
-  twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2},'Next core fires doubled'),
-  silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true},'Next core barely whispers'),
+  dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
+  velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:1.6,surcharge:4},'Next core ×1.6 speed · +4⚡'),
+  bounce:     ()=>new ToolMod('RICOCHET','#3c8f7c','mod',{bounce:2,surcharge:6},'Next core bounces twice · +6⚡'),
+  pierce:     ()=>new ToolMod('DRILL','#8f6a3c','mod',{pierce:2,surcharge:8},'Next core passes through two bodies · +8⚡'),
+  heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6,surcharge:5},'Next core arcs and lands harder · +5⚡'),
+  twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
+  silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
+  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, then blows 1.2s later · +4⚡'),
+  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP FIELD','#2f8f9f','util',{grip:true},'Beam carries objects — pin the world to your crosshair'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
@@ -1409,8 +1449,8 @@ const ITEM_DEFS={
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
 };
 const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
-                'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','gripField','pulse','lantern',
-                'boltCore','sparkCore','beamCore'];
+                'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter',
+                'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore'];
 
 // ============================================================
 // INVENTORY GRIDS (Tarkov-style, mouse + cursor driven)
@@ -1547,6 +1587,16 @@ function interactInventory(){
     }
     if(currentFocus!==0 && (it instanceof Tool || it instanceof Gadget)){ playSound('empty'); return; }
     if(currentFocus===2 && it===inspectItem){ playSound('empty'); return; }   // no nesting a tool in itself
+    // unique parts: one optic, one burst cam — the rack rejects a second
+    if(it instanceof ToolMod && it.effect.unique && f.cols===GUN_COLS && f.rows===GUN_ROWS){
+      const cur=cellAt(f);
+      for(let r=0;r<f.rows;r++) for(let c=0;c<f.cols;c++){
+        const o=f.grid[r][c];
+        if(o && o!==cur && o instanceof ToolMod && o.effect.unique===it.effect.unique){
+          toast('ONE '+o.name.toUpperCase()+'-CLASS PART ONLY'); playSound('empty'); return;
+        }
+      }
+    }
     if(gridFits(it,cursorX,cursorY,f.grid,f.cols,f.rows)){
       placeInGrid(it,cursorX,cursorY,f.grid);
       consumeHeld();
@@ -1835,7 +1885,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,surcharge:0}; }
 function resolveTool(tool){
   const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:16,silenced:false,
              fovAim:0.62,flashlight:false,grip:false,pulse:false,shots:[],seq:[]};
@@ -1857,7 +1907,8 @@ function resolveTool(tool){
     }
   }
   out.seq=seq;
-  let pend=freshPend();
+  out.vented=[]; out.flow=[];
+  let pend=freshPend(), feeders=[];
   for(const m of seq){
     if(m.cat==='util'){
       if(m.effect.grip) out.grip=true;
@@ -1872,18 +1923,37 @@ function resolveTool(tool){
       if(e.grav) pend.grav+=e.grav;
       if(e.twin) pend.twin*=e.twin;
       if(e.silent) pend.silent=true;
+      if(e.fuse) pend.fuse+=e.fuse;
+      if(e.split) pend.split+=e.split;
+      pend.surcharge+=e.surcharge||0;
+      feeders.push(m);
     }else if(m.cat==='proj'){
-      out.shots.push({kind:m.effect.kind,pend:{...pend}});
-      pend=freshPend();
+      if(pend.twin>3) pend.twin=3;                       // TWIN cap: no shotgun accidents
+      const shot={kind:m.effect.kind,pend:{...pend},
+                  cost:(m.effect.base||0)+pend.surcharge,core:m};
+      out.shots.push(shot);
+      for(const f of feeders) out.flow.push({from:f,to:m});
+      pend=freshPend(); feeders=[];
     }
   }
-  if(out.shots.length===0) out.shots.push({kind:'bolt',pend:freshPend()});
+  out.vented=feeders;                                     // the cliff: charges feeding nothing
+  if(out.shots.length===0) out.shots.push({kind:'bolt',pend:freshPend(),cost:0});
   return out;
 }
 function describeSequence(res){
-  if(!res.seq.length) return '<span class="seqChip">BARE BOLT</span> <span style="color:var(--dust)">— nothing fitted in sequence</span>';
-  return res.seq.map(m=>'<span class="seqChip" style="border-color:'+(m.cat==='proj'?'#8e24aa':m.cat==='util'?'#2f8f9f':'#555')+'">'+m.name+'</span>')
-    .join('<span class="seqArrow">→</span>');
+  if(!res.seq.length) return '<span class="seqChip">BARE BOLT ⚡0</span> <span style="color:var(--dust)">— nothing fitted in sequence</span>';
+  let shotIdx=0;
+  return res.seq.map(m=>{
+    if(m.cat==='proj'){
+      const sh=res.shots[shotIdx++];
+      return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
+        +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(m.effect.kind==='bolt'?'+1rd':'')+'</span></span>';
+    }
+    if(m.cat==='util') return '<span class="seqChip" style="border-color:#2f8f9f">'+m.name+'</span>';
+    const v=res.vented&&res.vented.includes(m);
+    return '<span class="seqChip'+(v?' seqVent':'')+'" style="border-color:#555">'
+      +m.name+(v?' ⌁ vents':'')+'</span>';
+  }).join('<span class="seqArrow">→</span>');
 }
 
 const beamSegs=[];      // {a,b,col,ttl}
@@ -1896,13 +1966,15 @@ function emitProjectile(owner,origin,dir,shot,base){
     const spr=base.spread*(count>1?1.8:1.0)*(playerPos.isAiming&&owner==='player'?0.45:1);
     const d=new Vec3(dir.x+(runRng()-0.5)*spr*2, dir.y+(runRng()-0.5)*spr*2, dir.z+(runRng()-0.5)*spr*2).normalize();
     const kind=shot.kind;
-    const speed=(kind==='spark'?34:82)*p.vel;
+    const speed=(kind==='spark'?34:kind==='pick'?60:82)*p.vel;
     projectiles.push({
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:2.2, owner, kind,
-      dmg:(kind==='spark'?12:base.dmg)+p.dmg,
+      // stat dmg feeds mag-fed cores only; chamber dmg feeds everything
+      dmg:(kind==='spark'||kind==='pick'?12:base.dmg)+p.dmg,
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12,
-      col:kind==='spark'?[1.0,0.45,0.9]:[1.0,0.75,0.25],
+      fuse:p.fuse||0, split:p.split||0, stuck:false,
+      col:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:[1.0,0.75,0.25],
       silent:p.silent||base.silenced,
     });
   }
@@ -1937,29 +2009,41 @@ function tryFirePlayer(dt){
   const tAim=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,60);
   const fireDir=new Vec3(o.x+f.x*tAim-origin.x, o.y+f.y*tAim-origin.y, o.z+f.z*tAim-origin.z).normalize();
 
+  // dry-cycle: the next shot in the cycle may be unaffordable — skip to the
+  // first shot we CAN pay for (audible click on the skip), else dead trigger.
+  const n=res.shots.length;
+  let pickIdx=-1;
+  for(let k=0;k<n;k++){
+    const i=(activeTool.cycle+k)%n, s=res.shots[i];
+    if(s.kind==='beam') continue;                        // beam claims its own turn above
+    const okCharge=activeTool.charge>=(s.cost||0);
+    const okAmmo=s.kind!=='bolt'||(mag&&mag.loaded>0);
+    if(okCharge&&okAmmo){ pickIdx=i; if(k>0) playSound('click'); break; }
+  }
+  if(pickIdx<0){ playSound('empty'); fireCooldown=0.3; return; }
+  const liveShot=res.shots[pickIdx];
+  activeTool.charge-=(liveShot.cost||0);                 // price the SHOT, not the copies
   for(let b=0;b<res.burst;b++){
-    if(shot.kind==='bolt'){
-      if(!mag||mag.loaded<=0){ playSound('empty'); fireCooldown=0.3; break; }
+    if(liveShot.kind==='bolt'){
+      if(!mag||mag.loaded<=0){ playSound('empty'); break; }
       mag.loaded--;
-    }else if(shot.kind==='spark'){
-      if(activeTool.charge<18){ playSound('empty'); fireCooldown=0.3; break; }
-      activeTool.charge-=18;
     }
-    emitProjectile('player',origin,fireDir,shot,res);
-    const silent=shot.pend.silent||res.silenced;
-    playSound(shot.kind==='spark'?'spark':(silent?'silenced':'shoot'));
+    emitProjectile('player',origin,fireDir,liveShot,res);
+    const silent=liveShot.pend.silent||res.silenced;
+    playSound(liveShot.kind==='spark'?'spark':(silent?'silenced':'shoot'));
     addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
     if(!silent){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
     cameraPitch+=0.012+res.dmg*0.0004;
     playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4);
   }
-  activeTool.cycle++;
+  activeTool.cycle=(pickIdx+1)%n;
   fireCooldown=res.fireRate;
+  updateToolReadout();
 }
 function endBeam(){ beamActive=false; beamAudio(false); if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false); }
 function runBeam(dt,res,shot){
   beamAudio(true);
-  activeTool.charge=Math.max(0,activeTool.charge-24*dt);
+  activeTool.charge=Math.max(0,activeTool.charge-(24+(shot.pend.surcharge||0))*dt);
   if(activeTool.charge<=0){ endBeam(); return; }
   const o=camPos(), f=camForward();
   const maxLen=30;
@@ -2000,6 +2084,11 @@ function runBeam(dt,res,shot){
 function updateProjectiles(dt){
   for(let i=projectiles.length-1;i>=0;i--){
     const pr=projectiles[i];
+    if(pr.stuck){                                        // FUSEd: sit, count, blow
+      pr.fuseT-=dt;
+      if(pr.fuseT<=0){ triggerPayload(pr); projectiles.splice(i,1); }
+      continue;
+    }
     pr.life-=dt;
     if(pr.life<=0){ projectiles.splice(i,1); continue; }
     pr.vel.y-=pr.grav*dt;
@@ -2012,7 +2101,7 @@ function updateProjectiles(dt){
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
         if(d<0.42){ damagePlayer(pr.dmg); dead=impactOrPierce(pr); continue; }
       }
-      if(pr.owner==='player'){
+      if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
           if(en.health<=0) continue;
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
@@ -2030,12 +2119,18 @@ function updateProjectiles(dt){
           pr.vel.multiplyScalar(0.8);
           pr.pos.addScaledVector(_n,0.08);
           pr.bounces--; playSound('click');
+        }else if(pr.fuse>0){                             // FUSE: stick to the surface
+          worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          pr.pos.addScaledVector(_n,0.06);
+          pr.vel.set(0,0,0); pr.grav=0;
+          pr.stuck=true; pr.fuseT=pr.fuse;
+          playSound('click');
+          dead=false; break;
         }else{
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           addDecal(pr.pos,_n,pr.kind==='spark'?0.7:0.22);
           dead=true;
-          if(pr.kind==='spark') explode(pr);
-          else addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
+          triggerPayload(pr);
         }
       }
     }
@@ -2043,9 +2138,40 @@ function updateProjectiles(dt){
   }
 }
 function impactOrPierce(pr){
-  if(pr.kind==='spark'){ explode(pr); return true; }
+  if(pr.kind==='spark'){ triggerPayload(pr); return true; }
+  if(pr.split>0){ splinterBurst(pr); return true; }
   if(pr.pierce>0){ pr.pierce--; return false; }
   return true;
+}
+// one routing point for what a shot DOES when it lands (immediate or fused)
+function triggerPayload(pr){
+  if(pr.kind==='pick') carveAt(pr);
+  if(pr.kind==='spark') explode(pr);
+  if(pr.split>0) splinterBurst(pr);
+  if(pr.kind!=='spark'&&pr.kind!=='pick') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
+}
+function splinterBurst(pr){
+  const nFrag=Math.min(4,pr.split);
+  for(let j=0;j<nFrag;j++){
+    const a=runRng()*Math.PI*2, e=(runRng()-0.2)*1.2;
+    const sp=Math.max(14,pr.vel.length()*0.45)||26;
+    projectiles.push({
+      pos:pr.pos.clone(), owner:pr.owner, life:1.1,
+      kind:pr.kind==='spark'?'spark':'bolt',
+      vel:new Vec3(Math.cos(a)*Math.cos(e)*sp,Math.sin(e)*sp,Math.sin(a)*Math.cos(e)*sp),
+      dmg:Math.max(2,Math.round(pr.dmg*0.45)),
+      bounces:pr.bounces, pierce:pr.pierce, grav:6,
+      fuse:0, split:0, stuck:false,                      // fragments never re-split
+      col:pr.col, silent:pr.silent,
+    });
+  }
+}
+function carveAt(pr){
+  const r=Math.min(2.2, Math.max(1.0, 1.4+(pr.dmg-12)*0.05));
+  addSdfEdit(pr.pos.x,pr.pos.y,pr.pos.z,r,true);
+  addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[0.6,0.95,0.85],1.6,0.10);
+  addNoise(pr.pos.x,pr.pos.y,pr.pos.z,26);               // carving is loud work
+  playSound('spark');
 }
 function explode(pr){
   playSound('boom');
@@ -2330,7 +2456,7 @@ function resetLevel(){
   SEED.y=Math.floor(runRng()*900)+13;
   placeGate();
   visitedCells.clear();
-  worldItems.length=0; projectiles.length=0; beamSegs.length=0;
+  worldItems.length=0; projectiles.length=0; beamSegs.length=0; SDF_EDITS.length=0;
   decals.length=0; dynLights.length=0; noisePings.length=0;
   heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
@@ -2594,7 +2720,12 @@ function refreshInvUI(){
   if(isInventoryOpen) renderGrid('bagGrid',bagGrid,BAG_COLS,BAG_ROWS,0);
   if(isToolMenuOpen){
     renderGrid('gunGrid',activeTool?activeTool.grid:null,GUN_COLS,GUN_ROWS,1);
-    if(activeTool) activeTool._res=resolveTool(activeTool);
+    if(activeTool){
+      activeTool._res=resolveTool(activeTool);
+      const sig=activeTool._res.seq.map(m=>m.id).join(',');
+      if(activeTool._seqSig!==undefined && activeTool._seqSig!==sig) activeTool.cycle=0;   // edited: back to shot 1
+      activeTool._seqSig=sig;
+    }
     document.getElementById('modSequence').innerHTML=describeSequence(activeTool?activeTool._res:resolveTool(null));
   }
   renderInspect();
@@ -2614,6 +2745,11 @@ function updateToolReadout(){
   }).join(' / ');
   md.textContent=(res.silenced?'SUPPRESSED ':'')+(res.auto?'AUTO ':'')+(res.burst>1?'BURST'+res.burst+' ':'')+kinds
     +(res.grip?' +GRIP':'')+(res.pulse?' +PUSH':'');
+  // the fire cycle, visible: which shot is next, and what it will cost
+  const cyc=activeTool.cycle%res.shots.length;
+  document.getElementById('trPips').innerHTML=res.shots.map((sh,i)=>
+    '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
+    +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
   const mag=toolMagazine(activeTool);
   am.textContent=(mag?mag.loaded+'/'+mag.maxCapacity:'NO MAG')+' · pocket '+(mag?bagAmmoCount(mag.acceptedType):bagAmmoCount('9mm'));
   document.getElementById('chargeFill').style.width=activeTool.charge.toFixed(0)+'%';
@@ -3015,6 +3151,11 @@ function frame(){
   }
   const dsorted=[...dynLights].sort((a,b)=>b.intensity-a.intensity);
   const nd=Math.min(RLIM.DYN,dsorted.length);
+  gl.uniform1i(U.uEditCount,SDF_EDITS.length);
+  for(let i=0;i<SDF_EDITS.length;i++){
+    const ed=SDF_EDITS[i];
+    gl.uniform4f(U.edits[i],ed.x,ed.y,ed.z,ed.w);
+  }
   gl.uniform1i(U.dynCount,nd);
   for(let i=0;i<nd;i++){
     const d=dsorted[i];
