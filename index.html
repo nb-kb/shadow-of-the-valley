@@ -274,7 +274,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20k';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20l';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -563,6 +563,8 @@ uniform bool  flashlightOn;
 
 uniform float uMenu;        // 0..1 — inventory presentation blend
 uniform int   uMenuMode;    // 1 rucksack · 2 tool
+uniform int   uColCount;    // rack columns (menu presentation only)
+uniform vec4  uCols[8];     // x len(slots) · y filled frac · z chain joints · w hasMuzzleMod
 uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uHasTool;
@@ -846,9 +848,36 @@ vec2 map(vec3 p){
         float d=sdBackpack(bp);
         if(d<res.x) res=vec2(d,22.0);
       }else{
-        vec3 tp=vl-vec3(0.0,-0.02-rise,0.60);
-        tp=rotY(tp,-1.5708+sin(iTime*0.5)*0.06);
+        // the rack pose: gun points AWAY and up-screen — muzzles top, grip bottom,
+        // matching the vertical column layout floating over it
+        vec3 tp=vl-vec3(0.0,-0.16-rise,0.66);
+        tp=rotY(tp, sin(iTime*0.5)*0.05);              // gentle sway only
+        tp=rotX(tp, 1.05);                             // pitch the barrel up-and-away
         float d=sdGun(tp/2.1,true)*2.1;
+        // the columns: one cylinder per mount, fanned L/R, length by slot count
+        for(int ci=0;ci<8;ci++){
+          if(ci>=uColCount) break;
+          float fi=float(ci);
+          float side=(1.0-2.0*mod(fi,2.0))*ceil(fi*0.5)*0.085;   // odd left, even right, ci0 center
+          float len=uCols[ci].x*0.055;
+          vec3 a=vec3(side,0.05,0.10), b=vec3(side,0.05,0.10+len);
+          float bd=sdCapsule(tp, a, b, ci==0?0.040:0.030)*2.1;
+          // chain joints: shallow ring notches along the column
+          float joints=uCols[ci].z;
+          if(joints>0.5){
+            float seg=len/(joints+1.0);
+            for(int j=1;j<4;j++){
+              if(float(j)>joints) break;
+              float ring=length(vec2(length(tp.xy-vec2(side,0.05))-(ci==0?0.046:0.036), tp.z-(0.10+seg*float(j))))-0.006;
+              bd=min(bd,ring*2.1);
+            }
+          }
+          if(uCols[ci].w>0.5){                         // fitted muzzle: a collar at the tip
+            float mz=sdCapsule(tp, vec3(side,0.05,0.10+len), vec3(side,0.05,0.13+len), ci==0?0.048:0.038)*2.1;
+            bd=min(bd,mz);
+          }
+          if(bd<d) d=bd;
+        }
         if(d<res.x) res=vec2(d,20.0);
       }
     }else if(uHasTool>0.5){
@@ -1080,7 +1109,7 @@ gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
-['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uAim','uBob','uHasTool','uToolCfg',
+['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
@@ -2248,6 +2277,7 @@ function emitProjectile(owner,origin,dir,shot,base){
 }
 function toolNoise(silent){ return silent?4:22; }
 
+const _colsBuf=new Float32Array(32);
 let fireCooldown=0, reloadTimer=0;
 let BARE_RES=null;
 function bareRes(){ return BARE_RES||(BARE_RES=resolveTool(null)); }
@@ -3450,7 +3480,9 @@ function menuNav(){
               setFocus(1, bc-1, clamp(cursorY,0,tz?tz.rowsOf(bc-1)-1:0)); }
         moved=true; return;
       }
-      cursorX=clamp(nx,0,f.cols-1); cursorY=clamp(ny,0,f.rows-1); moved=true;
+      cursorX=clamp(nx,0,f.cols-1);
+      // ragged racks: clamp Y against the DESTINATION column's height
+      cursorY=clamp(ny,0,(f.rack?f.rowsOf(cursorX):f.rows)-1); moved=true;
     };
     if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1,0);
     if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1,0);
@@ -3559,6 +3591,22 @@ function frame(){
   gl.uniform1f(U.fov,playerPos.currentFov*(1-0.22*menuAnim));
   gl.uniform1f(U.uMenu,menuAnim);
   gl.uniform1i(U.uMenuMode,menuMode);
+  // rack presentation: column silhouettes under the HTML overlay
+  if(menuAnim>0.001 && menuMode===2 && activeTool){
+    const cols=toolColumns(activeTool);
+    const n=Math.min(8,cols.length);
+    gl.uniform1i(U.uColCount,n);
+    for(let i=0;i<n;i++){
+      const refs=cols[i].refs;
+      const filled=refs.length?refs.filter(r=>readRef(r)).length/refs.length:0;
+      const joints=activeTool.mounts[cols[i].mountIdx].chain.length- (cols[i].mountIdx===0?0:1);
+      const muz=refs.length&&refs[refs.length-1].muzzle&&readRef(refs[refs.length-1])?1:0;
+      _colsBuf[i*4]=Math.fround(refs.length); _colsBuf[i*4+1]=Math.fround(filled);
+      _colsBuf[i*4+2]=Math.fround(Math.max(0,joints)); _colsBuf[i*4+3]=muz;
+    }
+    for(let i=n*4;i<32;i++) _colsBuf[i]=0;
+    gl.uniform4fv(U.uCols,_colsBuf);
+  }else gl.uniform1i(U.uColCount,0);
   gl.uniform1f(U.uAim,playerPos.aimAmt);
   gl.uniform3f(U.uBob,playerPos.bobX,playerPos.bobY,playerPos.viewKick*0.09);
   gl.uniform3f(U.uLightDir,dayNight.lightDir.x,dayNight.lightDir.y,dayNight.lightDir.z);
