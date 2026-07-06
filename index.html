@@ -154,7 +154,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <div class="row stencil"><span>Suspicion</span><div class="meter"><div id="suspicionFill"></div></div></div>
   <div class="row stencil"><span>Ring</span><span id="hudDepth">I</span></div>
   <div class="row stencil" id="clockRow"><span>Watch</span><span id="hudClock">--:--</span></div>
-  <div class="row stencil"><span>FPS</span><span id="hudFps">--</span></div>
+  <div class="row stencil" id="fpsRow"><span>FPS</span><span id="hudFps">--</span></div>
   <div class="row stencil hidden" id="gpStatus"><span>Pad</span><span id="gpName">linked</span></div>
 </div>
 <div id="eyeWrap"><div id="eye"></div><div id="eyeLbl">EXPOSURE</div></div>
@@ -163,7 +163,6 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <div class="big" id="trName">—</div>
   <div class="sub" id="trMode">BARE</div>
   <div class="sub" id="trPips"></div>
-  <div class="sub"><span id="trAmmo">0/0</span></div>
   <div id="chargeMeter"><div id="chargeFill"></div></div>
 </div>
 <div id="banner"></div>
@@ -342,7 +341,7 @@ const ACTIONS = [
   {id:'leanL',    label:'Lean left',           kb:'KeyQ',        pad:4},   // L1
   {id:'leanR',    label:'Lean right',          kb:'KeyX',        pad:5},   // R1
   {id:'bag',      label:'Rucksack',            kb:'KeyB',        pad:8},   // share
-  {id:'tool',     label:'Tool rack / back out',kb:'Tab',         pad:1},   // circle
+  {id:'tool',     label:'Tool rack / close layer',kb:'Tab',       pad:1},   // circle
   {id:'manual',   label:'Field manual',        kb:'KeyM',        pad:9},   // options
   {id:'debug',    label:'Debug console',       kb:'Backquote',   pad:null},
 ];
@@ -1472,6 +1471,15 @@ let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
 let activeTool=null;
 let isInventoryOpen=false,isToolMenuOpen=false,isManualOpen=false,isDebugOpen=false;
 let currentFocus=0, cursorX=0, cursorY=0;
+// each grid remembers where your cursor was — switching focus or reopening a
+// menu restores it instead of snapping to 0,0
+const FOCUS_MEM=[{x:0,y:0},{x:0,y:0},{x:0,y:0}];
+function setFocus(n,ex,ey){
+  FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+  currentFocus=n;
+  if(ex!==undefined){ cursorX=ex; cursorY=ey; }
+  else{ cursorX=FOCUS_MEM[n].x; cursorY=FOCUS_MEM[n].y; }
+}
 let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
 
 function uiOpen(){ return isInventoryOpen||isToolMenuOpen||isManualOpen||isDebugOpen||gameState!=='play'; }
@@ -1537,7 +1545,7 @@ function closeAllInv(){
 function openBag(){
   isToolMenuOpen=false; inspectItem=null;
   document.getElementById('toolUI').classList.add('hidden');
-  isInventoryOpen=true; menuMode=1; currentFocus=0; cursorX=0; cursorY=0;
+  isInventoryOpen=true; menuMode=1; setFocus(0);
   document.getElementById('backpackUI').classList.remove('hidden');
   document.exitPointerLock&&document.exitPointerLock();
   refreshInvUI();
@@ -1545,7 +1553,7 @@ function openBag(){
 function openToolMenu(){
   isInventoryOpen=false; inspectItem=null;
   document.getElementById('backpackUI').classList.add('hidden');
-  isToolMenuOpen=true; menuMode=2; currentFocus=1; cursorX=0; cursorY=0;
+  isToolMenuOpen=true; menuMode=2; setFocus(1);
   document.getElementById('toolUI').classList.remove('hidden');
   document.exitPointerLock&&document.exitPointerLock();
   refreshInvUI();
@@ -1647,7 +1655,7 @@ function activateAtCursor(){
   if(cell===inspectItem){ closeInspect(); return; }
   if(cell instanceof Magazine){ inspectItem=cell; playSound('click'); renderInspect(); refreshInvUI(); return; }
   if(cell instanceof Tool){
-    inspectItem=cell; currentFocus=2; cursorX=0; cursorY=0;
+    inspectItem=cell; setFocus(2);
     playSound('click'); renderInspect(); refreshInvUI(); return;
   }
   if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
@@ -1664,7 +1672,7 @@ function activateAtCursor(){
 }
 function closeInspect(){
   inspectItem=null;
-  if(currentFocus===2) currentFocus=isToolMenuOpen?1:0;
+  if(currentFocus===2) setFocus(isToolMenuOpen?1:0);
   playSound('click'); renderInspect(); refreshInvUI();
 }
 function renderInspect(){
@@ -1676,8 +1684,9 @@ function renderInspect(){
   if(inspectItem instanceof Magazine){
     body.innerHTML='<div class="hintline" style="margin-top:8px;">'
       +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · feeds '+inspectItem.acceptedType
-      +'<br>Grab loose rounds with <b>E</b> and place them on this magazine to pour.'
-      +'<br><b>X / ✕</b> on it again closes these pockets.</div>';
+      +'<br><b>E</b> with held rounds on this magazine pours them in.'
+      +'<br><b>F / \u25b3</b> on it shakes the rounds out into your hand.'
+      +'<br><b>X / \u2715</b> on it again closes these pockets.</div>';
   }else if(inspectItem instanceof Tool){
     body.innerHTML='<div class="gridWrap" id="inspectGrid" style="grid-template-columns:repeat(4,44px);"></div>'
       +'<div class="hintline"><b>X / ✕</b> again (or on empty pocket) closes. Rack mods here without wielding it.</div>';
@@ -1692,6 +1701,13 @@ function quickUse(){
   const cell=cellAt(f);
   if(!cell) return;
   if(cell instanceof Tool && currentFocus===0){ wieldTool(cell); return; }
+  if(cell instanceof Magazine && cell.loaded>0 && !heldWorld){   // F: shake the rounds out into your hand
+    const rounds=new Ammunition(cell.acceptedType+' rounds','#a07c2c',cell.acceptedType,cell.loaded);
+    cell.loaded=0;
+    handHold(rounds);
+    toast('UNLOADED '+rounds.count+' ROUNDS');
+    playSound('reload'); refreshInvUI(); return;
+  }
   if(cell instanceof Ammunition && activeTool){
     const mag=toolMagazine(activeTool);
     if(mag && mag.acceptedType===cell.ammoType && mag.loaded<mag.maxCapacity){
@@ -2726,11 +2742,13 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
     }
     div.addEventListener('mouseenter',()=>{
       if(currentFocus===focusIdx && cursorX===c && cursorY===r) return;
+      if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       if(item) showTooltip(item); else hideTooltip();
       refreshInvUI();
     });
     div.addEventListener('mousedown',e=>{
+      if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       if(e.button===0) interactInventory();
       else if(e.button===2) quickUse();
@@ -2774,8 +2792,8 @@ function refreshInvUI(){
   updateToolReadout();
 }
 function updateToolReadout(){
-  const nm=document.getElementById('trName'), md=document.getElementById('trMode'), am=document.getElementById('trAmmo');
-  if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; am.textContent=''; document.getElementById('chargeFill').style.width='0%'; return; }
+  const nm=document.getElementById('trName'), md=document.getElementById('trMode');
+  if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; document.getElementById('chargeFill').style.width='0%'; return; }
   activeTool._res=activeTool._res||resolveTool(activeTool);
   const res=activeTool._res;
   nm.textContent=activeTool.name.toUpperCase();
@@ -2792,9 +2810,7 @@ function updateToolReadout(){
   document.getElementById('trPips').innerHTML=res.shots.map((sh,i)=>
     '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
     +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
-  const mag=toolMagazine(activeTool);
-  am.textContent=(mag?mag.loaded+'/'+mag.maxCapacity:'NO MAG')+' · pocket '+(mag?bagAmmoCount(mag.acceptedType):bagAmmoCount('9mm'));
-  document.getElementById('chargeFill').style.width=activeTool.charge.toFixed(0)+'%';
+  document.getElementById('chargeFill').style.width=activeTool.charge.toFixed(0)+'%';  // rounds are counted by hand now
 }
 
 let toastT=0;
@@ -3039,7 +3055,19 @@ function menuNav(){
   let moved=false;
   if(f.grid){
     clampCursor(f);
-    const step=(dx,dy)=>{ cursorX=clamp(cursorX+dx,0,f.cols-1); cursorY=clamp(cursorY+dy,0,f.rows-1); moved=true; };
+    const step=(dx,dy)=>{
+      const nx=cursorX+dx, ny=cursorY+dy;
+      const inspGrid=inspectItem instanceof Tool;         // the pockets panel sits to the RIGHT
+      if(dx>0 && nx>=f.cols && inspGrid && currentFocus!==2){
+        setFocus(2, 0, clamp(cursorY,0,GUN_ROWS-1)); moved=true; return;
+      }
+      if(dx<0 && nx<0 && currentFocus===2){
+        const back=isToolMenuOpen?1:0;
+        const bc=back===0?BAG_COLS:GUN_COLS, br=back===0?BAG_ROWS:GUN_ROWS;
+        setFocus(back, bc-1, clamp(cursorY,0,br-1)); moved=true; return;
+      }
+      cursorX=clamp(nx,0,f.cols-1); cursorY=clamp(ny,0,f.rows-1); moved=true;
+    };
     if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1,0);
     if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1,0);
     if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(0,-1);
@@ -3072,7 +3100,13 @@ function frame(){
   // menu toggles — ○/Tab open the tool rack outside, back out of any menu inside
   if(gameState==='play'&&!listeningBind){
     if(pressed('bag')&&!isManualOpen&&!isDebugOpen) toggleInventory();
-    if(pressed('tool')&&!isManualOpen&&!isDebugOpen){ uiMenusOpen()?closeAllInv():openToolMenu(); }
+    if(pressed('tool')&&!isDebugOpen){
+      if(isManualOpen) closeManual();                    // circle closes the manual
+      else if(inspectItem) closeInspect();               // then any open sub-inventory
+      else if(isInventoryOpen) openToolMenu();           // rucksack -> tool rack
+      else if(isToolMenuOpen) closeAllInv();             // tool rack -> back to the valley
+      else openToolMenu();
+    }
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(INPUT.rawKey['Escape']){
@@ -3239,8 +3273,12 @@ function frame(){
     hudT=0.12;
     document.getElementById('healthFill').style.width=(playerPos.health/playerPos.maxHealth*100)+'%';
     document.getElementById('suspicionFill').style.width=(highestDetection*100)+'%';
-    document.getElementById('hudFps').textContent=fpsEma.toFixed(0);
-    document.getElementById('hudClock').textContent=hasGadget('watch')?dayNight.clock+(dayNight.sunUp?' ☀':' ☾'):'--:--';
+    // gadget rows exist only while the gadget is in the rucksack
+    const hasW=hasGadget('watch'), hasO=hasGadget('optics');
+    document.getElementById('clockRow').style.display=hasW?'':'none';
+    document.getElementById('fpsRow').style.display=hasO?'':'none';
+    if(hasO) document.getElementById('hudFps').textContent=fpsEma.toFixed(0);
+    if(hasW) document.getElementById('hudClock').textContent=dayNight.clock+(dayNight.sunUp?' ☀':' ☾');
     const e=playerPos.exposure;
     const eye=document.getElementById('eye');
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
