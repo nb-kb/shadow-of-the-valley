@@ -60,6 +60,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   background:radial-gradient(circle at 50% 100%, var(--exposed) 0%, #221c0c 60%, #000 100%);
   box-shadow:0 0 18px 2px rgba(255,217,138,0); transition:box-shadow .2s;}
 #eyeLbl{font-size:9px;letter-spacing:.3em;color:var(--dust);margin-top:3px;}
+#laserRange{position:absolute;left:calc(50% + 26px);top:calc(50% + 14px);z-index:10;pointer-events:none;
+  font-size:11px;letter-spacing:.14em;color:#ff5a66;text-shadow:0 0 6px #400;opacity:0;transition:opacity .15s;}
 #compassStrip{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;
   font-size:11px;letter-spacing:.2em;color:var(--gate);text-shadow:0 0 6px rgba(87,224,163,.6);}
 
@@ -79,6 +81,21 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   backdrop-filter:blur(1.5px);}
 .cell{width:44px;height:44px;border:1px solid rgba(215,220,230,.15);border-radius:3px;
   background:rgba(12,14,18,.28);position:relative;font-size:8px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
+#rackWrap{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:8px 4px;}
+.rackCol{display:flex;flex-direction:column-reverse;gap:3px;align-items:center;}
+.rackHead{font-size:9px;letter-spacing:.14em;color:var(--dust);text-align:center;margin-bottom:4px;order:99;}
+.rcell{width:var(--rc,40px);height:var(--rc,40px);border:1px solid rgba(215,220,230,.15);border-radius:3px;
+  background:rgba(12,14,18,.30);position:relative;cursor:pointer;}
+.rcell:hover{outline:1px solid var(--dust);z-index:2;}
+.rcell.cursor{outline:2px solid var(--exposed);z-index:3;}
+.rcell.muz{border-radius:50% 50% 4px 4px;border-color:rgba(255,200,120,.35);}
+.rcell.seg0{box-shadow:inset 0 -2px 0 rgba(255,255,255,.10);}   /* barrel joint */
+.rcell.mountSock{border-style:dashed;opacity:.6;}
+.rcell.vent{opacity:.4;filter:grayscale(1);}
+.rcell.nextCore{outline:2px solid var(--gate);}
+.rcell img{width:82%;height:82%;position:absolute;left:9%;top:9%;image-rendering:pixelated;pointer-events:none;}
+.rcell .rlbl{position:absolute;bottom:-1px;left:1px;right:1px;font-size:7px;line-height:1;color:#dfe3ea;
+  text-shadow:0 1px 2px #000;pointer-events:none;overflow:hidden;white-space:nowrap;}
 .cell:hover{outline:1px solid var(--dust);z-index:2;}
 .cell.cursor{outline:2px solid var(--exposed);z-index:3;}
 .cell.origin{border-color:rgba(255,255,255,.30);}
@@ -144,6 +161,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <body>
 <canvas id="gameCanvas"></canvas>
 <div id="crosshair"></div>
+<div id="laserRange"></div>
 <div id="interactPrompt"></div>
 <div id="vignette"></div>
 <div id="alertFlash"></div>
@@ -179,11 +197,11 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- Tool — mod slots float over the Tool turned on its side -->
 <div id="toolUI" class="hidden">
-  <div class="stencil">THE TOOL · INTERNAL RACK 4×4</div>
-  <div class="gridWrap" id="gunGrid" style="grid-template-columns:repeat(4,44px);"></div>
-  <div class="seqReadout" style="background:rgba(6,8,10,.4);pointer-events:auto;"><div class="stencil" style="margin-bottom:6px;">Modulation sequence (left→right, top→bottom)</div><div id="modSequence">—</div></div>
-  <div class="hintline">Order matters — modifiers charge the next projectile core after them.<br>
-  No core fitted = bare bolt (needs a magazine). <b>X / ✕</b> on a magazine or spare tool opens its own pockets.</div>
+  <div class="stencil">THE TOOL · BARREL RACK</div>
+  <div id="rackWrap"></div>
+  <div class="seqReadout" style="background:rgba(6,8,10,.4);pointer-events:auto;"><div class="stencil" style="margin-bottom:6px;">Columns fire together · each resolves bottom→top</div><div id="modSequence">—</div></div>
+  <div class="hintline">Charges load the core ABOVE them, per column. <b>E</b> with a held barrel chains it onto a column; a platform mounts side columns.<br>
+  <b>F</b> lifts an empty top barrel or a bare platform. Muzzle slots (◆) take muzzle parts only.</div>
 </div>
 
 <!-- Detached pockets — magazines & spare tools opened with X -->
@@ -256,7 +274,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20i';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20k';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1403,14 +1421,99 @@ class Magazine extends Item{
   get renderType(){ return 2; }
   desc(){ return 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
 }
+const BARREL_TIERS={
+  common:   {len:3,  spr:0.04, color:'#6e6a5e', w:1,h:2},
+  uncommon: {len:6,  spr:0.03, color:'#4f7a5c', w:1,h:2},
+  rare:     {len:9,  spr:0.02, color:'#3c5f8f', w:1,h:3},
+  epic:     {len:12, spr:0.01, color:'#7a4f8f', w:1,h:3},
+  legendary:{len:15, spr:0.00, color:'#a3822e', w:1,h:4},
+};
+const PLATFORM_TIERS={ small:{perSide:1,color:'#5a5f52'}, medium:{perSide:2,color:'#4f6a5c'}, large:{perSide:3,color:'#465a7a'} };
+const CHAIN_SPREAD_CAP=0.12;
+
+class Barrel extends Item{
+  constructor(rarity){
+    const t=BARREL_TIERS[rarity];
+    super(rarity[0].toUpperCase()+rarity.slice(1)+' Barrel',t.w,t.h,t.color);
+    this.rarity=rarity; this.length=t.len; this.addedSpread=t.spr;
+    this.slots=new Array(t.len).fill(null);      // slots[0] = BOTTOM, always
+    this.muzzle=null;                             // dedicated muzzle slot at this barrel's tip
+  }
+  get renderType(){ return 7; }
+  desc(){ return this.length+' slots · +'+this.addedSpread.toFixed(2)+' spread · E on a column to chain it on top'; }
+}
+class Platform extends Item{
+  constructor(rarity){
+    const t=PLATFORM_TIERS[rarity];
+    super(rarity[0].toUpperCase()+rarity.slice(1)+' Platform',2,1,t.color);
+    this.rarity=rarity; this.perSide=t.perSide;
+  }
+  get renderType(){ return 7; }
+  desc(){ return '+'+(this.perSide*2)+' barrel mounts ('+this.perSide+' per side) · E on the rack to install'; }
+}
+
 class Tool extends Item{
   constructor(name,color){
     super(name,2,2,color);
-    this.grid=Array(4).fill(null).map(()=>Array(4).fill(null));
-    this.cycle=0; this.charge=100;
+    // base column: 4 fixed agnostic slots + a native muzzle, never removable
+    this.base={slots:new Array(4).fill(null), muzzle:null};
+    this.platform=null;
+    this.mounts=[{chain:[],cycle:0}];             // mount 0 is native
+    this.charge=100;
   }
   get renderType(){ return 1; }
   desc(){ return 'The Tool. Everyone carries one. Right-click to wield.'; }
+}
+function mountCount(tool){ return 1+(tool.platform?tool.platform.perSide*2:0); }
+function syncMounts(tool){                        // platform installed/removed: grow/shrink mount list
+  const want=mountCount(tool);
+  while(tool.mounts.length<want) tool.mounts.push({chain:[],cycle:0});
+  // shrink only over empty mounts (callers guarantee this before removing a platform)
+  while(tool.mounts.length>want && tool.mounts[tool.mounts.length-1].chain.length===0) tool.mounts.pop();
+}
+
+// -------- column assembly: the pure heart of the rack. A column is a mount's --------
+// -------- full chain; mount 0 includes the base slots. Cell refs write through. ----
+function toolColumns(tool){
+  const cols=[];
+  for(let mi=0;mi<tool.mounts.length;mi++){
+    const m=tool.mounts[mi];
+    const refs=[];
+    if(mi===0) for(let i=0;i<tool.base.slots.length;i++) refs.push({a:tool.base.slots,i,muzzle:false});
+    for(const b of m.chain) for(let i=0;i<b.slots.length;i++) refs.push({a:b.slots,i,muzzle:false});
+    // exactly one ACTIVE muzzle per column: topmost barrel's, else (mount 0) the base's
+    let mz=null;
+    if(m.chain.length) mz={a:m.chain[m.chain.length-1],k:'muzzle',muzzle:true};
+    else if(mi===0)    mz={a:tool.base,k:'muzzle',muzzle:true};
+    if(mz) refs.push(mz);
+    const spreadAdd=Math.min(CHAIN_SPREAD_CAP, m.chain.reduce((a,b)=>a+b.addedSpread,0));
+    cols.push({mount:m, mountIdx:mi, refs, spreadAdd,
+               isEmptyMount: mi>0 && m.chain.length===0});
+  }
+  return cols;
+}
+function readRef(r){ return r.k? r.a[r.k] : r.a[r.i]; }
+function writeRef(r,v){ if(r.k) r.a[r.k]=v; else r.a[r.i]=v; }
+
+// which magazine feeds column ci: its own slots first (bottom-up), then the base
+// segment as the shared reserve. Rucksack mags never auto-feed.
+function columnMag(tool,ci,needRounds){
+  const cols=toolColumns(tool);
+  const scan=(refs)=>{
+    let empty=null;
+    for(const r of refs){ const it=readRef(r);
+      if(it instanceof Magazine){ if(it.loaded>0) return it; if(!empty) empty=it; } }
+    return needRounds?null:empty;
+  };
+  const own=scan(cols[ci]?cols[ci].refs:[]);
+  if(own) return own;
+  if(ci!==0) return scan(cols[0]?cols[0].refs.filter(r=>r.a===tool.base.slots):[]);
+  return null;
+}
+function toolMagazine(tool){                      // any mag, base first — reload + pour verbs
+  for(const col of toolColumns(tool))
+    for(const r of col.refs){ const it=readRef(r); if(it instanceof Magazine) return it; }
+  return null;
 }
 class Gadget extends Item{
   constructor(name,color,kind,blurb){ super(name,1,1,color); this.kind=kind; this.blurb=blurb; }
@@ -1424,19 +1527,27 @@ const ITEM_DEFS={
   magStd:     ()=>new Magazine('Std Mag','#23262b','9mm',12),
   magDrum:    ()=>new Magazine('Drum','#2c3138','9mm',28),
   tool:       ()=>new Tool('Covenant Tool','#3a4048'),
+  barrelC:    ()=>new Barrel('common'),
+  barrelU:    ()=>new Barrel('uncommon'),
+  barrelR:    ()=>new Barrel('rare'),
+  barrelE:    ()=>new Barrel('epic'),
+  barrelL:    ()=>new Barrel('legendary'),
+  platS:      ()=>new Platform('small'),
+  platM:      ()=>new Platform('medium'),
+  platL:      ()=>new Platform('large'),
   // --- basic rack mods (order-independent stats) ---
   reflex:     ()=>new ToolMod('Reflex','#3949ab','stat',{fov:0.78,unique:'fov'},'Aim view ×0.78 · one optic only'),
   scope:      ()=>new ToolMod('Long Glass','#283593','stat',{fov:0.42,unique:'fov'},'Aim view ×0.42 — patient work · one optic only'),
-  suppressor: ()=>new ToolMod('Suppressor','#37474f','stat',{silenced:true},'Shots whisper instead of shout'),
-  heavyBarrel:()=>new ToolMod('Heavy Barrel','#4e5a63','stat',{dmg:8,spread:0.85},'+8 hurt, steadier'),
-  compensator:()=>new ToolMod('Compensator','#546e7a','stat',{spread:0.55},'Spread ×0.55'),
+  suppressor: ()=>new ToolMod('Suppressor','#37474f','muzzle',{silenced:true},'Muzzle slot · this column whispers'),
+  heavyBarrel:()=>new ToolMod('Heavy Frame','#4e5a63','stat',{dmg:8,spread:0.85},'+8 hurt, steadier'),
+  compensator:()=>new ToolMod('Compensator','#546e7a','muzzle',{spread:0.55},'Muzzle slot · this column, spread ×0.55'),
   autoSear:   ()=>new ToolMod('Auto Sear','#6d4c41','stat',{auto:true,fireRate:-0.22},'Hold to keep firing'),
   burstCam:   ()=>new ToolMod('Burst Cam','#5d4037','stat',{burst:3,unique:'burst'},'Three-round prayer · one cam only'),
   hairTrigger:()=>new ToolMod('Hair Trigger','#795548','stat',{fireRate:-0.14},'Faster follow-ups'),
   // --- sequence: projectile cores ---
   boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt',base:0},'Core · fires a slug from the magazine'),
   sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18},'Core · bursting ember · 18⚡'),
-  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','proj',{kind:'beam',base:0},'Core · a held line of light, drinks charge'),
+  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: laser variant · atop a column alone: tactical laser'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
@@ -1461,7 +1572,8 @@ const ITEM_DEFS={
 };
 const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
                 'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter',
-                'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore'];
+                'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
+                'barrelC','barrelU','barrelR','platS','platM'];
 
 // ============================================================
 // INVENTORY GRIDS (Tarkov-style, mouse + cursor driven)
@@ -1526,14 +1638,7 @@ function takeBagAmmo(type,want){
   }
   return got;
 }
-function toolMagazine(tool){
-  const seen=new Set();
-  for(let r=0;r<GUN_ROWS;r++) for(let c=0;c<GUN_COLS;c++){
-    const it=tool.grid[r][c];
-    if(it&&it instanceof Magazine&&!seen.has(it.id)) return it;
-  }
-  return null;
-}
+// (toolMagazine now lives beside the rack model above)
 
 function closeAllInv(){
   isInventoryOpen=false; isToolMenuOpen=false; inspectItem=null;
@@ -1561,15 +1666,34 @@ function openToolMenu(){
 function toggleInventory(){ isInventoryOpen?closeAllInv():openBag(); }
 function toggleToolMenu(){ isToolMenuOpen?closeAllInv():openToolMenu(); }
 
+function rackZone(tool){
+  const cols=toolColumns(tool);
+  return {rack:tool, colsData:cols, cols:cols.length,
+          rowsOf:c=>Math.max(1,(cols[c]&&cols[c].refs.length)||1)};
+}
 function focusGrid(){
-  if(currentFocus===2 && inspectItem instanceof Tool) return {grid:inspectItem.grid,cols:GUN_COLS,rows:GUN_ROWS};
-  return currentFocus===0
-    ? {grid:bagGrid,cols:BAG_COLS,rows:BAG_ROWS}
-    : {grid:activeTool?activeTool.grid:null,cols:GUN_COLS,rows:GUN_ROWS};
+  if(currentFocus===2 && inspectItem instanceof Tool) return rackZone(inspectItem);
+  if(currentFocus===0) return {grid:bagGrid,cols:BAG_COLS,rows:BAG_ROWS};
+  return activeTool?rackZone(activeTool):{grid:null,cols:1,rows:1};
 }
 
-function clampCursor(f){ cursorX=clamp(cursorX,0,f.cols-1); cursorY=clamp(cursorY,0,f.rows-1); }
-function cellAt(f){ const row=f.grid[cursorY]; return (row&&row[cursorX])||null; }
+function clampCursor(f){
+  cursorX=clamp(cursorX,0,f.cols-1);
+  cursorY=clamp(cursorY,0,(f.rack?f.rowsOf(cursorX):f.rows)-1);
+}
+function refAt(f){ const cd=f.colsData&&f.colsData[cursorX]; return (cd&&cd.refs[cursorY])||null; }
+function cellAt(f){
+  if(f.rack){ const r=refAt(f); return r?readRef(r):null; }
+  if(!f.grid) return null;
+  const row=f.grid[cursorY]; return (row&&row[cursorX])||null;
+}
+// the top barrel of the column under the cursor (removal candidate)
+function topBarrelAt(f){
+  const cd=f.colsData&&f.colsData[cursorX]; if(!cd) return null;
+  const m=f.rack.mounts[cd.mountIdx];
+  return m.chain.length?m.chain[m.chain.length-1]:null;
+}
+function barrelIsEmpty(b){ return b.slots.every(x=>!x) && !b.muzzle; }
 
 // lift an inventory item into the player's hand: it becomes a pinned world item
 function handHold(item){
@@ -1591,7 +1715,7 @@ function consumeHeld(){
 }
 
 function interactInventory(){
-  const f=focusGrid(); if(!f.grid) return;
+  const f=focusGrid(); if(!f.grid&&!f.rack) return;
   clampCursor(f);
   const cell=cellAt(f);
 
@@ -1605,18 +1729,44 @@ function interactInventory(){
       if(it.count<=0) consumeHeld();
       playSound('reload'); refreshInvUI(); return;
     }
-    if(currentFocus!==0 && (it instanceof Tool || it instanceof Gadget)){ playSound('empty'); return; }
-    if(currentFocus===2 && it===inspectItem){ playSound('empty'); return; }   // no nesting a tool in itself
-    // unique parts: one optic, one burst cam — the rack rejects a second
-    if(it instanceof ToolMod && it.effect.unique && f.cols===GUN_COLS && f.rows===GUN_ROWS){
-      const cur=cellAt(f);
-      for(let r=0;r<f.rows;r++) for(let c=0;c<f.cols;c++){
-        const o=f.grid[r][c];
-        if(o && o!==cur && o instanceof ToolMod && o.effect.unique===it.effect.unique){
-          toast('ONE '+o.name.toUpperCase()+'-CLASS PART ONLY'); playSound('empty'); return;
+    if(it===inspectItem || (f.rack&&it===f.rack)){ playSound('empty'); return; }   // no nesting a tool in itself
+
+    if(f.rack){
+      // ---- structural installs first: barrels chain, platforms mount ----
+      if(it instanceof Barrel){
+        const cd=f.colsData[cursorX];
+        f.rack.mounts[cd.mountIdx].chain.push(it);
+        consumeHeld(); toast(it.name.toUpperCase()+' CHAINED'); playSound('place'); refreshInvUI(); return;
+      }
+      if(it instanceof Platform){
+        if(f.rack.platform){ toast('A PLATFORM IS ALREADY FITTED'); playSound('empty'); return; }
+        f.rack.platform=it; syncMounts(f.rack);
+        consumeHeld(); toast(it.name.toUpperCase()+' MOUNTED — '+(mountCount(f.rack)-1)+' SIDE MOUNTS'); playSound('place'); refreshInvUI(); return;
+      }
+      const ref=refAt(f);
+      if(!ref){ playSound('empty'); return; }             // empty mount socket takes only barrels
+      // ---- muzzle discipline: muzzle mods ONLY in muzzle slots, and vice versa ----
+      const isMuz=it instanceof ToolMod && it.cat==='muzzle';
+      if(ref.muzzle && !isMuz){ toast('MUZZLE SLOT — MUZZLE PARTS ONLY'); playSound('empty'); return; }
+      if(!ref.muzzle && isMuz){ toast(it.name.toUpperCase()+' FITS A MUZZLE SLOT'); playSound('empty'); return; }
+      // unique parts: one optic, one burst cam — whole tool
+      if(it instanceof ToolMod && it.effect.unique){
+        for(const col of f.colsData) for(const r2 of col.refs){
+          const o=readRef(r2);
+          if(o && o!==cell && o instanceof ToolMod && o.effect&&o.effect.unique===it.effect.unique){
+            toast('ONE '+o.name.toUpperCase()+'-CLASS PART ONLY'); playSound('empty'); return;
+          }
         }
       }
+      if(!cell){ writeRef(ref,it); consumeHeld(); playSound('place'); refreshInvUI(); return; }
+      // swap — slots are agnostic, footprint is irrelevant inside the rack
+      if(cell===inspectItem) closeInspect();
+      writeRef(ref,it);
+      heldWorld.w.item=cell;
+      playSound('place'); refreshInvUI(); return;
     }
+
+    // ---- rucksack: unchanged grid semantics ----
     if(gridFits(it,cursorX,cursorY,f.grid,f.cols,f.rows)){
       placeInGrid(it,cursorX,cursorY,f.grid);
       consumeHeld();
@@ -1635,7 +1785,8 @@ function interactInventory(){
 
   if(cell){                                               // hand empty: lift it out of the pocket
     if(cell===inspectItem) closeInspect();
-    removeFromGrid(cell,f.grid);
+    if(f.rack) writeRef(refAt(f),null);
+    else removeFromGrid(cell,f.grid);
     handHold(cell);
     refreshInvUI(); return;
   }
@@ -1644,7 +1795,7 @@ function interactInventory(){
 
 // [X] — inspect · activate. Magazines & spare tools open their own pockets.
 function activateAtCursor(){
-  const f=focusGrid(); if(!f.grid){ if(inspectItem) closeInspect(); return; }
+  const f=focusGrid(); if(!f.grid&&!f.rack){ if(inspectItem) closeInspect(); return; }
   clampCursor(f);
   const cell=cellAt(f);
   if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
@@ -1688,18 +1839,18 @@ function renderInspect(){
       +'<br><b>F / \u25b3</b> on it shakes the rounds out into your hand.'
       +'<br><b>X / \u2715</b> on it again closes these pockets.</div>';
   }else if(inspectItem instanceof Tool){
-    body.innerHTML='<div class="gridWrap" id="inspectGrid" style="grid-template-columns:repeat(4,44px);"></div>'
+    body.innerHTML='<div id="inspectRack"></div>'
       +'<div class="hintline"><b>X / ✕</b> again (or on empty pocket) closes. Rack mods here without wielding it.</div>';
-    renderGrid('inspectGrid',inspectItem.grid,GUN_COLS,GUN_ROWS,2);
+    renderRack('inspectRack',inspectItem,2);
   }else body.innerHTML='';
 }
 
 // right-click / [F] — the analog "use" verb
 function quickUse(){
-  const f=focusGrid(); if(!f.grid) return;
+  const f=focusGrid(); if(!f.grid&&!f.rack) return;
   clampCursor(f);
   const cell=cellAt(f);
-  if(!cell) return;
+  if(!cell && !f.rack) return;            // rack verbs (unchain/strip) work on empty cells
   if(cell instanceof Tool && currentFocus===0){ wieldTool(cell); return; }
   if(cell instanceof Magazine && cell.loaded>0 && !heldWorld){   // F: shake the rounds out into your hand
     const rounds=new Ammunition(cell.acceptedType+' rounds','#a07c2c',cell.acceptedType,cell.loaded);
@@ -1718,6 +1869,26 @@ function quickUse(){
     }
   }
   if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
+  if(f.rack && !heldWorld){
+    // F on the top barrel of a chain (any of its cells) lifts it — if empty
+    const tb=topBarrelAt(f);
+    const ref=refAt(f);
+    const onTop=tb && ref && (ref.a===tb.slots || ref.a===tb);
+    if(onTop){
+      if(!barrelIsEmpty(tb)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
+      f.rack.mounts[f.colsData[cursorX].mountIdx].chain.pop();
+      handHold(tb); toast(tb.name.toUpperCase()+' UNCHAINED'); refreshInvUI(); return;
+    }
+    // F on an empty side mount: uninstall the platform if ALL its mounts are bare
+    const cd=f.colsData[cursorX];
+    if(cd && cd.isEmptyMount && f.rack.platform){
+      const allEmpty=f.rack.mounts.slice(1).every(m=>m.chain.length===0);
+      if(!allEmpty){ toast('CLEAR ALL SIDE MOUNTS FIRST'); playSound('empty'); return; }
+      const p=f.rack.platform; f.rack.platform=null; syncMounts(f.rack);
+      if(cursorX>=toolColumns(f.rack).length) cursorX=0;
+      handHold(p); toast('PLATFORM STRIPPED'); refreshInvUI(); return;
+    }
+  }
   playSound('click');
 }
 function wieldTool(tool){
@@ -1941,36 +2112,45 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,surcharge:0}; }
-function resolveTool(tool){
-  const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:16,silenced:false,
-             fovAim:0.62,flashlight:false,grip:false,pulse:false,shots:[],seq:[]};
-  if(!tool){ out.shots.push({kind:'bolt',pend:freshPend()}); return out; }
-  const seq=[];
-  for(let r=0;r<GUN_ROWS;r++) for(let c=0;c<GUN_COLS;c++){
-    const it=tool.grid[r][c];
-    if(it && it.x===c && it.y===r && it instanceof ToolMod){
-      if(it.cat==='stat'){
-        const e=it.effect;
-        if(e.fireRate) out.fireRate=Math.max(0.06,out.fireRate+e.fireRate);
-        if(e.auto) out.auto=true;
-        if(e.burst) out.burst=e.burst;
-        if(e.spread) out.spread*=e.spread;
-        if(e.dmg) out.dmg+=e.dmg;
-        if(e.silenced) out.silenced=true;
-        if(e.fov) out.fovAim=e.fov;
-      }else seq.push(it);
-    }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,surcharge:0,laser:false}; }
+// fold one stat/util mod into the whole-tool frame — identical to the old fold
+function foldFrame(out,m){
+  const e=m.effect;
+  if(m.cat==='stat'){
+    if(e.fireRate) out.fireRate=Math.max(0.06,out.fireRate+e.fireRate);
+    if(e.auto) out.auto=true;
+    if(e.burst) out.burst=e.burst;
+    if(e.spread) out.spread*=e.spread;
+    if(e.dmg) out.dmg+=e.dmg;
+    if(e.fov) out.fovAim=e.fov;
+  }else{
+    if(e.grip) out.grip=true;
+    if(e.pulse) out.pulse=true;
+    if(e.flashlight) out.flashlight=true;
   }
-  out.seq=seq;
-  out.vented=[]; out.flow=[];
+}
+// one column, bottom-to-top: the EXACT old pend/feeder/vent/flow logic, plus:
+// non-sequence items are cargo (skipped), the column's muzzle folds per-lane,
+// and a lane-final BEAM becomes the tactical laser instead of venting.
+function resolveLane(col,out){
+  const lane={shots:[],vented:[],flow:[],seq:[],tacLaser:false,
+              spreadAdd:col.spreadAdd,silenced:false,spreadMul:1,mountIdx:col.mountIdx};
   let pend=freshPend(), feeders=[];
-  for(const m of seq){
-    if(m.cat==='util'){
-      if(m.effect.grip) out.grip=true;
-      if(m.effect.pulse) out.pulse=true;
-      if(m.effect.flashlight) out.flashlight=true;
-    }else if(m.cat==='mod'){
+  for(const ref of col.refs){
+    const m=readRef(ref);
+    if(!m) continue;
+    if(ref.muzzle){                                 // active muzzle: per-COLUMN stats
+      if(m instanceof ToolMod && m.cat==='muzzle'){
+        if(m.effect.silenced) lane.silenced=true;
+        if(m.effect.spread) lane.spreadMul*=m.effect.spread;
+        lane.seq.push(m);
+      }
+      continue;
+    }
+    if(!(m instanceof ToolMod)) continue;           // mags & cargo ride along, sequence-blind
+    if(m.cat==='stat'||m.cat==='util'){ foldFrame(out,m); lane.seq.push(m); continue; }
+    lane.seq.push(m);
+    if(m.cat==='mod'){
       const e=m.effect;
       if(e.dmg) pend.dmg+=e.dmg;
       if(e.vel) pend.vel*=e.vel;
@@ -1981,35 +2161,66 @@ function resolveTool(tool){
       if(e.silent) pend.silent=true;
       if(e.fuse) pend.fuse+=e.fuse;
       if(e.split) pend.split+=e.split;
+      if(e.laser) pend.laser=true;
       pend.surcharge+=e.surcharge||0;
       feeders.push(m);
     }else if(m.cat==='proj'){
-      if(pend.twin>3) pend.twin=3;                       // TWIN cap: no shotgun accidents
+      if(pend.twin>3) pend.twin=3;                  // TWIN cap: no shotgun accidents
       const shot={kind:m.effect.kind,pend:{...pend},
-                  cost:(m.effect.base||0)+pend.surcharge,core:m};
-      out.shots.push(shot);
-      for(const f of feeders) out.flow.push({from:f,to:m});
+                  cost:(m.effect.base||0)+pend.surcharge,core:m,
+                  spreadAdd:col.spreadAdd,lane};
+      lane.shots.push(shot);
+      for(const f of feeders) lane.flow.push({from:f,to:m});
       pend=freshPend(); feeders=[];
     }
   }
-  out.vented=feeders;                                     // the cliff: charges feeding nothing
-  if(out.shots.length===0) out.shots.push({kind:'bolt',pend:freshPend(),cost:0});
+  // the cliff — unless the trailing feeders END in a lone BEAM: that's the tac laser
+  if(feeders.length && feeders[feeders.length-1].effect.laser){
+    lane.tacLaser=true;
+    lane.vented=feeders.slice(0,-1);                // BEAM itself is working; anything under it vents
+  }else lane.vented=feeders;
+  return lane;
+}
+function resolveTool(tool){
+  const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:24,silenced:false,
+             fovAim:0.62,flashlight:false,grip:false,pulse:false,columns:[],shots:[]};
+  if(tool) for(const col of toolColumns(tool)){
+    if(col.isEmptyMount){ out.columns.push({shots:[],vented:[],flow:[],seq:[],tacLaser:false,
+      spreadAdd:0,silenced:false,spreadMul:1,mountIdx:col.mountIdx,emptyMount:true}); continue; }
+    out.columns.push(resolveLane(col,out));
+  }
+  out.shots=out.columns.flatMap(c=>c.shots);        // convenience for HUD/summaries
+  if(!tool || out.shots.length===0){
+    const bare={shots:[{kind:'bolt',pend:freshPend(),cost:0,spreadAdd:0}],vented:[],flow:[],
+                seq:[],tacLaser:false,spreadAdd:0,silenced:false,spreadMul:1,mountIdx:0,bare:true};
+    bare.shots[0].lane=bare;
+    out.columns=[bare]; out.shots=bare.shots; out.bare=true;
+  }
+  out.hasTacLaser=out.columns.some(c=>c.tacLaser);
   return out;
 }
 function describeSequence(res){
-  if(!res.seq.length) return '<span class="seqChip">BARE BOLT ⚡0</span> <span style="color:var(--dust)">— nothing fitted in sequence</span>';
-  let shotIdx=0;
-  return res.seq.map(m=>{
-    if(m.cat==='proj'){
-      const sh=res.shots[shotIdx++];
-      return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
-        +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(m.effect.kind==='bolt'?'+1rd':'')+'</span></span>';
-    }
-    if(m.cat==='util') return '<span class="seqChip" style="border-color:#2f8f9f">'+m.name+'</span>';
-    const v=res.vented&&res.vented.includes(m);
-    return '<span class="seqChip'+(v?' seqVent':'')+'" style="border-color:#555">'
-      +m.name+(v?' ⌁ vents':'')+'</span>';
-  }).join('<span class="seqArrow">→</span>');
+  if(res.bare) return '<span class="seqChip">BARE BOLT ⚡0</span> <span style="color:var(--dust)">— nothing racked, needs a magazine</span>';
+  return res.columns.map((lane,ci)=>{
+    const name=lane.mountIdx===0?'BASE':'M'+lane.mountIdx;
+    if(lane.emptyMount) return '<span style="color:var(--dust)">'+name+': free mount</span>';
+    if(!lane.seq.length&&!lane.tacLaser) return '<span style="color:var(--dust)">'+name+': —</span>';
+    let shotIdx=0;
+    const chips=lane.seq.map(m=>{
+      if(m.cat==='proj'){
+        const sh=lane.shots[shotIdx++];
+        return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
+          +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&sh.kind==='bolt'&&!sh.pend.laser?'+1rd':'')+'</span></span>';
+      }
+      if(m.cat==='util') return '<span class="seqChip" style="border-color:#2f8f9f">'+m.name+'</span>';
+      if(m.cat==='muzzle') return '<span class="seqChip" style="border-color:#c9a45a">'+m.name+'</span>';
+      const v=lane.vented&&lane.vented.includes(m);
+      const tac=lane.tacLaser&&m.effect&&m.effect.laser&&lane.seq.indexOf(m)===lane.seq.length-1;
+      return '<span class="seqChip'+(v?' seqVent':'')+'" style="border-color:'+(tac?'#ff5a66':'#555')+'">'
+        +m.name+(v?' ⌁ vents':'')+(tac?' ▸ painting':'')+'</span>';
+    }).join('<span class="seqArrow">→</span>');
+    return '<span style="color:var(--dust)">'+name+':</span> '+chips;
+  }).join('<br>');
 }
 
 const beamSegs=[];      // {a,b,col,ttl}
@@ -2029,7 +2240,7 @@ function emitProjectile(owner,origin,dir,shot,base){
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything
       dmg:(kind==='spark'||kind==='pick'?12:base.dmg)+p.dmg,
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12,
-      fuse:p.fuse||0, split:p.split||0, stuck:false,
+      fuse:p.fuse||0, split:p.split||0, stuck:false, push:!!(base&&base.pulse),
       col:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:[1.0,0.75,0.25],
       silent:p.silent||base.silenced,
     });
@@ -2042,64 +2253,128 @@ let BARE_RES=null;
 function bareRes(){ return BARE_RES||(BARE_RES=resolveTool(null)); }
 function tryFirePlayer(dt){
   const res=activeTool?activeTool._res:bareRes();
-  const wantFire=down('fire');
-  const shot=res.shots[activeTool?activeTool.cycle%res.shots.length:0];
-
-  // BEAM is a held verb, not a click
-  if(activeTool && shot.kind==='beam'){
-    if(wantFire && activeTool.charge>0.5 && !heldWorld||wantFire&&heldWorld&&heldWorld.mode==='beam'){
-      runBeam(dt,res,shot);
-      beamActive=true;
-    }else if(beamActive){ endBeam(); activeTool.cycle++; }
-    beamWasHeld=wantFire;
-    return;
-  }
-  if(beamActive) endBeam();
-
   if(fireCooldown>0) return;
-  const clicked = res.auto ? wantFire : pressed('fire');
+  const clicked = res.auto ? down('fire') : pressed('fire');
   if(!clicked || !activeTool || heldWorld) return;
 
-  const mag=toolMagazine(activeTool);
   const o=camPos(), f=camForward();
   const origin=muzzleWorld();
   // converge: shots leave the muzzle but land where the crosshair looks
   const tAim=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,60);
   const fireDir=new Vec3(o.x+f.x*tAim-origin.x, o.y+f.y*tAim-origin.y, o.z+f.z*tAim-origin.z).normalize();
 
-  // dry-cycle: the next shot in the cycle may be unaffordable — skip to the
-  // first shot we CAN pay for (audible click on the skip), else dead trigger.
-  const n=res.shots.length;
-  let pickIdx=-1;
-  for(let k=0;k<n;k++){
-    const i=(activeTool.cycle+k)%n, s=res.shots[i];
-    if(s.kind==='beam') continue;                        // beam claims its own turn above
-    const okCharge=activeTool.charge>=(s.cost||0);
-    const okAmmo=s.kind!=='bolt'||(mag&&mag.loaded>0);
-    if(okCharge&&okAmmo){ pickIdx=i; if(k>0) playSound('click'); break; }
-  }
-  if(pickIdx<0){ playSound('empty'); fireCooldown=0.3; return; }
-  const liveShot=res.shots[pickIdx];
-  activeTool.charge-=(liveShot.cost||0);                 // price the SHOT, not the copies
-  for(let b=0;b<res.burst;b++){
-    if(liveShot.kind==='bolt'){
-      if(!mag||mag.loaded<=0){ playSound('empty'); break; }
-      mag.loaded--;
+  // THE VOLLEY WALK — columns pay the shared pools in mount order. Each column
+  // runs its own dry-cycle against the budget AT ITS TURN: skip unaffordable
+  // (click), fire the first that fits, advance ITS cycle. A column that can
+  // afford nothing HOLDS its cycle and retries next pull. Expensive cores
+  // brown out first at the margin; the cheap bolt lane keeps you shooting.
+  let firedAny=false, skippedAny=false, loudest=0, kicked=0;
+  const cols=res.columns;
+  for(let ci=0;ci<cols.length;ci++){
+    const lane=cols[ci];
+    const n=lane.shots.length; if(!n) continue;
+    const cyc=res.bare?0:activeTool.mounts[lane.mountIdx].cycle;
+    const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true);   // bare bolt still drinks from the rack's mag
+    let pick=-1;
+    for(let k=0;k<n;k++){
+      const i=(cyc+k)%n, sh=lane.shots[i];
+      const needsAmmo=sh.kind==='bolt'&&!sh.pend.laser;
+      const okCharge=activeTool.charge>=(sh.cost||0);
+      const okAmmo=!needsAmmo||(mag&&mag.loaded>0);
+      if(okCharge&&okAmmo){ pick=i; if(k>0) skippedAny=true; break; }
     }
-    emitProjectile('player',origin,fireDir,liveShot,res);
-    const silent=liveShot.pend.silent||res.silenced;
-    playSound(liveShot.kind==='spark'?'spark':(silent?'silenced':'shoot'));
-    addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
-    if(!silent){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
-    cameraPitch+=0.012+res.dmg*0.0004;
-    playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4);
+    if(pick<0) continue;                                 // starved column: cycle HOLDS
+    const sh=lane.shots[pick];
+    activeTool.charge-=(sh.cost||0);                     // price the shot, not the copies
+    for(let b=0;b<res.burst;b++){
+      if(sh.kind==='bolt'&&!sh.pend.laser){
+        if(!mag||mag.loaded<=0) break;
+        mag.loaded--;
+      }
+      if(sh.pend.laser) fireHitscan('player',origin,fireDir,sh,res);
+      else emitProjectile('player',origin,fireDir,sh,res);
+      const silent=sh.pend.silent||res.silenced||lane.silenced;
+      playSound(sh.pend.laser?'spark':sh.kind==='spark'?'spark':(silent?'silenced':'shoot'));
+      loudest=Math.max(loudest,toolNoise(silent));
+      if(!silent&&kicked===0){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
+      if(kicked<3){ cameraPitch+=0.012+res.dmg*0.0004; playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4); kicked++; }
+    }
+    if(!res.bare) activeTool.mounts[lane.mountIdx].cycle=(pick+1)%n;
+    firedAny=true;
   }
-  activeTool.cycle=(pickIdx+1)%n;
+  if(skippedAny) playSound('click');
+  if(!firedAny){ playSound('empty'); fireCooldown=0.3; return; }
+  if(loudest>0) addNoise(playerPos.x,playerPos.y,playerPos.z,loudest);
   fireCooldown=res.fireRate;
   updateToolReadout();
 }
+
+// LASER VARIANTS: instant rays. No travel, no drop, no ammo. Under ballistic
+// damage by design — energy is convenient, ballistics kill.
+function fireHitscan(owner,origin,dir,shot,res){
+  const p=shot.pend;
+  const o=owner==='player'?camPos():origin, f=dir;
+  const maxLen=60;
+  let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
+  let pierceLeft=p.pierce, dmg=(shot.kind==='spark'?10:14)+p.dmg;
+  const hits=[];
+  for(const en of enemies){
+    if(en.health<=0) continue;
+    const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
+    const tt=rx*f.x+ry*f.y+rz*f.z;
+    if(tt>0.3&&tt<t){
+      const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
+      if(d<0.55) hits.push({en,tt});
+    }
+  }
+  hits.sort((a,b)=>a.tt-b.tt);
+  for(const h of hits){
+    if(owner==='player') h.en.hurt(dmg,'player');
+    if(res&&res.pulse){ h.en.velocity.addScaledVector(f,9); h.en.stagger=0.3; }
+    if(pierceLeft<=0){ t=h.tt; break; }
+    pierceLeft--;
+  }
+  const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
+  beamSegs.push({a:origin.clone?origin.clone():new Vec3(origin.x,origin.y,origin.z),b:end,
+                 col:shot.kind==='spark'?[1.0,0.45,0.9]:[1.0,0.3,0.35],ttl:0.06});
+  if(shot.kind==='spark'){                              // remote detonation at the dot
+    explode({pos:end,dmg,owner});
+  }else if(shot.kind==='pick'){
+    carveAt({pos:end,dmg});
+  }else{
+    worldNormalJS(end.x,end.y,end.z,_n); addDecal(end,_n,0.14);
+    addDyn(end.x,end.y,end.z,[1,0.4,0.4],1.0,0.05);
+  }
+}
+
+// THE TACTICAL LASER — a lane-topped BEAM with nothing to feed. While aiming:
+// a live ray to the aim point, a rangefinder, at-range grip for GRIP FIELD
+// builds. 2 charge/s only while the ray is lit.
+function runTacLaser(dt){
+  const res=activeTool?activeTool._res:null;
+  if(!res||!res.hasTacLaser||!playerPos.isAiming||heldWorld&&heldWorld.mode!=='beam'){ 
+    if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false);
+    const lr=document.getElementById('laserRange'); if(lr) lr.style.opacity=0;
+    return;
+  }
+  if(activeTool.charge<0.5) return;
+  activeTool.charge=Math.max(0,activeTool.charge-2*dt);
+  const o=camPos(), f=camForward();
+  const maxLen=40;
+  let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
+  if(res.grip && !heldWorld){
+    const pick=itemUnderCrosshair(maxLen);
+    if(pick.idx>=0 && pressed('interact')) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam');
+  }
+  if(heldWorld&&heldWorld.mode==='beam') t=Math.min(t,heldWorld.holdDist);
+  const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
+  beamSegs.push({a:muzzleWorld(),b:end,col:res.grip?[0.3,0.9,1.0]:[1.0,0.25,0.35],ttl:0.05});
+  addDyn(end.x,end.y,end.z,[1,0.3,0.35],0.7,0.04);
+  const lr=document.getElementById('laserRange');
+  if(lr){ lr.textContent=t>=maxLen-0.1?'—— m':t.toFixed(1)+' m'; lr.style.opacity=1; }
+}
 function endBeam(){ beamActive=false; beamAudio(false); if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false); }
-function runBeam(dt,res,shot){
+function runBeam_DEAD(dt,res,shot){
   beamAudio(true);
   activeTool.charge=Math.max(0,activeTool.charge-(24+(shot.pend.surcharge||0))*dt);
   if(activeTool.charge<=0){ endBeam(); return; }
@@ -2163,7 +2438,10 @@ function updateProjectiles(dt){
         for(const en of enemies){
           if(en.health<=0) continue;
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
-          if(d<0.55){ en.hurt(pr.dmg,'player'); playSound('hit'); dead=impactOrPierce(pr); break; }
+          if(d<0.55){
+            en.hurt(pr.dmg,'player'); playSound('hit');
+            if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
+            dead=impactOrPierce(pr); break; }
         }
         if(dead) continue;
       }
@@ -2302,16 +2580,30 @@ class Zealot{
   buildTool(){
     const t=ITEM_DEFS.tool(); t.name='Zealot Tool';
     const mag=ITEM_DEFS.magStd(); mag.loaded=8+Math.floor(runRng()*5);
-    placeInGrid(mag,0,0,t.grid);
+    t.base.slots[0]=mag;
     const roll=runRng();
-    const put=(key,x,y)=>{ const m=ITEM_DEFS[key](); if(gridFits(m,x,y,t.grid,GUN_COLS,GUN_ROWS)) placeInGrid(m,x,y,t.grid); };
-    if(roll<0.18)      put('dmgPlus',1,0), put('boltCore',2,0);
-    else if(roll<0.30) put('twin',1,0),    put('boltCore',2,0);
-    else if(roll<0.40) put('sparkCore',1,0);
-    else if(roll<0.50) put('suppressor',1,0), put('boltCore',2,0);
-    else if(roll<0.58) put('autoSear',1,0),   put('boltCore',2,0);
-    else               put('boltCore',1,0);
-    if(runRng()<0.3) put(MOD_KEYS[Math.floor(runRng()*MOD_KEYS.length)],1,2);
+    // pour the base column bottom-up: charges first, core above — structurally
+    // incapable of rolling an all-vented gun
+    let bi=1;
+    const put=key=>{ const m=ITEM_DEFS[key]();
+      if(m instanceof ToolMod && m.cat==='muzzle'){ if(!t.base.muzzle) t.base.muzzle=m; return; }
+      if(m instanceof Barrel){ t.mounts[0].chain.push(m); return; }
+      if(m instanceof Platform) return;                 // guards don't roll platforms (yet)
+      if(bi<t.base.slots.length) t.base.slots[bi++]=m; };
+    if(roll<0.18)      { put('dmgPlus'); put('boltCore'); }
+    else if(roll<0.30) { put('twin');    put('boltCore'); }
+    else if(roll<0.40) { put('sparkCore'); }
+    else if(roll<0.50) { put('suppressor'); put('boltCore'); }
+    else if(roll<0.58) { put('autoSear');   put('boltCore'); }
+    else               { put('boltCore'); }
+    // deeper rings chain a barrel with its own little sequence
+    if(depth>=2 && runRng()<0.35){
+      const b=ITEM_DEFS[runRng()<0.7?'barrelC':'barrelU']();
+      if(runRng()<0.6) b.slots[0]=ITEM_DEFS[['dmgPlus','velPlus','twin','splinter'][Math.floor(runRng()*4)]]();
+      b.slots[1]=ITEM_DEFS[runRng()<0.75?'boltCore':'sparkCore']();
+      t.mounts[0].chain.push(b);
+    }
+    if(runRng()<0.3) put(MOD_KEYS[Math.floor(runRng()*MOD_KEYS.length)]);
     this.tool=t;
     this.res=resolveTool(t);
     this.reserve=6+Math.floor(runRng()*10);
@@ -2533,7 +2825,8 @@ function initLoadout(){
   bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
   const t=ITEM_DEFS.tool(); t.name='Foundling Tool';
   const mag=ITEM_DEFS.magStd(); mag.loaded=8;
-  placeInGrid(mag,0,0,t.grid);
+  t.base.slots[0]=mag;                                  // slots are agnostic — the mag just sits there
+  t.mounts[0].chain.push(ITEM_DEFS.barrelC());          // starting common barrel on the native mount
   activeTool=t;
   autoPlace(ITEM_DEFS.ammo9(),bagGrid,BAG_COLS,BAG_ROWS);
   autoPlace(ITEM_DEFS.watch(),bagGrid,BAG_COLS,BAG_ROWS);
@@ -2776,20 +3069,104 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
     container.appendChild(span);
   }
 }
+function rackSig(tool){
+  return (tool.platform?tool.platform.id:'_')+'|'+tool.mounts.map(m=>
+    m.chain.map(b=>b.id+':'+b.slots.map(x=>x?x.id:'_').join(',')+':'+(b.muzzle?b.muzzle.id:'_')).join('+')).join('|')
+    +'|'+tool.base.slots.map(x=>x?x.id:'_').join(',')+':'+(tool.base.muzzle?tool.base.muzzle.id:'_');
+}
 function refreshInvUI(){
   if(isInventoryOpen) renderGrid('bagGrid',bagGrid,BAG_COLS,BAG_ROWS,0);
   if(isToolMenuOpen){
-    renderGrid('gunGrid',activeTool?activeTool.grid:null,GUN_COLS,GUN_ROWS,1);
     if(activeTool){
       activeTool._res=resolveTool(activeTool);
-      const sig=activeTool._res.seq.map(m=>m.id).join(',');
-      if(activeTool._seqSig!==undefined && activeTool._seqSig!==sig) activeTool.cycle=0;   // edited: back to shot 1
+      const sig=rackSig(activeTool);
+      if(activeTool._seqSig!==undefined && activeTool._seqSig!==sig)
+        for(const m of activeTool.mounts) m.cycle=0;     // edited: every column back to shot 1
       activeTool._seqSig=sig;
     }
+    renderRack('rackWrap',activeTool,1);
     document.getElementById('modSequence').innerHTML=describeSequence(activeTool?activeTool._res:resolveTool(null));
   }
   renderInspect();
   updateToolReadout();
+}
+
+// ---- the rack: one flex column per mount, bottom-to-top, muzzle on top --------------
+function renderRack(containerId,tool,focusIdx){
+  const container=document.getElementById(containerId);
+  container.innerHTML='';
+  if(!tool){ container.innerHTML='<div class="hintline">No Tool wielded.</div>'; return; }
+  const res=(focusIdx===1&&tool._res)?tool._res:resolveTool(tool);
+  const cols=toolColumns(tool);
+  const maxLen=Math.max(...cols.map(c=>c.refs.length),1);
+  const cell=clamp(Math.floor(340/maxLen),20,40);
+  container.style.setProperty('--rc',cell+'px');
+  cols.forEach((col,ci)=>{
+    const lane=res.columns[ci]||{};
+    const colDiv=document.createElement('div');
+    colDiv.className='rackCol';
+    // header: mount label · next cost · mag state · cycle
+    const head=document.createElement('div'); head.className='rackHead';
+    if(col.isEmptyMount) head.textContent='MOUNT '+ci+' · FREE';
+    else{
+      const n=lane.shots?lane.shots.length:0;
+      const cyc=n?tool.mounts[col.mountIdx].cycle%n:0;
+      const next=n?lane.shots[cyc]:null;
+      const mg=columnMag(tool,ci,false);
+      head.innerHTML=(ci===0?'BASE':'M'+ci)
+        +(next?' · ▶'+next.kind.toUpperCase()+(next.cost?'⚡'+next.cost:''):' · —')
+        +(mg?' · '+mg.loaded+'/'+mg.maxCapacity:(lane.shots&&lane.shots.some(s=>s.kind==='bolt'&&!s.pend.laser)?' · <span style="color:#e0492e">DRY</span>':''))
+        +(lane.tacLaser?' · <span style="color:#ff5a66">▸ painting</span>':'')
+        +(col.spreadAdd?' · +'+col.spreadAdd.toFixed(2):'');
+    }
+    colDiv.appendChild(head);
+    if(col.isEmptyMount){
+      const d=mkRackCell(tool,focusIdx,ci,0,null,{mountSock:true});
+      d.appendChild(Object.assign(document.createElement('div'),{className:'rlbl',textContent:'mount'}));
+      colDiv.appendChild(d);
+    }else{
+      col.refs.forEach((ref,ri)=>{
+        const it=readRef(ref);
+        const opts={muz:ref.muzzle,
+          seg: !ref.muzzle && ref.i===0 && ref.a!==tool.base.slots,
+          vent: it&&lane.vented&&lane.vented.includes(it),
+          nextCore: it&&lane.shots&&lane.shots.length&&lane.shots[tool.mounts[col.mountIdx].cycle%lane.shots.length].core===it};
+        const d=mkRackCell(tool,focusIdx,ci,ri,it,opts);
+        colDiv.appendChild(d);
+      });
+    }
+    container.appendChild(colDiv);
+  });
+}
+function mkRackCell(tool,focusIdx,ci,ri,item,opts){
+  const d=document.createElement('div');
+  d.className='rcell'+(opts.muz?' muz':'')+(opts.seg?' seg0':'')+(opts.mountSock?' mountSock':'')
+    +(opts.vent?' vent':'')+(opts.nextCore?' nextCore':'');
+  if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) d.classList.add('cursor');
+  if(item){
+    const img=document.createElement('img'); img.src=makeIcon(item); img.draggable=false; d.appendChild(img);
+    const extra=item instanceof Ammunition?'×'+item.count:(item instanceof Magazine?item.loaded+'/'+item.maxCapacity:'');
+    const lbl=document.createElement('div'); lbl.className='rlbl'; lbl.textContent=item.name+(extra?' '+extra:'');
+    d.appendChild(lbl);
+    if(item===inspectItem) d.style.borderColor='var(--gate)';
+  }else if(opts.muz){
+    const lbl=document.createElement('div'); lbl.className='rlbl'; lbl.textContent='◆ muzzle'; d.appendChild(lbl);
+  }
+  d.addEventListener('mouseenter',()=>{
+    if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) return;
+    if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+    currentFocus=focusIdx; cursorX=ci; cursorY=ri;
+    if(item) showTooltip(item); else hideTooltip();
+    refreshInvUI();
+  });
+  d.addEventListener('mousedown',e=>{
+    if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+    currentFocus=focusIdx; cursorX=ci; cursorY=ri;
+    if(e.button===0) interactInventory();
+    else if(e.button===2) quickUse();
+    else if(e.button===1){ e.preventDefault(); activateAtCursor(); }
+  });
+  return d;
 }
 function updateToolReadout(){
   const nm=document.getElementById('trName'), md=document.getElementById('trMode');
@@ -2805,11 +3182,14 @@ function updateToolReadout(){
   }).join(' / ');
   md.textContent=(res.silenced?'SUPPRESSED ':'')+(res.auto?'AUTO ':'')+(res.burst>1?'BURST'+res.burst+' ':'')+kinds
     +(res.grip?' +GRIP':'')+(res.pulse?' +PUSH':'');
-  // the fire cycle, visible: which shot is next, and what it will cost
-  const cyc=activeTool.cycle%res.shots.length;
-  document.getElementById('trPips').innerHTML=res.shots.map((sh,i)=>
-    '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
-    +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
+  // the fire cycle, visible: per COLUMN — the volley is one shot from each
+  document.getElementById('trPips').innerHTML=res.columns.filter(l=>l.shots.length).map(lane=>{
+    const n=lane.shots.length;
+    const cyc=res.bare?0:activeTool.mounts[lane.mountIdx].cycle%n;
+    return lane.shots.map((sh,i)=>
+      '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
+      +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
+  }).join(' <span style="opacity:.4">‖</span> ');
   document.getElementById('chargeFill').style.width=activeTool.charge.toFixed(0)+'%';  // rounds are counted by hand now
 }
 
@@ -3053,18 +3433,22 @@ function updateWorldItems(dt){
 function menuNav(){
   const f=focusGrid();
   let moved=false;
-  if(f.grid){
+  if(f.grid||f.rack){
     clampCursor(f);
     const step=(dx,dy)=>{
       const nx=cursorX+dx, ny=cursorY+dy;
       const inspGrid=inspectItem instanceof Tool;         // the pockets panel sits to the RIGHT
       if(dx>0 && nx>=f.cols && inspGrid && currentFocus!==2){
-        setFocus(2, 0, clamp(cursorY,0,GUN_ROWS-1)); moved=true; return;
+        const tz=rackZone(inspectItem);
+        setFocus(2, 0, clamp(cursorY,0,tz.rowsOf(0)-1)); moved=true; return;
       }
       if(dx<0 && nx<0 && currentFocus===2){
         const back=isToolMenuOpen?1:0;
-        const bc=back===0?BAG_COLS:GUN_COLS, br=back===0?BAG_ROWS:GUN_ROWS;
-        setFocus(back, bc-1, clamp(cursorY,0,br-1)); moved=true; return;
+        if(back===0){ setFocus(0, BAG_COLS-1, clamp(cursorY,0,BAG_ROWS-1)); }
+        else{ const tz=activeTool?rackZone(activeTool):null;
+              const bc=tz?tz.cols:1;
+              setFocus(1, bc-1, clamp(cursorY,0,tz?tz.rowsOf(bc-1)-1:0)); }
+        moved=true; return;
       }
       cursorX=clamp(nx,0,f.cols-1); cursorY=clamp(ny,0,f.rows-1); moved=true;
     };
@@ -3122,6 +3506,7 @@ function frame(){
     if(!uiMenusOpen()){
       updateInteract(dt);
       tryFirePlayer(dt);
+      runTacLaser(dt);
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
     }else if(beamActive) endBeam();
     updateHeldPhysics(dt);
