@@ -284,12 +284,15 @@ const FLAGS = { god:false, noclip:false, seeAll:false };
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
 let runRng = mulberry32(1);
 function fractJS(x){return x-Math.floor(x);}
-// identical math to GLSL hash(vec2) so JS collision matches shader geometry
+// bit-exact twin of the shader's hashi(): pure int32/uint32 ops, so the CPU
+// and GPU agree on every cell no matter the driver's float precision.
 function cellHash(x,y){
-  let px=fractJS(x*123.34), py=fractJS(y*456.21);
-  const d=px*(px+45.32)+py*(py+45.32);
-  px+=d; py+=d;
-  return fractJS(px*py);
+  let v=(Math.imul(x|0,1664525)^Math.imul(y|0,1013904223))>>>0;
+  v=(Math.imul(v,747796405)+2891336453)>>>0;
+  v^=v>>>16; v=Math.imul(v,0x7feb352d)>>>0;
+  v^=v>>>15; v=Math.imul(v,0x846ca68b)>>>0;
+  v^=v>>>16;
+  return Math.fround(v>>>0)*2.3283064365386963e-10;   // *2^-32, both sides round-to-nearest
 }
 
 // -------- tiny vector kit
@@ -580,9 +583,21 @@ float hash(vec2 p){
   p += dot(p, p+45.32);
   return fract(p.x*p.y);
 }
+// integer-lattice hash — bit-exact twin of cellHash() in JS. World structure
+// MUST come from this one, never from hash(): float-precision hashes diverge
+// between GPU (f32) and CPU (f64), which desyncs collision from the picture.
+float hashi(ivec2 v){
+  uint x=(uint(v.x)*1664525u)^(uint(v.y)*1013904223u);
+  x=x*747796405u+2891336453u;
+  x^=x>>16; x*=0x7feb352du;
+  x^=x>>15; x*=0x846ca68bu;
+  x^=x>>16;
+  return float(x)*(1.0/4294967296.0);
+}
 float vnoise(vec2 x){
   vec2 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
-  float a=hash(i), b=hash(i+vec2(1.0,0.0)), c=hash(i+vec2(0.0,1.0)), d=hash(i+vec2(1.0,1.0));
+  ivec2 ii=ivec2(i);
+  float a=hashi(ii), b=hashi(ii+ivec2(1,0)), c=hashi(ii+ivec2(0,1)), d=hashi(ii+ivec2(1,1));
   return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
 }
 
@@ -693,7 +708,7 @@ vec2 mapStatic(vec3 p){
     vec3 q=p;
     q.xz=mod(q.xz+cellSize*0.5,cellSize)-cellSize*0.5;
     bool isGate=(cellId==uGateCell);
-    float h=hash(cellId+uSeed);
+    float h=hashi(ivec2(cellId)+ivec2(uSeed));
     vec2 cell=cellSDF(q,h,isGate);
     if(cell.x<res.x) res=cell;
   }
@@ -949,7 +964,7 @@ void main(){
 
       vec2 cellId=floor((p.xz+10.0)/20.0);
       if(abs(cellId.y)<=2.0){
-        float hL=hash(cellId+uSeed);
+        float hL=hashi(ivec2(cellId)+ivec2(uSeed));
         if(hL > 0.45 && cellId != uGateCell){
           float type=floor(hL*5.0);
           vec3 lpos;
@@ -1083,6 +1098,11 @@ function terrainHJS(x,z){
 
 function mapWorldJS(px,py,pz){
   let res=(py-terrainHJS(px,pz))*0.62;
+  { // gate beacon column (shader draws it solid; capsule y:0..70 r:0.30)
+    const bdy=Math.max(0,Math.abs(py-35)-35);
+    const bxz=Math.hypot(px-GATE.x,pz-GATE.z);
+    res=Math.min(res, Math.sqrt(bxz*bxz+bdy*bdy)-0.30);
+  }
   const cs=20.0;
   const cx=Math.floor((px+cs*0.5)/cs), cz=Math.floor((pz+cs*0.5)/cs);
   const pcx=Math.floor((playerPos.x+cs*0.5)/cs), pcz=Math.floor((playerPos.z+cs*0.5)/cs);
@@ -1096,32 +1116,33 @@ function mapWorldJS(px,py,pz){
     return Math.min(res,pil);
   }
   const h=cellHash(cx+SEED.x, cz+SEED.y);
-  const type=Math.floor(h*5);
+  const fr=Math.fround;                                    // GPU multiplies in f32 — mirror it
+  const type=Math.floor(fr(h*5));
   let d=res;
   for(let k=0;k<2;k++){                                    // boulders
-    if(fractJS(h*(7+13*k))<0.5){
-      const rx=fractJS(h*(31+17*k))*16-8, rz=fractJS(h*(57+23*k))*16-8, rr=0.5+fractJS(h*(71+29*k))*0.7;
+    if(fractJS(fr(h*(7+13*k)))<0.5){
+      const rx=fractJS(fr(h*(31+17*k)))*16-8, rz=fractJS(fr(h*(57+23*k)))*16-8, rr=0.5+fractJS(fr(h*(71+29*k)))*0.7;
       const ax=qx-rx, ay=(qy-rr*0.55)*1.6, az=qz-rz;
       d=Math.min(d, Math.sqrt(ax*ax+ay*ay+az*az)-rr);
     }
   }
   if(type===0||type>2){                                    // crates
     for(let k=0;k<3;k++){
-      if(fractJS(h*(13+7*k))<0.6){
-        const cx0=fractJS(h*(29+11*k))*14-7, cz0=fractJS(h*(53+17*k))*14-7;
+      if(fractJS(fr(h*(13+7*k)))<0.6){
+        const cx0=fractJS(fr(h*(29+11*k)))*14-7, cz0=fractJS(fr(h*(53+17*k)))*14-7;
         d=Math.min(d, sdBoxJS(qx-cx0,qy-0.55,qz-cz0,0.55,0.55,0.55));
       }
     }
   }
   if(type===1){                                            // barracks
-    const bx=fractJS(h*11.7)*4-2, bz=fractJS(h*19.3)*4-2;
+    const bx=fractJS(fr(h*11.7))*4-2, bz=fractJS(fr(h*19.3))*4-2;
     let shell=sdBoxJS(qx-bx,qy-1.8,qz-bz,5.0,1.8,3.6);
     shell=Math.max(shell,-sdBoxJS(qx-bx,qy-1.70,qz-bz,4.6,1.68,3.2));
     shell=Math.max(shell,-sdBoxJS(qx-bx,qy-1.05,qz-bz,5.4,1.05,0.75));
     d=Math.min(d,shell);
     d=Math.min(d, sdBoxJS(qx-bx,qy-3.75,qz-bz,5.35,0.12,3.95));
   }else if(type===2){                                      // watchtower
-    const tx=fractJS(h*11.7)*6-3, tz=fractJS(h*19.3)*6-3;
+    const tx=fractJS(fr(h*11.7))*6-3, tz=fractJS(fr(h*19.3))*6-3;
     const ax=qx-tx, az=qz-tz;
     for(let k=0;k<4;k++){
       const sx=k<2?1:-1, sz=(k===0||k===2)?1:-1;
@@ -1132,18 +1153,18 @@ function mapWorldJS(px,py,pz){
     d=Math.min(d, sdBoxJS(ax,qy-6.9,az,0.09,0.75,0.09));
     d=Math.min(d, sdBoxJS(ax,qy-7.6,az,2.3,0.1,2.3));
   }else if(type===3){                                      // walled yard
-    const gx=fractJS(h*23.9)*6-3;
+    const gx=fractJS(fr(h*23.9))*6-3;
     let ring=Math.max(sdBoxJS(qx,qy-1.6,qz,6.5,1.6,6.5), -sdBoxJS(qx,qy-1.7,qz,5.9,1.8,5.9));
     ring=Math.max(ring, -sdBoxJS(qx-gx,qy-1.5,qz,1.4,1.8,7.2));
     d=Math.min(d,ring);
   }else if(type===4){                                      // ruin
-    const wx=fractJS(h*11.7)*6-3, wz=fractJS(h*19.3)*6-3;
-    const hA=0.8+fractJS(h*13.1)*1.6, hB=0.6+fractJS(h*17.7)*1.4;
+    const wx=fractJS(fr(h*11.7))*6-3, wz=fractJS(fr(h*19.3))*6-3;
+    const hA=0.8+fractJS(fr(h*13.1))*1.6, hB=0.6+fractJS(fr(h*17.7))*1.4;
     d=Math.min(d, sdBoxJS(qx-wx,qy-hA,qz-wz,3.5,hA,0.3));
     d=Math.min(d, sdBoxJS(qx-wx-2.2,qy-hB,qz-wz+1.5,0.3,hB,3.0));
   }
   if(h>0.45 && type!==1){                                  // lamp post
-    const lx=fractJS(h*23.3)*7-3.5, lz=fractJS(h*41.7)*7-3.5;
+    const lx=fractJS(fr(h*23.3))*7-3.5, lz=fractJS(fr(h*41.7))*7-3.5;
     const rxz=Math.hypot(qx-lx,qz-lz);
     const dv=Math.abs(qy-2.0)-2.0, dh=rxz-0.07;
     d=Math.min(d, Math.min(Math.max(dh,dv),0)+Math.hypot(Math.max(dh,0),Math.max(dv,0)));
@@ -2729,8 +2750,17 @@ function updatePlayer(dt){
 
   const fx=Math.sin(cameraYaw), fz=Math.cos(cameraYaw);
   const rx=Math.cos(cameraYaw), rz=-Math.sin(cameraYaw);
-  playerPos.x+=(rx*mx+fx*mz)*speed*dt;
-  playerPos.z+=(rz*mx+fz*mz)*speed*dt;
+  { // substep the slide: ruin walls are 0.3m thin, one capped-dt sprint frame is wider
+    const stepX=(rx*mx+fx*mz)*speed*dt, stepZ=(rz*mx+fz*mz)*speed*dt;
+    const nSub=FLAGS.noclip?1:Math.max(1,Math.ceil(Math.hypot(stepX,stepZ)/0.18));
+    for(let sI=0;sI<nSub;sI++){
+      playerPos.x+=stepX/nSub; playerPos.z+=stepZ/nSub;
+      if(!FLAGS.noclip&&nSub>1){
+        _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
+        playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
+      }
+    }
+  }
 
   if(FLAGS.noclip){
     playerPos.velY=0;
