@@ -1269,7 +1269,7 @@ function marchWorldJS(ox,oy,oz,dx,dy,dz,maxDist){
 // GAME STATE · DAY/NIGHT · EXPOSURE
 // ============================================================
 const playerPos={
-  x:2.5,y:0,z:2.5, velY:0, onGround:true,
+  x:2.5,y:0,z:2.5, velY:0, onGround:true, coyoteT:0, jumpBufT:0,
   health:100,maxHealth:100,
   eyeHeight:1.32, baseHeight:1.32,          // a child's eye line
   isAiming:false,isSprinting:false,isCrouching:false,
@@ -1304,22 +1304,32 @@ function updateDayNight(){
   const elev=-Math.cos(t01*Math.PI*2);                 // -1 midnight … +1 noon
   const elevAng=elev*(Math.PI/2)*0.9;
   const sd=new Vec3(Math.cos(elevAng)*Math.sin(az), Math.sin(elevAng), Math.cos(elevAng)*Math.cos(az));
-  dayNight.sunUp = sd.y>0.02;
-  if(dayNight.sunUp){
-    dayNight.lightDir.copy(sd).normalize();
-    const warm=clamp(1.0-sd.y*1.4,0,1);                // low sun = warm
-    const inten=clamp(sd.y*1.6,0.15,1.05);
-    dayNight.lightCol=[inten*(1.0), inten*lerp(0.97,0.55,warm), inten*lerp(0.9,0.3,warm)];
-    dayNight.ambient=lerp(0.09,0.34,clamp(sd.y*1.5,0,1));
-    dayNight.skyHi=[lerp(0.35,0.16,warm),lerp(0.55,0.22,warm),lerp(0.85,0.35,warm)];
-    dayNight.skyLo=[lerp(0.75,0.85,warm),lerp(0.72,0.45,warm),lerp(0.65,0.30,warm)];
-  }else{
-    dayNight.lightDir.set(-sd.x,-sd.y,-sd.z).normalize();   // moon opposite
-    dayNight.lightCol=[0.16,0.20,0.30];
-    dayNight.ambient=0.055;
-    dayNight.skyHi=[0.02,0.03,0.06];
-    dayNight.skyLo=[0.05,0.06,0.10];
-  }
+  // twilight blend: k=1 full day, k=0 full night, smooth across a dusk band.
+  // Palettes are computed for BOTH states and lerped, so nothing snaps; the
+  // sun->moon direction swap happens at sd.y=0 where both lights are dim and
+  // color-matched, making the swap invisible.
+  const tw=clamp((sd.y+0.16)/(0.12+0.16),0,1);
+  const k=tw*tw*(3-2*tw);
+  dayNight.k=k;
+  dayNight.sunUp = sd.y>0.0;
+  dayNight.lightDir.copy(dayNight.sunUp?sd:{x:-sd.x,y:-sd.y,z:-sd.z}).normalize();
+  const warm=clamp(1.0-sd.y*1.4,0,1);                  // low sun = warm
+  const inten=clamp(sd.y*1.6,0.12,1.05);
+  const dCol=[inten*(1.0), inten*lerp(0.97,0.55,warm), inten*lerp(0.9,0.3,warm)];
+  const dAmb=lerp(0.09,0.34,clamp(sd.y*1.5,0,1));
+  const dHi=[lerp(0.35,0.16,warm),lerp(0.55,0.22,warm),lerp(0.85,0.35,warm)];
+  const dLo=[lerp(0.75,0.85,warm),lerp(0.72,0.45,warm),lerp(0.65,0.30,warm)];
+  const nCol=[0.16,0.20,0.30], nAmb=0.055, nHi=[0.02,0.03,0.06], nLo=[0.05,0.06,0.10];
+  const mixV=(a,b)=>[lerp(a[0],b[0],k),lerp(a[1],b[1],k),lerp(a[2],b[2],k)];
+  // horizon dip: directional light fades to zero right at the sun/moon swap,
+  // so the direction flip never moves a visible shadow
+  const dipT=clamp(Math.abs(sd.y)*14,0,1);
+  const dip=dipT*dipT*(3-2*dipT);
+  const lc=mixV(nCol,dCol);
+  dayNight.lightCol=[lc[0]*dip,lc[1]*dip,lc[2]*dip];
+  dayNight.ambient=lerp(nAmb,dAmb,k);
+  dayNight.skyHi=mixV(nHi,dHi);
+  dayNight.skyLo=mixV(nLo,dLo);
 }
 
 // how lit is the player right now? (drives stealth)
@@ -1333,7 +1343,7 @@ function updateExposure(dt){
   const L=dayNight.lightDir;
   const skyT=marchWorldJS(px,py,pz, L.x,L.y,L.z, 45);
   if(skyT>=45){
-    e += dayNight.sunUp ? clamp(L.y,0,1)*0.85 : 0.13;
+    e += lerp(0.13, clamp(L.y,0,1)*0.85, dayNight.k!==undefined?dayNight.k:(dayNight.sunUp?1:0));
   }
   const cs=20, cx=Math.floor((px+cs*0.5)/cs), cz=Math.floor((pz+cs*0.5)/cs);
   const h=cellHash(cx+SEED.x,cz+SEED.y);
@@ -2915,16 +2925,25 @@ function updatePlayer(dt){
     if(down('leanL')&&down('leanR')) playerPos.y-=4*dt;
   }else{
     playerPos.velY-=P('gravity')*dt;
+    if(playerPos.velY<-34) playerPos.velY=-34;           // terminal velocity
     playerPos.y+=playerPos.velY*dt;
     _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
     playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
     _c2.set(playerPos.x,playerPos.y+0.95,playerPos.z); resolveCollision(_c2,0.34);
     playerPos.x=_c2.x; playerPos.y=_c2.y-0.95; playerPos.z=_c2.z;
+    // grounded: resting equilibrium on scaled terrain reads ~0.15 at the feet,
+    // on structure floors ~0.04 — 0.22 covers both without licking walls
     const gd=mapWorldJS(playerPos.x,playerPos.y+0.05,playerPos.z);
-    if(playerPos.velY<=0&&gd<0.14){ playerPos.onGround=true; playerPos.velY=0; }
+    if(playerPos.velY<=0.001&&gd<0.22){ playerPos.onGround=true; playerPos.velY=0; }
     else playerPos.onGround=false;
-    if(pressed('jump')&&playerPos.onGround&&!playerPos.isCrouching&&!menus){
-      playerPos.velY=P('jumpVel'); playerPos.onGround=false; playSound('step');
+    // coyote: you may still jump a beat after leaving the edge
+    playerPos.coyoteT = playerPos.onGround ? 0.09 : Math.max(0,playerPos.coyoteT-dt);
+    // buffer: a press just before landing still lands the jump
+    playerPos.jumpBufT = Math.max(0,playerPos.jumpBufT-dt);
+    if(pressed('jump')&&!menus) playerPos.jumpBufT=0.12;
+    if(playerPos.jumpBufT>0&&playerPos.coyoteT>0&&!playerPos.isCrouching&&!menus){
+      playerPos.velY=P('jumpVel'); playerPos.onGround=false;
+      playerPos.coyoteT=0; playerPos.jumpBufT=0; playSound('step');
     }
   }
 
