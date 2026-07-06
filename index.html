@@ -73,6 +73,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
 #backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
   text-align:center;pointer-events:none;}
+#toolCols{display:flex;gap:16px;align-items:flex-start;}
+#rackLeft{flex:0 0 auto;}
+#rackInspect{flex:0 0 210px;min-height:120px;align-self:stretch;padding:12px 14px;
+  background:rgba(6,8,10,.5);border:1px solid var(--dust);border-radius:4px;pointer-events:auto;}
+#rackInspect .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;font-size:11px;}
+#rackInspect .tt-cat{color:var(--dust);font-size:9px;margin-bottom:8px;}
+#rackInspect .tt-body{font-size:10px;line-height:1.6;color:var(--bone);}
 #toolUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);z-index:40;
   text-align:center;pointer-events:none;}
 #backpackUI .stencil,#toolUI .stencil{text-shadow:0 1px 5px #000,0 0 14px #000;font-size:11px;letter-spacing:.28em;}
@@ -198,10 +205,15 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <!-- Tool — mod slots float over the Tool turned on its side -->
 <div id="toolUI" class="hidden">
   <div class="stencil">THE TOOL · BARREL RACK</div>
-  <div id="rackWrap"></div>
-  <div class="seqReadout" style="background:rgba(6,8,10,.4);pointer-events:auto;"><div class="stencil" style="margin-bottom:6px;">Columns fire together · each resolves bottom→top</div><div id="modSequence">—</div></div>
-  <div class="hintline">Charges load the core ABOVE them, per column. A <b>barrel</b> in a slot extends that column; a <b>platform</b> adds side slots — each fires alone, or roots a barrel.<br>
-  Containers lift out only when empty. Muzzle slots (◆) take muzzle parts only.</div>
+  <div id="toolCols">
+    <div id="rackLeft">
+      <div id="rackWrap"></div>
+      <div class="seqReadout" style="background:rgba(6,8,10,.4);pointer-events:auto;"><div class="stencil" style="margin-bottom:6px;">Columns fire together · each resolves bottom→top</div><div id="modSequence">—</div></div>
+      <div class="hintline">Charges load the core ABOVE them, per column. A <b>barrel</b> in a slot extends that column; a <b>platform</b> adds side slots — each fires alone, or roots a barrel.<br>
+      Containers lift out only when empty. Muzzle slots (◆) take muzzle parts only.</div>
+    </div>
+    <div id="rackInspect"><div class="stencil" style="margin-bottom:8px;">DETAIL</div><div id="rackInspectBody" class="hintline" style="opacity:.55;">Hover or select a slot to read it.</div></div>
+  </div>
 </div>
 
 <!-- Detached pockets — magazines & spare tools opened with X -->
@@ -850,29 +862,30 @@ vec2 map(vec3 p){
       }else{
         // the rack pose: gun points AWAY and up-screen — muzzles top, grip bottom,
         // matching the vertical column layout floating over it
-        vec3 tp=vl-vec3(0.0,-0.16-rise,0.66);
+        vec3 tp=vl-vec3(0.0,-0.22-rise,0.82);          // further back — more of the Tool in frame
         tp=rotY(tp, sin(iTime*0.5)*0.05);              // gentle sway only
         tp=rotX(tp, 1.05);                             // pitch the barrel up-and-away
-        float d=sdGun(tp/2.1,true)*2.1;
-        // the columns: one cylinder per mount, fanned L/R, length by slot count
+        float d=sdGun(tp/2.7,true)*2.7;                // smaller on screen = whole rack visible
+        // the columns share the body's scale: work in tp/2.7 space, *2.7 back out
+        vec3 cp=tp/2.7;
         for(int ci=0;ci<8;ci++){
           if(ci>=uColCount) break;
           float side=uCols[ci].y*0.085;                          // real column x offset
           float len=uCols[ci].x*0.055;
           vec3 a=vec3(side,0.05,0.10), b=vec3(side,0.05,0.10+len);
-          float bd=sdCapsule(tp, a, b, ci==0?0.040:0.030)*2.1;
+          float bd=sdCapsule(cp, a, b, ci==0?0.040:0.030)*2.7;
           // chain joints: shallow ring notches along the column
           float joints=uCols[ci].z;
           if(joints>0.5){
             float seg=len/(joints+1.0);
             for(int j=1;j<4;j++){
               if(float(j)>joints) break;
-              float ring=length(vec2(length(tp.xy-vec2(side,0.05))-(ci==0?0.046:0.036), tp.z-(0.10+seg*float(j))))-0.006;
-              bd=min(bd,ring*2.1);
+              float ring=length(vec2(length(cp.xy-vec2(side,0.05))-(ci==0?0.046:0.036), cp.z-(0.10+seg*float(j))))-0.006;
+              bd=min(bd,ring*2.7);
             }
           }
           if(uCols[ci].w>0.5){                         // fitted muzzle: a collar at the tip
-            float mz=sdCapsule(tp, vec3(side,0.05,0.10+len), vec3(side,0.05,0.13+len), ci==0?0.048:0.038)*2.1;
+            float mz=sdCapsule(cp, vec3(side,0.05,0.10+len), vec3(side,0.05,0.13+len), ci==0?0.048:0.038)*2.7;
             bd=min(bd,mz);
           }
           if(bd<d) d=bd;
@@ -1514,6 +1527,14 @@ class Tool extends Item{
 // -------- items that add a horizontal row of agnostic slots, each its own lane -----
 // -------- (one cell of vertical space) unless a barrel roots a new column there. ---
 const RACK_MAX_COLS=8;
+function wingCellCount(rootBarrel){
+  // mirrors walkColumn's cell emission for a barrel-rooted column (no nested platforms in count)
+  let n=0;
+  (function walk(b){ n++;                        // the barrel's own structural cell
+    for(const it of b.slots){ if(it instanceof Barrel) walk(it); else n++; }
+  })(rootBarrel);
+  return n+1;                                     // + the muzzle cell at the tip
+}
 function toolColumns(tool){
   const cols=[], cells=[];
   function cycleRefBase(){ return {get:()=>tool.baseCycle, set:v=>{tool.baseCycle=v;}}; }
@@ -1543,7 +1564,11 @@ function toolColumns(tool){
           const wref={a:it.slots,i:wi};
           const wit=it.slots[wi];
           if(wit instanceof Barrel){
-            walkColumn([wref],wx,y,cycleRefPlat(it,wi),false);   // barrel roots a column here
+            // center the wing column on the platform row: a 3-cell wing puts its
+            // middle cell level with the platform, a 5-cell wing its 3rd, etc.
+            const wingLen=wingCellCount(wit);
+            const y0=y-Math.floor(wingLen/2);
+            walkColumn([wref],wx,y0,cycleRefPlat(it,wi),false);
           }else{
             if(cols.length<RACK_MAX_COLS){                        // a one-cell micro-lane
               const mc={refs:[wref],mountIdx:cols.length,spreadAdd:0,cycleRef:cycleRefPlat(it,wi),x:wx,micro:true,cells:[]};
@@ -1758,14 +1783,14 @@ function toggleToolMenu(){ isToolMenuOpen?closeAllInv():openToolMenu(); }
 function rackZone(tool){
   const cols=toolColumns(tool);
   const cells=cols.cells;
-  let minX=0,maxX=0,maxY=0;
-  for(const c of cells){ if(c.x<minX)minX=c.x; if(c.x>maxX)maxX=c.x; if(c.y>maxY)maxY=c.y; }
+  let minX=0,maxX=0,minY=0,maxY=0;
+  for(const c of cells){ if(c.x<minX)minX=c.x; if(c.x>maxX)maxX=c.x; if(c.y<minY)minY=c.y; if(c.y>maxY)maxY=c.y; }
   const map=new Map();
-  for(const c of cells) map.set((c.x-minX)+','+c.y, c);
-  return {rack:tool, colsData:cols, cells, map, minX,
-          cols:maxX-minX+1, maxY,
+  for(const c of cells) map.set((c.x-minX)+','+(c.y-minY),c);   // normalize so wings that dip below sit in-grid
+  return {rack:tool, colsData:cols, cells, map, minX, minY,
+          cols:maxX-minX+1, maxY:maxY-minY,
           at:(cx,cy)=>map.get(cx+','+cy)||null,
-          rowsOf:cx=>{ let m=0; for(const c of cells) if(c.x-minX===cx) m=Math.max(m,c.y+1); return Math.max(1,m); }};
+          rowsOf:cx=>{ let m=0; for(const c of cells) if(c.x-minX===cx) m=Math.max(m,c.y-minY+1); return Math.max(1,m); }};
 }
 function focusGrid(){
   if(currentFocus===2 && inspectItem instanceof Tool) return rackZone(inspectItem);
@@ -1779,10 +1804,10 @@ function clampCursor(f){
   if(f.rack && !f.at(cursorX,cursorY)){    // sparse rack: snap to the nearest real cell
     let best=null,bd=1e9;
     for(const c of f.cells){
-      const d=Math.abs(c.x-f.minX-cursorX)*3+Math.abs(c.y-cursorY);
+      const d=Math.abs(c.x-f.minX-cursorX)*3+Math.abs(c.y-f.minY-cursorY);
       if(d<bd){ bd=d; best=c; }
     }
-    if(best){ cursorX=best.x-f.minX; cursorY=best.y; }
+    if(best){ cursorX=best.x-f.minX; cursorY=best.y-f.minY; }
   }
 }
 function refAt(f){ const c=f.at&&f.at(cursorX,cursorY); return c?c.ref:null; }
@@ -3168,6 +3193,7 @@ function refreshInvUI(){
       activeTool._seqSig=sig;
     }
     renderRack('rackWrap',activeTool,1);
+    updateRackDock();
     document.getElementById('modSequence').innerHTML=describeSequence(activeTool?activeTool._res:resolveTool(null));
   }
   renderInspect();
@@ -3182,8 +3208,7 @@ function renderRack(containerId,tool,focusIdx){
   const res=(focusIdx===1&&tool._res)?tool._res:resolveTool(tool);
   const z=rackZone(tool);
   const rows=z.maxY+1;
-  const cell=clamp(Math.floor(340/Math.max(rows,4)),20,40);
-  container.style.setProperty('--rc',cell+'px');
+  container.style.setProperty('--rc','36px');       // fixed — no jarring rescale as the tool grows
   container.style.display='grid';
   container.style.gridTemplateColumns='repeat('+z.cols+',var(--rc))';
   container.style.gridAutoRows='var(--rc)';
@@ -3191,7 +3216,7 @@ function renderRack(containerId,tool,focusIdx){
   container.style.justifyContent='center';
   const laneByIdx=res.columns;
   for(const c of z.cells){
-    const cx=c.x-z.minX, cy=c.y;
+    const cx=c.x-z.minX, cy=c.y-z.minY;
     const lane=laneByIdx[c.colIdx]||{};
     const it=c.ref?readRef(c.ref):null;
     const n=lane.shots?lane.shots.length:0;
@@ -3223,6 +3248,35 @@ function topCellOfCol(z,colIdx){
   for(const c of z.cells) if(c.colIdx===colIdx && (!best||c.y>best.y)) best=c;
   return best;
 }
+// the docked detail panel — reads the slot the cursor is on, grows with the text
+function updateRackDock(){
+  const body=document.getElementById('rackInspectBody'); if(!body) return;
+  if(!isToolMenuOpen || !activeTool){ return; }
+  const z=rackZone(activeTool);
+  const c=z.at(cursorX,cursorY);
+  const it=c&&c.ref?readRef(c.ref):null;
+  if(it){
+    const cat=it instanceof ToolMod?('MOD · '+it.cat.toUpperCase()):
+              it instanceof Barrel?'BARREL':it instanceof Platform?'PLATFORM':
+              it instanceof Magazine?'MAGAZINE':it instanceof Ammunition?'AMMUNITION':
+              it instanceof Gadget?'GADGET · SETTING':'ITEM';
+    let extra='';
+    if(it instanceof Magazine) extra=' · '+it.loaded+'/'+it.maxCapacity;
+    if(it instanceof Ammunition) extra=' · ×'+it.count;
+    if(it instanceof Barrel) extra=' · +'+it.addedSpread.toFixed(2)+' spread';
+    body.innerHTML='<div class="tt-name">'+it.name+'</div><div class="tt-cat">'+cat+extra
+      +'</div><div class="tt-body">'+it.desc()+'</div>';
+    body.style.opacity=1;
+  }else if(c&&c.muzzle){
+    body.innerHTML='<div class="tt-name">MUZZLE SLOT</div><div class="tt-cat">◆ DEDICATED</div>'
+      +'<div class="tt-body">Only muzzle parts fit here — Suppressor, Compensator. Silences or tightens this column alone.</div>';
+    body.style.opacity=1;
+  }else{
+    body.innerHTML='<div class="tt-name" style="color:var(--dust)">EMPTY SLOT</div>'
+      +'<div class="tt-body" style="opacity:.6;">Agnostic — a mod, magazine, barrel, platform, or cargo all fit.</div>';
+    body.style.opacity=.8;
+  }
+}
 function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   const d=document.createElement('div');
   d.className='rcell'+(opts.muz?' muz':'')+(opts.structural?' seg0':'')
@@ -3241,7 +3295,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
     if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) return;
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
-    if(item) showTooltip(item); else hideTooltip();
+    hideTooltip();                       // rack uses the docked panel instead
     refreshInvUI();
   });
   d.addEventListener('mousedown',e=>{
