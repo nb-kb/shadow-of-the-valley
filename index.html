@@ -83,7 +83,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   background:rgba(12,14,18,.28);position:relative;font-size:8px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
 #rackWrap{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:8px 4px;}
 .rackCol{display:flex;flex-direction:column-reverse;gap:3px;align-items:center;}
-.rackHead{font-size:9px;letter-spacing:.14em;color:var(--dust);text-align:center;margin-bottom:4px;order:99;}
+.rackHead{font-size:8px;letter-spacing:.08em;color:var(--dust);text-align:center;white-space:nowrap;align-self:end;pointer-events:none;}
 .rcell{width:var(--rc,40px);height:var(--rc,40px);border:1px solid rgba(215,220,230,.15);border-radius:3px;
   background:rgba(12,14,18,.30);position:relative;cursor:pointer;}
 .rcell:hover{outline:1px solid var(--dust);z-index:2;}
@@ -200,8 +200,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <div class="stencil">THE TOOL · BARREL RACK</div>
   <div id="rackWrap"></div>
   <div class="seqReadout" style="background:rgba(6,8,10,.4);pointer-events:auto;"><div class="stencil" style="margin-bottom:6px;">Columns fire together · each resolves bottom→top</div><div id="modSequence">—</div></div>
-  <div class="hintline">Charges load the core ABOVE them, per column. <b>E</b> with a held barrel chains it onto a column; a platform mounts side columns.<br>
-  <b>F</b> lifts an empty top barrel or a bare platform. Muzzle slots (◆) take muzzle parts only.</div>
+  <div class="hintline">Charges load the core ABOVE them, per column. A <b>barrel</b> in a slot extends that column; a <b>platform</b> adds side slots — each fires alone, or roots a barrel.<br>
+  Containers lift out only when empty. Muzzle slots (◆) take muzzle parts only.</div>
 </div>
 
 <!-- Detached pockets — magazines & spare tools opened with X -->
@@ -274,7 +274,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20m';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20n';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -857,8 +857,7 @@ vec2 map(vec3 p){
         // the columns: one cylinder per mount, fanned L/R, length by slot count
         for(int ci=0;ci<8;ci++){
           if(ci>=uColCount) break;
-          float fi=float(ci);
-          float side=(1.0-2.0*mod(fi,2.0))*ceil(fi*0.5)*0.085;   // odd left, even right, ci0 center
+          float side=uCols[ci].y*0.085;                          // real column x offset
           float len=uCols[ci].x*0.055;
           vec3 a=vec3(side,0.05,0.10), b=vec3(side,0.05,0.10+len);
           float bd=sdCapsule(tp, a, b, ci==0?0.040:0.030)*2.1;
@@ -1476,9 +1475,11 @@ class Platform extends Item{
     const t=PLATFORM_TIERS[rarity];
     super(rarity[0].toUpperCase()+rarity.slice(1)+' Platform',2,1,t.color);
     this.rarity=rarity; this.perSide=t.perSide;
+    this.slots=new Array(t.perSide*2).fill(null);   // [0..perSide) left, [perSide..) right
+    this.cycles=new Array(t.perSide*2).fill(0);     // each slot roots its own lane
   }
   get renderType(){ return 7; }
-  desc(){ return '+'+(this.perSide*2)+' barrel mounts ('+this.perSide+' per side) · E on the rack to install'; }
+  desc(){ return 'Slots into a column · adds '+(this.perSide*2)+' side slots — each fires on its own, or roots a barrel'; }
 }
 
 class Tool extends Item{
@@ -1486,40 +1487,84 @@ class Tool extends Item{
     super(name,2,2,color);
     // base column: 4 fixed agnostic slots + a native muzzle, never removable
     this.base={slots:new Array(4).fill(null), muzzle:null};
-    this.platform=null;
-    this.mounts=[{chain:[],cycle:0}];             // mount 0 is native
+    this.baseCycle=0;                              // the main column's cycle root
     this.charge=100;
   }
   get renderType(){ return 1; }
   desc(){ return 'The Tool. Everyone carries one. Right-click to wield.'; }
 }
-function mountCount(tool){ return 1+(tool.platform?tool.platform.perSide*2:0); }
-function syncMounts(tool){                        // platform installed/removed: grow/shrink mount list
-  const want=mountCount(tool);
-  while(tool.mounts.length<want) tool.mounts.push({chain:[],cycle:0});
-  // shrink only over empty mounts (callers guarantee this before removing a platform)
-  while(tool.mounts.length>want && tool.mounts[tool.mounts.length-1].chain.length===0) tool.mounts.pop();
-}
 
-// -------- column assembly: the pure heart of the rack. A column is a mount's --------
-// -------- full chain; mount 0 includes the base slots. Cell refs write through. ----
+// -------- column assembly: the rack is a TREE now. Barrels are slot items that ------
+// -------- inline their slots into the column they sit in; platforms are slot -------
+// -------- items that add a horizontal row of agnostic slots, each its own lane -----
+// -------- (one cell of vertical space) unless a barrel roots a new column there. ---
+const RACK_MAX_COLS=8;
 function toolColumns(tool){
-  const cols=[];
-  for(let mi=0;mi<tool.mounts.length;mi++){
-    const m=tool.mounts[mi];
-    const refs=[];
-    if(mi===0) for(let i=0;i<tool.base.slots.length;i++) refs.push({a:tool.base.slots,i,muzzle:false});
-    for(const b of m.chain) for(let i=0;i<b.slots.length;i++) refs.push({a:b.slots,i,muzzle:false});
-    // exactly one ACTIVE muzzle per column: topmost barrel's, else (mount 0) the base's
-    let mz=null;
-    if(m.chain.length) mz={a:m.chain[m.chain.length-1],k:'muzzle',muzzle:true};
-    else if(mi===0)    mz={a:tool.base,k:'muzzle',muzzle:true};
-    if(mz) refs.push(mz);
-    const spreadAdd=Math.min(CHAIN_SPREAD_CAP, m.chain.reduce((a,b)=>a+b.addedSpread,0));
-    cols.push({mount:m, mountIdx:mi, refs, spreadAdd,
-               isEmptyMount: mi>0 && m.chain.length===0});
+  const cols=[], cells=[];
+  function cycleRefBase(){ return {get:()=>tool.baseCycle, set:v=>{tool.baseCycle=v;}}; }
+  function cycleRefPlat(p,i){ return {get:()=>p.cycles[i]||0, set:v=>{p.cycles[i]=v;}}; }
+  // walk one column: rootRefs are slot refs whose contents stack upward from (x,y0)
+  function walkColumn(rootRefs,x,y0,cycleRef,isMain){
+    if(cols.length>=RACK_MAX_COLS) return null;
+    const col={refs:[],mountIdx:cols.length,spreadAdd:0,cycleRef,x,cells:[]};
+    cols.push(col);
+    let y=y0, topBarrel=null;
+    const queue=[...rootRefs];
+    for(let qi=0;qi<queue.length;qi++){
+      const ref=queue[qi];
+      const it=ref.k?ref.a[ref.k]:ref.a[ref.i];
+      if(it instanceof Barrel){
+        cells.push({x,y,ref,colIdx:col.mountIdx,structural:'barrel'}); y++;
+        col.spreadAdd=Math.min(CHAIN_SPREAD_CAP,col.spreadAdd+it.addedSpread);
+        topBarrel=it;
+        for(let i=0;i<it.slots.length;i++) queue.push({a:it.slots,i});
+        continue;
+      }
+      if(it instanceof Platform){
+        cells.push({x,y,ref,colIdx:col.mountIdx,structural:'platform'});
+        for(let side=0;side<2;side++) for(let k=0;k<it.perSide;k++){
+          const wx=x+(side?1:-1)*(k+1);
+          const wi=side*it.perSide+k;
+          const wref={a:it.slots,i:wi};
+          const wit=it.slots[wi];
+          if(wit instanceof Barrel){
+            walkColumn([wref],wx,y,cycleRefPlat(it,wi),false);   // barrel roots a column here
+          }else{
+            if(cols.length<RACK_MAX_COLS){                        // a one-cell micro-lane
+              const mc={refs:[wref],mountIdx:cols.length,spreadAdd:0,cycleRef:cycleRefPlat(it,wi),x:wx,micro:true,cells:[]};
+              cols.push(mc);
+              cells.push({x:wx,y,ref:wref,colIdx:mc.mountIdx});
+            }
+          }
+        }
+        y++;
+        continue;
+      }
+      col.refs.push(ref);
+      cells.push({x,y,ref,colIdx:col.mountIdx});
+      y++;
+    }
+    // the column's active muzzle: topmost inlined barrel's, else (main only) the base's
+    const holder=topBarrel||(isMain?tool.base:null);
+    if(holder){
+      const mz={a:holder,k:'muzzle',muzzle:true};
+      col.refs.push(mz);
+      cells.push({x,y,ref:mz,colIdx:col.mountIdx,muzzle:true});
+    }
+    return col;
   }
+  const baseRefs=tool.base.slots.map((_,i)=>({a:tool.base.slots,i}));
+  walkColumn(baseRefs,0,0,cycleRefBase(),true);
+  cols.cells=cells;
   return cols;
+}
+function barrelIsEmpty(b){ return b.slots.every(x=>!x) && !b.muzzle; }
+function platformIsEmpty(p){ return p.slots.every(x=>!x); }
+function resetAllCycles(tool){
+  tool.baseCycle=0;
+  (function walk(arr){ for(const it of arr){ if(!it) continue;
+    if(it instanceof Platform){ it.cycles.fill(0); walk(it.slots); }
+    if(it instanceof Barrel) walk(it.slots); } })(tool.base.slots);
 }
 function readRef(r){ return r.k? r.a[r.k] : r.a[r.i]; }
 function writeRef(r,v){ if(r.k) r.a[r.k]=v; else r.a[r.i]=v; }
@@ -1697,8 +1742,15 @@ function toggleToolMenu(){ isToolMenuOpen?closeAllInv():openToolMenu(); }
 
 function rackZone(tool){
   const cols=toolColumns(tool);
-  return {rack:tool, colsData:cols, cols:cols.length,
-          rowsOf:c=>Math.max(1,(cols[c]&&cols[c].refs.length)||1)};
+  const cells=cols.cells;
+  let minX=0,maxX=0,maxY=0;
+  for(const c of cells){ if(c.x<minX)minX=c.x; if(c.x>maxX)maxX=c.x; if(c.y>maxY)maxY=c.y; }
+  const map=new Map();
+  for(const c of cells) map.set((c.x-minX)+','+c.y, c);
+  return {rack:tool, colsData:cols, cells, map, minX,
+          cols:maxX-minX+1, maxY,
+          at:(cx,cy)=>map.get(cx+','+cy)||null,
+          rowsOf:cx=>{ let m=0; for(const c of cells) if(c.x-minX===cx) m=Math.max(m,c.y+1); return Math.max(1,m); }};
 }
 function focusGrid(){
   if(currentFocus===2 && inspectItem instanceof Tool) return rackZone(inspectItem);
@@ -1709,20 +1761,22 @@ function focusGrid(){
 function clampCursor(f){
   cursorX=clamp(cursorX,0,f.cols-1);
   cursorY=clamp(cursorY,0,(f.rack?f.rowsOf(cursorX):f.rows)-1);
+  if(f.rack && !f.at(cursorX,cursorY)){    // sparse rack: snap to the nearest real cell
+    let best=null,bd=1e9;
+    for(const c of f.cells){
+      const d=Math.abs(c.x-f.minX-cursorX)*3+Math.abs(c.y-cursorY);
+      if(d<bd){ bd=d; best=c; }
+    }
+    if(best){ cursorX=best.x-f.minX; cursorY=best.y; }
+  }
 }
-function refAt(f){ const cd=f.colsData&&f.colsData[cursorX]; return (cd&&cd.refs[cursorY])||null; }
+function refAt(f){ const c=f.at&&f.at(cursorX,cursorY); return c?c.ref:null; }
 function cellAt(f){
   if(f.rack){ const r=refAt(f); return r?readRef(r):null; }
   if(!f.grid) return null;
   const row=f.grid[cursorY]; return (row&&row[cursorX])||null;
 }
-// the top barrel of the column under the cursor (removal candidate)
-function topBarrelAt(f){
-  const cd=f.colsData&&f.colsData[cursorX]; if(!cd) return null;
-  const m=f.rack.mounts[cd.mountIdx];
-  return m.chain.length?m.chain[m.chain.length-1]:null;
-}
-function barrelIsEmpty(b){ return b.slots.every(x=>!x) && !b.muzzle; }
+
 
 // lift an inventory item into the player's hand: it becomes a pinned world item
 function handHold(item){
@@ -1761,19 +1815,8 @@ function interactInventory(){
     if(it===inspectItem || (f.rack&&it===f.rack)){ playSound('empty'); return; }   // no nesting a tool in itself
 
     if(f.rack){
-      // ---- structural installs first: barrels chain, platforms mount ----
-      if(it instanceof Barrel){
-        const cd=f.colsData[cursorX];
-        f.rack.mounts[cd.mountIdx].chain.push(it);
-        consumeHeld(); toast(it.name.toUpperCase()+' CHAINED'); playSound('place'); refreshInvUI(); return;
-      }
-      if(it instanceof Platform){
-        if(f.rack.platform){ toast('A PLATFORM IS ALREADY FITTED'); playSound('empty'); return; }
-        f.rack.platform=it; syncMounts(f.rack);
-        consumeHeld(); toast(it.name.toUpperCase()+' MOUNTED — '+(mountCount(f.rack)-1)+' SIDE MOUNTS'); playSound('place'); refreshInvUI(); return;
-      }
       const ref=refAt(f);
-      if(!ref){ playSound('empty'); return; }             // empty mount socket takes only barrels
+      if(!ref){ playSound('empty'); return; }
       // ---- muzzle discipline: muzzle mods ONLY in muzzle slots, and vice versa ----
       const isMuz=it instanceof ToolMod && it.cat==='muzzle';
       if(ref.muzzle && !isMuz){ toast('MUZZLE SLOT — MUZZLE PARTS ONLY'); playSound('empty'); return; }
@@ -1787,8 +1830,14 @@ function interactInventory(){
           }
         }
       }
-      if(!cell){ writeRef(ref,it); consumeHeld(); playSound('place'); refreshInvUI(); return; }
-      // swap — slots are agnostic, footprint is irrelevant inside the rack
+      if(!cell){ writeRef(ref,it);
+        consumeHeld();
+        if(it instanceof Barrel) toast('BARREL SET — COLUMN EXTENDED');
+        if(it instanceof Platform) toast('PLATFORM SET — '+it.slots.length+' SIDE SLOTS');
+        playSound('place'); refreshInvUI(); return; }
+      // swap — but never rip out a loaded container
+      if(cell instanceof Barrel && !barrelIsEmpty(cell)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
+      if(cell instanceof Platform && !platformIsEmpty(cell)){ toast('CLEAR THE PLATFORM FIRST'); playSound('empty'); return; }
       if(cell===inspectItem) closeInspect();
       writeRef(ref,it);
       heldWorld.w.item=cell;
@@ -1813,6 +1862,8 @@ function interactInventory(){
   }
 
   if(cell){                                               // hand empty: lift it out of the pocket
+    if(cell instanceof Barrel && !barrelIsEmpty(cell)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
+    if(cell instanceof Platform && !platformIsEmpty(cell)){ toast('CLEAR THE PLATFORM FIRST'); playSound('empty'); return; }
     if(cell===inspectItem) closeInspect();
     if(f.rack) writeRef(refAt(f),null);
     else removeFromGrid(cell,f.grid);
@@ -1898,26 +1949,6 @@ function quickUse(){
     }
   }
   if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
-  if(f.rack && !heldWorld){
-    // F on the top barrel of a chain (any of its cells) lifts it — if empty
-    const tb=topBarrelAt(f);
-    const ref=refAt(f);
-    const onTop=tb && ref && (ref.a===tb.slots || ref.a===tb);
-    if(onTop){
-      if(!barrelIsEmpty(tb)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
-      f.rack.mounts[f.colsData[cursorX].mountIdx].chain.pop();
-      handHold(tb); toast(tb.name.toUpperCase()+' UNCHAINED'); refreshInvUI(); return;
-    }
-    // F on an empty side mount: uninstall the platform if ALL its mounts are bare
-    const cd=f.colsData[cursorX];
-    if(cd && cd.isEmptyMount && f.rack.platform){
-      const allEmpty=f.rack.mounts.slice(1).every(m=>m.chain.length===0);
-      if(!allEmpty){ toast('CLEAR ALL SIDE MOUNTS FIRST'); playSound('empty'); return; }
-      const p=f.rack.platform; f.rack.platform=null; syncMounts(f.rack);
-      if(cursorX>=toolColumns(f.rack).length) cursorX=0;
-      handHold(p); toast('PLATFORM STRIPPED'); refreshInvUI(); return;
-    }
-  }
   playSound('click');
 }
 function wieldTool(tool){
@@ -2214,9 +2245,9 @@ function resolveTool(tool){
   const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:24,silenced:false,
              fovAim:0.62,flashlight:false,grip:false,pulse:false,columns:[],shots:[]};
   if(tool) for(const col of toolColumns(tool)){
-    if(col.isEmptyMount){ out.columns.push({shots:[],vented:[],flow:[],seq:[],tacLaser:false,
-      spreadAdd:0,silenced:false,spreadMul:1,mountIdx:col.mountIdx,emptyMount:true}); continue; }
-    out.columns.push(resolveLane(col,out));
+    const lane=resolveLane(col,out);
+    lane.cycleRef=col.cycleRef; lane.micro=!!col.micro; lane.x=col.x;
+    out.columns.push(lane);
   }
   out.shots=out.columns.flatMap(c=>c.shots);        // convenience for HUD/summaries
   if(!tool || out.shots.length===0){
@@ -2303,7 +2334,7 @@ function tryFirePlayer(dt){
   for(let ci=0;ci<cols.length;ci++){
     const lane=cols[ci];
     const n=lane.shots.length; if(!n) continue;
-    const cyc=res.bare?0:activeTool.mounts[lane.mountIdx].cycle;
+    const cyc=res.bare?0:lane.cycleRef.get();
     const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true);   // bare bolt still drinks from the rack's mag
     let pick=-1;
     for(let k=0;k<n;k++){
@@ -2329,7 +2360,7 @@ function tryFirePlayer(dt){
       if(!silent&&kicked===0){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
       if(kicked<3){ cameraPitch+=0.012+res.dmg*0.0004; playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4); kicked++; }
     }
-    if(!res.bare) activeTool.mounts[lane.mountIdx].cycle=(pick+1)%n;
+    if(!res.bare) lane.cycleRef.set((pick+1)%n);
     firedAny=true;
   }
   if(skippedAny) playSound('click');
@@ -2617,7 +2648,7 @@ class Zealot{
     let bi=1;
     const put=key=>{ const m=ITEM_DEFS[key]();
       if(m instanceof ToolMod && m.cat==='muzzle'){ if(!t.base.muzzle) t.base.muzzle=m; return; }
-      if(m instanceof Barrel){ t.mounts[0].chain.push(m); return; }
+      if(m instanceof Barrel){ if(bi<t.base.slots.length) t.base.slots[bi++]=m; return; }
       if(m instanceof Platform) return;                 // guards don't roll platforms (yet)
       if(bi<t.base.slots.length) t.base.slots[bi++]=m; };
     if(roll<0.18)      { put('dmgPlus'); put('boltCore'); }
@@ -2627,11 +2658,11 @@ class Zealot{
     else if(roll<0.58) { put('autoSear');   put('boltCore'); }
     else               { put('boltCore'); }
     // deeper rings chain a barrel with its own little sequence
-    if(depth>=2 && runRng()<0.35){
+    if(depth>=2 && runRng()<0.35 && bi<t.base.slots.length){
       const b=ITEM_DEFS[runRng()<0.7?'barrelC':'barrelU']();
       if(runRng()<0.6) b.slots[0]=ITEM_DEFS[['dmgPlus','velPlus','twin','splinter'][Math.floor(runRng()*4)]]();
       b.slots[1]=ITEM_DEFS[runRng()<0.75?'boltCore':'sparkCore']();
-      t.mounts[0].chain.push(b);
+      t.base.slots[bi++]=b;
     }
     if(runRng()<0.3) put(MOD_KEYS[Math.floor(runRng()*MOD_KEYS.length)]);
     this.tool=t;
@@ -2856,7 +2887,7 @@ function initLoadout(){
   const t=ITEM_DEFS.tool(); t.name='Foundling Tool';
   const mag=ITEM_DEFS.magStd(); mag.loaded=8;
   t.base.slots[0]=mag;                                  // slots are agnostic — the mag just sits there
-  t.mounts[0].chain.push(ITEM_DEFS.barrelC());          // starting common barrel on the native mount
+  t.base.slots[1]=ITEM_DEFS.barrelC();                  // starting barrel extends the main column
   activeTool=t;
   autoPlace(ITEM_DEFS.ammo9(),bagGrid,BAG_COLS,BAG_ROWS);
   autoPlace(ITEM_DEFS.watch(),bagGrid,BAG_COLS,BAG_ROWS);
@@ -3100,9 +3131,15 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
   }
 }
 function rackSig(tool){
-  return (tool.platform?tool.platform.id:'_')+'|'+tool.mounts.map(m=>
-    m.chain.map(b=>b.id+':'+b.slots.map(x=>x?x.id:'_').join(',')+':'+(b.muzzle?b.muzzle.id:'_')).join('+')).join('|')
-    +'|'+tool.base.slots.map(x=>x?x.id:'_').join(',')+':'+(tool.base.muzzle?tool.base.muzzle.id:'_');
+  const sig=[];
+  (function walk(arr,tag){ arr.forEach((it,i)=>{
+    if(!it){ sig.push(tag+i+':_'); return; }
+    sig.push(tag+i+':'+it.id);
+    if(it instanceof Barrel){ walk(it.slots,tag+i+'b'); sig.push(tag+i+'m:'+(it.muzzle?it.muzzle.id:'_')); }
+    if(it instanceof Platform) walk(it.slots,tag+i+'p');
+  }); })(tool.base.slots,'B');
+  sig.push('M:'+(tool.base.muzzle?tool.base.muzzle.id:'_'));
+  return sig.join('|');
 }
 function refreshInvUI(){
   if(isInventoryOpen) renderGrid('bagGrid',bagGrid,BAG_COLS,BAG_ROWS,0);
@@ -3111,7 +3148,7 @@ function refreshInvUI(){
       activeTool._res=resolveTool(activeTool);
       const sig=rackSig(activeTool);
       if(activeTool._seqSig!==undefined && activeTool._seqSig!==sig)
-        for(const m of activeTool.mounts) m.cycle=0;     // edited: every column back to shot 1
+        resetAllCycles(activeTool);                       // edited: every column back to shot 1
       activeTool._seqSig=sig;
     }
     renderRack('rackWrap',activeTool,1);
@@ -3121,56 +3158,58 @@ function refreshInvUI(){
   updateToolReadout();
 }
 
-// ---- the rack: one flex column per mount, bottom-to-top, muzzle on top --------------
+// ---- the rack: a sparse cell map laid out on a CSS grid — the cross shape -----------
 function renderRack(containerId,tool,focusIdx){
   const container=document.getElementById(containerId);
   container.innerHTML='';
   if(!tool){ container.innerHTML='<div class="hintline">No Tool wielded.</div>'; return; }
   const res=(focusIdx===1&&tool._res)?tool._res:resolveTool(tool);
-  const cols=toolColumns(tool);
-  const maxLen=Math.max(...cols.map(c=>c.refs.length),1);
-  const cell=clamp(Math.floor(340/maxLen),20,40);
+  const z=rackZone(tool);
+  const rows=z.maxY+1;
+  const cell=clamp(Math.floor(340/Math.max(rows,4)),20,40);
   container.style.setProperty('--rc',cell+'px');
-  cols.forEach((col,ci)=>{
-    const lane=res.columns[ci]||{};
-    const colDiv=document.createElement('div');
-    colDiv.className='rackCol';
-    // header: mount label · next cost · mag state · cycle
-    const head=document.createElement('div'); head.className='rackHead';
-    if(col.isEmptyMount) head.textContent='MOUNT '+ci+' · FREE';
-    else{
-      const n=lane.shots?lane.shots.length:0;
-      const cyc=n?tool.mounts[col.mountIdx].cycle%n:0;
-      const next=n?lane.shots[cyc]:null;
-      const mg=columnMag(tool,ci,false);
-      head.innerHTML=(ci===0?'BASE':'M'+ci)
-        +(next?' · ▶'+next.kind.toUpperCase()+(next.cost?'⚡'+next.cost:''):' · —')
-        +(mg?' · '+mg.loaded+'/'+mg.maxCapacity:(lane.shots&&lane.shots.some(s=>s.kind==='bolt'&&!s.pend.laser)?' · <span style="color:#e0492e">DRY</span>':''))
-        +(lane.tacLaser?' · <span style="color:#ff5a66">▸ painting</span>':'')
-        +(col.spreadAdd?' · +'+col.spreadAdd.toFixed(2):'');
+  container.style.display='grid';
+  container.style.gridTemplateColumns='repeat('+z.cols+',var(--rc))';
+  container.style.gridAutoRows='var(--rc)';
+  container.style.gap='3px';
+  container.style.justifyContent='center';
+  const laneByIdx=res.columns;
+  for(const c of z.cells){
+    const cx=c.x-z.minX, cy=c.y;
+    const lane=laneByIdx[c.colIdx]||{};
+    const it=c.ref?readRef(c.ref):null;
+    const n=lane.shots?lane.shots.length:0;
+    const cyc=n&&lane.cycleRef?lane.cycleRef.get()%n:0;
+    const opts={muz:!!c.muzzle,
+      structural:c.structural,
+      vent: it&&lane.vented&&lane.vented.includes(it),
+      nextCore: it&&n&&lane.shots[cyc].core===it};
+    const d=mkRackCell(tool,focusIdx,cx,cy,it,opts);
+    d.style.gridColumnStart=cx+1;
+    d.style.gridRowStart=(rows-cy)+1;                 // row 1 reserved for header chips
+    container.appendChild(d);
+    // header chip above each firing column's top cell
+    if(n && c===topCellOfCol(z,c.colIdx)){
+      const head=document.createElement('div'); head.className='rackHead';
+      const next=lane.shots[cyc];
+      const mg=columnMag(tool,c.colIdx,false);
+      head.innerHTML='▶'+next.kind.toUpperCase().slice(0,5)+(next.cost?'⚡'+next.cost:'')
+        +(mg?'·'+mg.loaded:(lane.shots.some(sh=>sh.kind==='bolt'&&!sh.pend.laser)?'·<span style="color:#e0492e">DRY</span>':''))
+        +(lane.tacLaser?'·<span style="color:#ff5a66">▸</span>':'');
+      head.style.gridColumnStart=cx+1;
+      head.style.gridRowStart=(rows-cy);
+      container.appendChild(head);
     }
-    colDiv.appendChild(head);
-    if(col.isEmptyMount){
-      const d=mkRackCell(tool,focusIdx,ci,0,null,{mountSock:true});
-      d.appendChild(Object.assign(document.createElement('div'),{className:'rlbl',textContent:'mount'}));
-      colDiv.appendChild(d);
-    }else{
-      col.refs.forEach((ref,ri)=>{
-        const it=readRef(ref);
-        const opts={muz:ref.muzzle,
-          seg: !ref.muzzle && ref.i===0 && ref.a!==tool.base.slots,
-          vent: it&&lane.vented&&lane.vented.includes(it),
-          nextCore: it&&lane.shots&&lane.shots.length&&lane.shots[tool.mounts[col.mountIdx].cycle%lane.shots.length].core===it};
-        const d=mkRackCell(tool,focusIdx,ci,ri,it,opts);
-        colDiv.appendChild(d);
-      });
-    }
-    container.appendChild(colDiv);
-  });
+  }
+}
+function topCellOfCol(z,colIdx){
+  let best=null;
+  for(const c of z.cells) if(c.colIdx===colIdx && (!best||c.y>best.y)) best=c;
+  return best;
 }
 function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   const d=document.createElement('div');
-  d.className='rcell'+(opts.muz?' muz':'')+(opts.seg?' seg0':'')+(opts.mountSock?' mountSock':'')
+  d.className='rcell'+(opts.muz?' muz':'')+(opts.structural?' seg0':'')
     +(opts.vent?' vent':'')+(opts.nextCore?' nextCore':'');
   if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) d.classList.add('cursor');
   if(item){
@@ -3215,7 +3254,7 @@ function updateToolReadout(){
   // the fire cycle, visible: per COLUMN — the volley is one shot from each
   document.getElementById('trPips').innerHTML=res.columns.filter(l=>l.shots.length).map(lane=>{
     const n=lane.shots.length;
-    const cyc=res.bare?0:activeTool.mounts[lane.mountIdx].cycle%n;
+    const cyc=res.bare?0:lane.cycleRef.get()%n;
     return lane.shots.map((sh,i)=>
       '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
       +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
@@ -3467,7 +3506,16 @@ function menuNav(){
     clampCursor(f);
     const step=(dx,dy)=>{
       // racks draw slot 0 at the BOTTOM: screen-down must move toward the grip (index 0)
-      const nx=cursorX+dx, ny=cursorY+(f.rack?-dy:dy);
+      let nx=cursorX+dx, ny=cursorY+(f.rack?-dy:dy);
+      if(f.rack && (nx>=0&&nx<f.cols)){
+        // scan along the axis for the next real cell (sparse cross-shaped layout)
+        let scan=0;
+        while(scan<12 && (nx>=0&&nx<f.cols) && ny>=0 && ny<=f.maxY+1 && !f.at(nx,ny)){
+          nx+=dx; ny+=(f.rack?-dy:dy); scan++;
+        }
+        if(f.at(nx,ny)){ cursorX=nx; cursorY=ny; moved=true; return; }
+        nx=cursorX+dx; ny=cursorY+(f.rack?-dy:dy);   // fall through to crossing/clamp
+      }
       const inspGrid=inspectItem instanceof Tool;         // the pockets panel sits to the RIGHT
       if(dx>0 && nx>=f.cols && inspGrid && currentFocus!==2){
         const tz=rackZone(inspectItem);
@@ -3602,11 +3650,10 @@ function frame(){
     gl.uniform1i(U.uColCount,n);
     for(let i=0;i<n;i++){
       const refs=cols[i].refs;
-      const filled=refs.length?refs.filter(r=>readRef(r)).length/refs.length:0;
-      const joints=activeTool.mounts[cols[i].mountIdx].chain.length- (cols[i].mountIdx===0?0:1);
+      const joints=cols[i].spreadAdd>0?Math.max(1,Math.round(cols[i].spreadAdd/0.03)):0;
       const muz=refs.length&&refs[refs.length-1].muzzle&&readRef(refs[refs.length-1])?1:0;
-      _colsBuf[i*4]=Math.fround(refs.length); _colsBuf[i*4+1]=Math.fround(filled);
-      _colsBuf[i*4+2]=Math.fround(Math.max(0,joints)); _colsBuf[i*4+3]=muz;
+      _colsBuf[i*4]=Math.fround(Math.max(1,refs.length)); _colsBuf[i*4+1]=Math.fround(cols[i].x);
+      _colsBuf[i*4+2]=Math.fround(joints); _colsBuf[i*4+3]=muz;
     }
     for(let i=n*4;i<32;i++) _colsBuf[i]=0;
     gl.uniform4fv(U.uCols,_colsBuf);
