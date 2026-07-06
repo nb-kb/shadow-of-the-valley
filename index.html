@@ -73,9 +73,17 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
 #backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
   text-align:center;pointer-events:none;}
-#toolCols{display:flex;gap:16px;align-items:flex-start;}
-#rackLeft{flex:0 0 auto;}
-#rackInspect{flex:0 0 210px;min-height:120px;align-self:stretch;padding:12px 14px;
+#tipPanel{position:absolute;left:calc(50% + 205px);top:50%;transform:translateY(-50%);z-index:44;
+  width:225px;pointer-events:none;}
+#tipMain{min-height:225px;padding:14px;border:1px solid var(--line);background:rgba(8,10,13,.72);
+  font-size:10px;letter-spacing:.1em;line-height:1.8;text-align:left;}
+#tipMain .tt-name{color:var(--exposed);font-weight:bold;font-size:12px;letter-spacing:.16em;display:block;margin-bottom:6px;}
+#tipMain .tt-kind{color:var(--gate);display:block;margin-bottom:6px;}
+#tipMain .tt-row{color:var(--bone);display:block;}
+#tipMain .tt-dim{color:var(--dust);}
+#tipDetail{min-height:130px;margin-top:12px;padding:12px 14px;border:1px dashed var(--line);
+  background:rgba(8,10,13,.45);font-size:10px;letter-spacing:.08em;line-height:1.7;color:var(--dust);text-align:left;}
+#__deadRackInspect{flex:0 0 210px;min-height:120px;align-self:stretch;padding:12px 14px;
   background:rgba(6,8,10,.5);border:1px solid var(--dust);border-radius:4px;pointer-events:auto;}
 #rackInspect .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;font-size:11px;}
 #rackInspect .tt-cat{color:var(--dust);font-size:9px;margin-bottom:8px;}
@@ -120,8 +128,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .hintline{margin-top:12px;font-size:9px;letter-spacing:.12em;color:var(--dust);line-height:1.7;}
 .hintline b{color:var(--bone);}
 
-/* tooltip */
-#tooltip{position:absolute;z-index:60;pointer-events:none;max-width:240px;padding:8px 10px;font-size:10px;
+/* tooltip (legacy floating — dead, kept for id safety) */
+#tooltip{display:none !important;position:absolute;z-index:60;pointer-events:none;max-width:240px;padding:8px 10px;font-size:10px;
   letter-spacing:.06em;line-height:1.5;background:var(--panel);border:1px solid var(--dust);color:var(--bone);display:none;}
 #tooltip .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;}
 #tooltip .tt-cat{color:var(--dust);font-size:9px;}
@@ -192,28 +200,23 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </div>
 <div id="banner"></div>
 
-<!-- Rucksack — slots float over the 3D pack the camera dips down to -->
+<!-- Rucksack -->
 <div id="backpackUI" class="hidden">
   <div class="stencil">RUCKSACK · THE WORLD DOES NOT PAUSE</div>
   <div class="gridWrap" id="bagGrid" style="grid-template-columns:repeat(10,44px);"></div>
-  <div class="hintline">
-    <b>E / □ / click</b> pick · place (drops a carried item into the slot too) &nbsp; <b>X / ✕</b> inspect · activate &nbsp; <b>F / △ / right-click</b> wield · feed<br>
-    <b>○ / Tab / Esc</b> close &nbsp;·&nbsp; leaning and jumping wait outside
-  </div>
 </div>
 
-<!-- Tool — mod slots float over the Tool turned on its side -->
+<!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
 <div id="toolUI" class="hidden">
   <div class="stencil">THE TOOL · BARREL RACK</div>
-  <div id="toolCols">
-    <div id="rackLeft">
-      <div id="rackWrap"></div>
-      <div class="seqReadout" style="background:rgba(6,8,10,.4);pointer-events:auto;"><div class="stencil" style="margin-bottom:6px;">Columns fire together · each resolves bottom→top</div><div id="modSequence">—</div></div>
-      <div class="hintline">Charges load the core ABOVE them, per column. A <b>barrel</b> in a slot extends that column; a <b>platform</b> adds side slots — each fires alone, or roots a barrel.<br>
-      Containers lift out only when empty. Muzzle slots (◆) take muzzle parts only.</div>
-    </div>
-    <div id="rackInspect"><div class="stencil" style="margin-bottom:8px;">DETAIL</div><div id="rackInspectBody" class="hintline" style="opacity:.55;">Hover or select a slot to read it.</div></div>
-  </div>
+  <div id="rackWrap"></div>
+  <div class="seqReadout"><div id="modSequence">—</div></div>
+</div>
+
+<!-- Docked tip panel: one info square + one dashed detail square (any menu) -->
+<div id="tipPanel" class="hidden">
+  <div id="tipMain"></div>
+  <div id="tipDetail"></div>
 </div>
 
 <!-- Detached pockets — magazines & spare tools opened with X -->
@@ -1754,31 +1757,39 @@ function takeBagAmmo(type,want){
 }
 // (toolMagazine now lives beside the rack model above)
 
-function closeAllInv(){
-  isInventoryOpen=false; isToolMenuOpen=false; inspectItem=null;
-  document.getElementById('backpackUI').classList.add('hidden');
-  document.getElementById('toolUI').classList.add('hidden');
-  document.getElementById('inspectUI').classList.add('hidden');
-  hideTooltip(); requestLock();
-}
-function openBag(){
-  isToolMenuOpen=false; inspectItem=null;
-  document.getElementById('toolUI').classList.add('hidden');
-  isInventoryOpen=true; menuMode=1; setFocus(0);
-  document.getElementById('backpackUI').classList.remove('hidden');
-  document.exitPointerLock&&document.exitPointerLock();
+// ---- MENU STATE: single authority. Everything below is derived. -------------------
+const Menus={view:'closed', inspect:null};
+function menuSet(view){
+  Menus.view=view;
+  if(view!=='closed' && Menus.inspect && !(view==='bag'||view==='tool')) Menus.inspect=null;
+  if(view==='closed') Menus.inspect=null;
+  // derived legacy aliases (read across the game + tests)
+  isInventoryOpen = view==='bag';
+  isToolMenuOpen  = view==='tool';
+  inspectItem     = Menus.inspect;
+  menuMode        = view==='bag'?1:view==='tool'?2:0;
+  document.getElementById('backpackUI').classList.toggle('hidden',view!=='bag');
+  document.getElementById('toolUI').classList.toggle('hidden',view!=='tool');
+  if(view==='closed'){
+    document.getElementById('inspectUI').classList.add('hidden');
+    requestLock();
+  }else{
+    document.exitPointerLock&&document.exitPointerLock();
+    setFocus(view==='bag'?0:1);
+  }
   refreshInvUI();
 }
-function openToolMenu(){
-  isInventoryOpen=false; inspectItem=null;
-  document.getElementById('backpackUI').classList.add('hidden');
-  isToolMenuOpen=true; menuMode=2; setFocus(1);
-  document.getElementById('toolUI').classList.remove('hidden');
-  document.exitPointerLock&&document.exitPointerLock();
+function menuInspect(item){
+  Menus.inspect=item; inspectItem=item;
+  if(item instanceof Tool) setFocus(2);                 // only tool inspects carry a grid
+  else if(!item && currentFocus===2) setFocus(Menus.view==='tool'?1:0);
   refreshInvUI();
 }
-function toggleInventory(){ isInventoryOpen?closeAllInv():openBag(); }
-function toggleToolMenu(){ isToolMenuOpen?closeAllInv():openToolMenu(); }
+function closeAllInv(){ menuSet('closed'); }
+function openBag(){ menuSet('bag'); }
+function openToolMenu(){ menuSet('tool'); }
+function toggleInventory(){ isInventoryOpen?menuSet('closed'):menuSet('bag'); }
+function toggleToolMenu(){ isToolMenuOpen?menuSet('closed'):menuSet('tool'); }
 
 function rackZone(tool){
   const cols=toolColumns(tool);
@@ -1924,10 +1935,9 @@ function activateAtCursor(){
   }
   if(!cell){ if(inspectItem) closeInspect(); return; }
   if(cell===inspectItem){ closeInspect(); return; }
-  if(cell instanceof Magazine){ inspectItem=cell; playSound('click'); renderInspect(); refreshInvUI(); return; }
+  if(cell instanceof Magazine){ menuInspect(cell); playSound('click'); return; }
   if(cell instanceof Tool){
-    inspectItem=cell; setFocus(2);
-    playSound('click'); renderInspect(); refreshInvUI(); return;
+    menuInspect(cell); playSound('click'); return;
   }
   if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
   if(cell instanceof Ammunition && activeTool){         // X on rounds feeds the wielded mag
@@ -1941,11 +1951,7 @@ function activateAtCursor(){
   }
   playSound('click');
 }
-function closeInspect(){
-  inspectItem=null;
-  if(currentFocus===2) setFocus(isToolMenuOpen?1:0);
-  playSound('click'); renderInspect(); refreshInvUI();
-}
+function closeInspect(){ menuInspect(null); playSound('click'); }
 function renderInspect(){
   const ui=document.getElementById('inspectUI');
   if(!inspectItem || !uiMenusOpen()){ ui.classList.add('hidden'); return; }
@@ -1953,14 +1959,10 @@ function renderInspect(){
   document.getElementById('inspectTitle').textContent=inspectItem.name.toUpperCase()+' — POCKETS';
   const body=document.getElementById('inspectBody');
   if(inspectItem instanceof Magazine){
-    body.innerHTML='<div class="hintline" style="margin-top:8px;">'
-      +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · feeds '+inspectItem.acceptedType
-      +'<br><b>E</b> with held rounds on this magazine pours them in.'
-      +'<br><b>F / \u25b3</b> on it shakes the rounds out into your hand.'
-      +'<br><b>X / \u2715</b> on it again closes these pockets.</div>';
+    body.innerHTML='<div style="margin-top:8px;font-size:11px;letter-spacing:.12em;">'
+      +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · '+inspectItem.acceptedType+'</div>';
   }else if(inspectItem instanceof Tool){
-    body.innerHTML='<div id="inspectRack"></div>'
-      +'<div class="hintline"><b>X / ✕</b> again (or on empty pocket) closes. Rack mods here without wielding it.</div>';
+    body.innerHTML='<div id="inspectRack"></div>';
     renderRack('inspectRack',inspectItem,2);
   }else body.innerHTML='';
 }
@@ -2977,15 +2979,71 @@ setTimeout(()=>{introArmed=true;},600);
 // ============================================================
 // UI RENDERERS — grids, tooltip, toast, manual, debug
 // ============================================================
-const tooltipEl=document.getElementById('tooltip');
-let mouseX=0,mouseY=0;
-document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;
-  if(tooltipEl.style.display==='block'){ positionTooltip(); }});
-function positionTooltip(){
-  tooltipEl.style.left=Math.min(window.innerWidth-260,mouseX+16)+'px';
-  tooltipEl.style.top=Math.min(window.innerHeight-120,mouseY+14)+'px';
+const tooltipEl=document.getElementById('tooltip');   // legacy, display:none
+const tipMainEl=document.getElementById('tipMain');
+const tipDetailEl=document.getElementById('tipDetail');
+const tipPanelEl=document.getElementById('tipPanel');
+function tipBrief(it){                                  // the info square's rows
+  if(it instanceof ToolMod){
+    const e=it.effect||{};
+    const kind=it.cat==='proj'?('CORE · '+(e.kind||'').toUpperCase())
+      :it.cat==='mod'?'CHARGE — feeds the core above'
+      :it.cat==='muzzle'?'MUZZLE PART'
+      :it.cat==='util'?'UTILITY — whole tool':'STAT — whole tool';
+    const rows=[];
+    if(e.base) rows.push('⚡'+e.base+' base');
+    if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
+    if(e.kind==='bolt') rows.push('+1 round per shot');
+    if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
+    if(e.vel) rows.push('velocity ×'+e.vel);
+    if(e.twin) rows.push('×'+e.twin+' projectiles');
+    if(e.pierce) rows.push('pierces '+e.pierce);
+    if(e.bounce) rows.push('bounces '+e.bounce);
+    if(e.spread) rows.push('spread ×'+e.spread);
+    if(e.fireRate) rows.push(e.fireRate+'s cycle');
+    if(e.silenced||e.silent) rows.push('silenced');
+    if(e.fuse) rows.push('fused '+e.fuse+'s');
+    if(e.split) rows.push('splinters ×'+e.split);
+    if(e.laser) rows.push('laser · ⚡+'+(e.surcharge||0));
+    return {kind,rows};
+  }
+  if(it instanceof Magazine) return {kind:'MAGAZINE · '+it.acceptedType,
+    rows:[it.loaded+' / '+it.maxCapacity+' rounds']};
+  if(it instanceof Ammunition) return {kind:'AMMUNITION · '+it.ammoType, rows:['×'+it.count]};
+  if(it instanceof Barrel) return {kind:'BARREL · '+it.rarity.toUpperCase(),
+    rows:[it.length+' slots','+'+it.addedSpread.toFixed(2)+' spread','own muzzle slot']};
+  if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
+    rows:[it.slots.length+' side slots','each fires alone']};
+  if(it instanceof Tool) return {kind:'THE TOOL', rows:['charge '+it.charge.toFixed(0)+'%']};
+  if(it instanceof Gadget) return {kind:'GADGET', rows:[]};
+  return {kind:it.constructor.name.toUpperCase(), rows:[]};
 }
-function showTooltip(item){
+function syncTip(){
+  const open=uiMenusOpen();
+  tipPanelEl.classList.toggle('hidden',!open);
+  if(!open) return;
+  const f=focusGrid();
+  if(!f.grid&&!f.rack){ tipMainEl.innerHTML='<span class="tt-dim">—</span>'; tipDetailEl.textContent=''; return; }
+  // read-only: clamp a LOCAL view of the cursor — a view function must not steer it
+  const sx=cursorX, sy=cursorY;
+  clampCursor(f); const it=cellAt(f);
+  const ref=f.rack?refAt(f):null;
+  cursorX=sx; cursorY=sy;
+  if(!it){
+    tipMainEl.innerHTML='<span class="tt-name">'+(ref&&ref.muzzle?'◆ MUZZLE SLOT':'EMPTY SLOT')+'</span>'
+      +'<span class="tt-dim">'+(ref&&ref.muzzle?'muzzle parts only':'holds anything')+'</span>';
+    tipDetailEl.textContent='';
+    return;
+  }
+  const b=tipBrief(it);
+  tipMainEl.innerHTML='<span class="tt-name">'+it.name+'</span>'
+    +'<span class="tt-kind">'+b.kind+'</span>'
+    +b.rows.map(r=>'<span class="tt-row">'+r+'</span>').join('');
+  tipDetailEl.textContent=it.desc?it.desc():'';
+}
+let mouseX=0,mouseY=0;
+document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;});
+function showTooltip_DEAD(item){
   const cat=item instanceof ToolMod?('MOD · '+item.cat.toUpperCase()):
             item instanceof Tool?'TOOL':item instanceof Magazine?'MAGAZINE':
             item instanceof Ammunition?'AMMUNITION':item instanceof Gadget?'GADGET · SETTING':'ITEM';
@@ -2995,7 +3053,7 @@ function showTooltip(item){
   tooltipEl.innerHTML='<div class="tt-name">'+item.name+'</div><div class="tt-cat">'+cat+extra+'</div><div>'+item.desc()+'</div>';
   tooltipEl.style.display='block'; positionTooltip();
 }
-function hideTooltip(){ tooltipEl.style.display='none'; }
+function hideTooltip(){ }   // superseded by syncTip's open-state gate
 
 // ---- item thumbnails: little canvas paintings, cached by kind ----
 if(window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundRect){
@@ -3138,7 +3196,6 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       if(currentFocus===focusIdx && cursorX===c && cursorY===r) return;
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
-      if(item) showTooltip(item); else hideTooltip();
       refreshInvUI();
     });
     div.addEventListener('mousedown',e=>{
@@ -3198,13 +3255,14 @@ function refreshInvUI(){
   }
   renderInspect();
   updateToolReadout();
+  syncTip();
 }
 
 // ---- the rack: a sparse cell map laid out on a CSS grid — the cross shape -----------
 function renderRack(containerId,tool,focusIdx){
   const container=document.getElementById(containerId);
   container.innerHTML='';
-  if(!tool){ container.innerHTML='<div class="hintline">No Tool wielded.</div>'; return; }
+  if(!tool){ container.innerHTML='<div style="color:var(--dust);font-size:10px;letter-spacing:.14em;">NO TOOL WIELDED</div>'; return; }
   const res=(focusIdx===1&&tool._res)?tool._res:resolveTool(tool);
   const z=rackZone(tool);
   const rows=z.maxY+1;
@@ -3295,7 +3353,6 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
     if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) return;
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
-    hideTooltip();                       // rack uses the docked panel instead
     refreshInvUI();
   });
   d.addEventListener('mousedown',e=>{
