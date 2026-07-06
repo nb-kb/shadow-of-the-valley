@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AUTODELIA — Raymarch Engine v19</title>
+<title>SHADOW OF THE VALLEY</title>
 <style>
 :root{
   --ink:#0b0c0e; --panel:rgba(15,17,20,.92); --line:#2a2c30;
@@ -65,17 +65,28 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   background:radial-gradient(ellipse at center, transparent 55%, rgba(190,30,10,.55) 100%);transition:opacity .1s;}
 #alertFlash{position:absolute;inset:0;pointer-events:none;z-index:7;opacity:0;box-shadow:inset 0 0 120px 30px rgba(224,73,46,.35);}
 
-/* ---------- inventory grids ---------- */
-#backpackUI{position:absolute;top:0;right:0;bottom:0;width:min(560px,52vw);z-index:40;padding:26px;overflow:auto;}
-#toolUI{position:absolute;top:0;left:0;bottom:0;width:min(420px,46vw);z-index:40;padding:26px;overflow:auto;}
-.gridWrap{display:grid;gap:2px;background:#000;padding:4px;border:1px solid var(--line);width:max-content;margin-top:10px;}
-.cell{width:42px;height:42px;border:1px solid #1c1e22;background:rgba(20,22,26,.55);position:relative;
-  font-size:8px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;overflow:hidden;}
+/* ---------- stylized inventories — slots float over the 3D prop ---------- */
+#backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
+  text-align:center;pointer-events:none;}
+#toolUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);z-index:40;
+  text-align:center;pointer-events:none;}
+#backpackUI .stencil,#toolUI .stencil{text-shadow:0 1px 5px #000,0 0 14px #000;font-size:11px;letter-spacing:.28em;}
+.gridWrap{position:relative;display:grid;gap:3px;padding:6px;margin:12px auto 0;width:max-content;
+  pointer-events:auto;background:rgba(6,8,10,.16);border:1px solid rgba(215,220,230,.13);border-radius:7px;
+  backdrop-filter:blur(1.5px);}
+.cell{width:44px;height:44px;border:1px solid rgba(215,220,230,.15);border-radius:3px;
+  background:rgba(12,14,18,.28);position:relative;font-size:8px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
 .cell:hover{outline:1px solid var(--dust);z-index:2;}
 .cell.cursor{outline:2px solid var(--exposed);z-index:3;}
-.cell .lbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:2px;
-  text-shadow:0 1px 1px #000;pointer-events:none;}
-.cell.origin{border-color:rgba(255,255,255,.35);}
+.cell.origin{border-color:rgba(255,255,255,.30);}
+.itemSpan{position:absolute;z-index:1;pointer-events:none;display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-end;padding:2px;}
+.itemSpan img{width:86%;height:70%;object-fit:contain;margin:auto;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.85));}
+.itemSpan .lbl2{font-size:8px;letter-spacing:.05em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 4px #000;
+  white-space:nowrap;overflow:hidden;max-width:100%;}
+#inspectUI{position:absolute;right:4vw;top:50%;transform:translateY(-50%);z-index:45;width:250px;padding:14px;}
+#inspectUI .gridWrap{margin:10px auto 0;}
 .seqReadout{margin-top:14px;padding:10px;border:1px dashed var(--line);font-size:10px;letter-spacing:.1em;color:var(--dust);}
 .seqChip{display:inline-block;border:1px solid var(--line);padding:2px 6px;margin:2px 3px 2px 0;color:var(--bone);background:#000;}
 .seqArrow{color:var(--dust);margin:0 2px;}
@@ -153,23 +164,29 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </div>
 <div id="banner"></div>
 
-<!-- Backpack -->
-<div id="backpackUI" class="panel hidden">
-  <div class="stencil">🎒 <b>Satchel</b> — 10×6 &nbsp;·&nbsp; the world does not pause</div>
-  <div class="gridWrap" id="bagGrid" style="grid-template-columns:repeat(10,42px);"></div>
+<!-- Rucksack — slots float over the 3D pack the camera dips down to -->
+<div id="backpackUI" class="hidden">
+  <div class="stencil">RUCKSACK · THE WORLD DOES NOT PAUSE</div>
+  <div class="gridWrap" id="bagGrid" style="grid-template-columns:repeat(10,44px);"></div>
   <div class="hintline">
-    <b>Click / [E]</b> pick·place &nbsp; <b>Right-click / [F]</b> quick-use (wield tool · use gadget · feed ammo)<br>
-    <b>[Tab]</b> close &nbsp; <b>D-pad</b> move cursor · <b>✕</b> pick·place · <b>□</b> quick-use
+    <b>E / □ / click</b> pick · place (drops a carried item into the slot too) &nbsp; <b>X / ✕</b> inspect · activate &nbsp; <b>F / △ / right-click</b> wield · feed<br>
+    <b>○ / Tab / Esc</b> close &nbsp;·&nbsp; leaning and jumping wait outside
   </div>
 </div>
 
-<!-- Tool bench -->
-<div id="toolUI" class="panel hidden">
-  <div class="stencil">🛠 <b>The Tool</b> — internal rack 4×4</div>
-  <div class="gridWrap" id="gunGrid" style="grid-template-columns:repeat(4,42px);"></div>
-  <div class="seqReadout"><div class="stencil" style="margin-bottom:6px;">Modulation sequence (read left→right, top→bottom)</div><div id="modSequence">—</div></div>
-  <div class="hintline">Order matters. Modifiers charge the next projectile core after them.<br>
-  No core fitted = bare bolt (needs magazine). <b>Grip Field + Beam Core</b> = carry things at range.</div>
+<!-- Tool — mod slots float over the Tool turned on its side -->
+<div id="toolUI" class="hidden">
+  <div class="stencil">THE TOOL · INTERNAL RACK 4×4</div>
+  <div class="gridWrap" id="gunGrid" style="grid-template-columns:repeat(4,44px);"></div>
+  <div class="seqReadout" style="background:rgba(6,8,10,.4);pointer-events:auto;"><div class="stencil" style="margin-bottom:6px;">Modulation sequence (left→right, top→bottom)</div><div id="modSequence">—</div></div>
+  <div class="hintline">Order matters — modifiers charge the next projectile core after them.<br>
+  No core fitted = bare bolt (needs a magazine). <b>X / ✕</b> on a magazine or spare tool opens its own pockets.</div>
+</div>
+
+<!-- Detached pockets — magazines & spare tools opened with X -->
+<div id="inspectUI" class="panel hidden">
+  <div class="stencil" id="inspectTitle">—</div>
+  <div id="inspectBody"></div>
 </div>
 
 <div id="tooltip"></div>
@@ -208,11 +225,11 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- Intro / death screens -->
 <div id="introScreen" class="screen"><div class="inner panel">
-  <h1>AUTODELIA</h1>
-  <p>The Ashen Covenant took you three winters ago.<br>Tonight the generator stuttered, and your cell door forgot its faith.</p>
-  <p><b>Reach the beacon.</b> Every guard carries the same Tool you do — take theirs apart and make yours stranger.</p>
+  <h1 style="font-size:23px;letter-spacing:.3em;">SHADOW OF THE VALLEY</h1>
+  <p>The Ashen Covenant strings its camps along the valley floor.<br>Tonight the generator stuttered, and your cell door forgot its faith.</p>
+  <p><b>Follow the valley to the beacon.</b> Every zealot carries the same Tool you do — take theirs apart and make yours stranger.</p>
   <p>Shadow hides you. Light betrays you. Noise carries.</p>
-  <p style="font-size:10px;">WASD move · mouse look · <b>hold E</b> carry things · <b>E</b> take · Tab satchel · T tool · R reload · F light · M manual · ` debug</p>
+  <p style="font-size:10px;">WASD move · <b>E</b> grab / reload / place · <b>LMB</b> fire or hurl · Shift sprint toggles · <b>B</b> rucksack · <b>Tab</b> tool · <b>X</b> inspect in menus · F light · M manual</p>
   <div class="go">— press any key or pad button —</div>
 </div></div>
 <div id="deathScreen" class="screen hidden"><div class="inner panel">
@@ -226,7 +243,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <script>
 'use strict';
 // ============================================================
-// AUTODELIA v19 — rebuilt on the Gemini v18 raymarch engine
+// SHADOW OF THE VALLEY (v20) — rebuilt on the Gemini raymarch engine
 // stealth-lit roguelike · sequenced tool mods · physgun carry
 // ============================================================
 
@@ -302,25 +319,24 @@ const roman=n=>['I','II','III','IV','V','VI','VII','VIII','IX','X'][Math.min(9,n
 // through the standard Gamepad API once paired at OS level)
 // ============================================================
 const ACTIONS = [
-  {id:'forward',  label:'Move forward',     kb:'KeyW',        pad:null},
-  {id:'back',     label:'Move back',        kb:'KeyS',        pad:null},
-  {id:'left',     label:'Move left',        kb:'KeyA',        pad:null},
-  {id:'right',    label:'Move right',       kb:'KeyD',        pad:null},
-  {id:'sprint',   label:'Sprint (hold)',    kb:'ShiftLeft',   pad:10},
-  {id:'crouch',   label:'Crouch (toggle)',  kb:'KeyC',        pad:1},
-  {id:'jump',     label:'Jump',             kb:'Space',       pad:0},
-  {id:'fire',     label:'Fire tool',        kb:'Mouse0',      pad:7},
-  {id:'aim',      label:'Aim (hold)',       kb:'Mouse2',      pad:6},
-  {id:'interact', label:'Take / hold-carry',kb:'KeyE',        pad:2},
-  {id:'throwHeld',label:'Hurl carried',     kb:'KeyG',        pad:5},
-  {id:'reload',   label:'Feed magazine',    kb:'KeyR',        pad:3},
-  {id:'flash',    label:'Lantern / use',    kb:'KeyF',        pad:12},
-  {id:'leanL',    label:'Lean left',        kb:'KeyQ',        pad:14},
-  {id:'leanR',    label:'Lean right',       kb:'KeyX',        pad:15},
-  {id:'bag',      label:'Satchel',          kb:'Tab',         pad:8},
-  {id:'tool',     label:'Tool bench',       kb:'KeyT',        pad:11},
-  {id:'manual',   label:'Field manual',     kb:'KeyM',        pad:9},
-  {id:'debug',    label:'Debug console',    kb:'Backquote',   pad:null},
+  {id:'forward',  label:'Move forward',        kb:'KeyW',        pad:null},
+  {id:'back',     label:'Move back',           kb:'KeyS',        pad:null},
+  {id:'left',     label:'Move left',           kb:'KeyA',        pad:null},
+  {id:'right',    label:'Move right',          kb:'KeyD',        pad:null},
+  {id:'sprint',   label:'Sprint (toggle)',     kb:'ShiftLeft',   pad:10},  // L3
+  {id:'crouch',   label:'Crouch (toggle)',     kb:'KeyC',        pad:11},  // R3
+  {id:'jump',     label:'Jump / ✕ activate',   kb:'Space',       pad:0},   // cross
+  {id:'fire',     label:'Fire / hurl carried', kb:'Mouse0',      pad:7},   // R2
+  {id:'aim',      label:'Aim (hold)',          kb:'Mouse2',      pad:6},   // L2
+  {id:'interact', label:'Grab / reload / place',kb:'KeyE',       pad:2},   // square
+  {id:'throwHeld',label:'Hurl carried (alt)',  kb:'KeyG',        pad:null},
+  {id:'flash',    label:'Lantern',             kb:'KeyF',        pad:3},   // triangle
+  {id:'leanL',    label:'Lean left',           kb:'KeyQ',        pad:4},   // L1
+  {id:'leanR',    label:'Lean right',          kb:'KeyX',        pad:5},   // R1
+  {id:'bag',      label:'Rucksack',            kb:'KeyB',        pad:8},   // share
+  {id:'tool',     label:'Tool rack / back out',kb:'Tab',         pad:1},   // circle
+  {id:'manual',   label:'Field manual',        kb:'KeyM',        pad:9},   // options
+  {id:'debug',    label:'Debug console',       kb:'Backquote',   pad:null},
 ];
 const BIND = {};            // action -> {kb, pad}
 ACTIONS.forEach(a=>BIND[a.id]={kb:a.kb, pad:a.pad});
@@ -505,11 +521,9 @@ uniform vec2  iResolution;
 uniform float iTime;
 uniform vec3  ro;
 uniform vec3  rd;
+uniform vec3  uRight;
+uniform vec3  uUp;
 uniform float fov;
-uniform float uCamYaw;
-uniform float uCamPitch;
-uniform int uInvOpen;
-uniform int uToolOpen;
 
 uniform vec3  uLightDir;    // active celestial light (sun by day, moon by night)
 uniform vec3  uLightCol;
@@ -522,9 +536,16 @@ uniform vec2  uGateCell;
 uniform vec3  uGatePos;
 uniform bool  flashlightOn;
 
+uniform float uMenu;        // 0..1 — inventory presentation blend
+uniform int   uMenuMode;    // 1 rucksack · 2 tool
+uniform float uAim;         // 0..1 aim-down blend
+uniform vec3  uBob;         // x sway · y bob · z recoil kick
+uniform float uHasTool;
+uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w unused
+
 uniform int   worldItemCount;
 uniform vec3  worldItemPos[${RLIM.ITEMS}];
-uniform vec4  worldItemData[${RLIM.ITEMS}];  // x:type y:yaw z:held w:unused
+uniform vec4  worldItemData[${RLIM.ITEMS}];  // x:type y:yaw z:held w:pitch
 
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
@@ -552,117 +573,166 @@ float sdCapsule(vec3 p,vec3 a,vec3 b,float r){ vec3 pa=p-a,ba=b-a; float h=clamp
 float sdCylY(vec3 p,float r,float h){ vec2 d=abs(vec2(length(p.xz),p.y))-vec2(r,h); return min(max(d.x,d.y),0.0)+length(max(d,0.0)); }
 float sdOcta(vec3 p,float s){ p=abs(p); return (p.x+p.y+p.z-s)*0.57735; }
 vec3 rotY(vec3 p,float a){ float c=cos(a),s=sin(a); return vec3(c*p.x - s*p.z, p.y, s*p.x + c*p.z); }
+vec3 rotX(vec3 p,float a){ float c=cos(a),s=sin(a); return vec3(p.x, c*p.y - s*p.z, s*p.y + c*p.z); }
 
 float hash(vec2 p){
   p = fract(p*vec2(123.34,456.21));
   p += dot(p, p+45.32);
   return fract(p.x*p.y);
 }
-
-// ============================================================
-// STATIC WORLD  — keep in exact lockstep with mapWorldJS()
-// ============================================================
-float cellSDF(vec3 q, float h, bool isGate){
-  float wall  = sdBox(q-vec3(0.0,4.0,0.0),  vec3(10.0,4.0,10.0));
-  float inner = sdBox(q-vec3(0.0,3.75,0.0), vec3(9.5,3.75,9.5));
-  float room  = max(wall, -inner);
-  if(isGate){
-    room = max(room, -sdBox(q-vec3(0.0,6.0,0.0), vec3(9.5,3.5,9.5))); // open courtyard
-  }else{
-    if(h < 0.2){
-      room = min(room, sdBox(q-vec3(0.0,4.0,0.0), vec3(2.5,4.0,2.5)));
-    }else if(h < 0.4){
-      vec3 pq = vec3(abs(q.x)-5.0, q.y-4.0, abs(q.z)-5.0);
-      room = min(room, sdBox(pq, vec3(1.5,4.0,1.5)));
-    }else if(h < 0.6){
-      float w1 = sdBox(q-vec3(0.0,4.0, 3.0), vec3(6.0,4.0,0.5));
-      float w2 = sdBox(q-vec3(3.0,4.0, 0.0), vec3(0.5,4.0,6.0));
-      room = min(room, min(w1, w2));
-    }else if(h < 0.8){
-      room = min(room, sdBox(q-vec3(0.0,0.5,0.0), vec3(6.5,0.5,6.5)));
-    }else{
-      room = max(room, -sdBox(q-vec3(0.0,0.0,0.0), vec3(4.0,1.0,4.0)));
-    }
-  }
-  room = max(room, -sdBox(q-vec3(0.0,1.15,0.0), vec3(10.6,1.15,1.5)));
-  room = max(room, -sdBox(q-vec3(0.0,1.15,0.0), vec3(1.5,1.15,10.6)));
-  if(!isGate){
-    if(fract(h*7.31) < 0.40){
-      float sx=fract(h*51.3)*8.0-4.0, sz=fract(h*67.7)*8.0-4.0;
-      room = max(room, -sdBox(q-vec3(sx,7.75,sz), vec3(1.4,1.0,1.4)));   // skylight
-    }
-    if(fract(h*3.77) < 0.55) room = max(room, -sdBox(q-vec3(0.0,5.2,0.0), vec3(10.6,0.45,2.4)));
-    if(fract(h*4.91) < 0.55) room = max(room, -sdBox(q-vec3(0.0,5.2,0.0), vec3(2.4,0.45,10.6)));
-  }
-  return room;
+float vnoise(vec2 x){
+  vec2 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1.0,0.0)), c=hash(i+vec2(0.0,1.0)), d=hash(i+vec2(1.0,1.0));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
 }
 
-vec2 mapStatic(vec3 p){
-  vec2 res = vec2(p.y, 1.0);                     // ground plane, mat 1
-  float cellSize = 20.0;
-  vec2 cellId = floor((p.xz + cellSize*0.5)/cellSize);
-  vec2 camCell = floor((ro.xz + cellSize*0.5)/cellSize);
-  if(max(abs(cellId.x-camCell.x), abs(cellId.y-camCell.y)) <= 4.0){
-    vec3 q = p;
-    q.xz = mod(q.xz + cellSize*0.5, cellSize) - cellSize*0.5;
-    bool isGate = (cellId == uGateCell);
-    float h = hash(cellId + uSeed);
-    float room = cellSDF(q, h, isGate);
-    if(room < res.x) res = vec2(room, 5.0);      // concrete
-    if(!isGate){
-      for(int k=0;k<3;k++){
-        float fk=float(k);
-        if(fract(h*(13.0+fk*7.0)) < 0.65){
-          float cx0=fract(h*(29.0+fk*11.0))*13.0-6.5;
-          float cz0=fract(h*(53.0+fk*17.0))*13.0-6.5;
-          float crate = sdBox(q-vec3(cx0,0.55,cz0), vec3(0.55));
-          if(crate < res.x) res = vec2(crate, 8.0);
-        }
-      }
-    }
-    if(isGate){
-      float pil = min(sdBox(q-vec3( 2.4,2.2,0.0), vec3(0.45,2.2,0.45)),
-                      sdBox(q-vec3(-2.4,2.2,0.0), vec3(0.45,2.2,0.45)));
-      pil = min(pil, sdBox(q-vec3(0.0,4.5,0.0), vec3(3.0,0.35,0.45)));
-      if(pil < res.x) res = vec2(pil, 7.0);      // gate emissive
+// ============================================================
+// TERRAIN + STATIC WORLD — keep in exact lockstep with mapWorldJS()
+// The valley: flat floor strip |z|<~52, noise-carved cliffs beyond.
+// ============================================================
+float terrainH(vec2 xz){
+  float az=abs(xz.y);
+  float w=smoothstep(52.0,100.0,az);
+  float h=w*w*72.0;
+  h += (vnoise(xz*0.11)-0.5)*12.0*w;
+  h += (vnoise(xz*0.37)-0.5)*3.0*w;
+  return h;
+}
+
+// cell types by hash: 0 open ground · 1 barracks · 2 watchtower · 3 walled yard · 4 ruin
+vec2 cellSDF(vec3 q, float h, bool isGate){
+  vec2 res=vec2(1e5,5.0);
+  if(isGate){
+    float pil=min(sdBox(q-vec3( 2.6,2.6,0.0), vec3(0.5,2.6,0.5)),
+                  sdBox(q-vec3(-2.6,2.6,0.0), vec3(0.5,2.6,0.5)));
+    pil=min(pil, sdBox(q-vec3(0.0,5.2,0.0), vec3(3.4,0.4,0.5)));
+    return vec2(pil,7.0);
+  }
+  float type=floor(h*5.0);
+  for(int k=0;k<2;k++){                                     // boulders
+    float fk=float(k);
+    if(fract(h*(7.0+13.0*fk))<0.5){
+      float rx=fract(h*(31.0+17.0*fk))*16.0-8.0;
+      float rz=fract(h*(57.0+23.0*fk))*16.0-8.0;
+      float rr=0.5+fract(h*(71.0+29.0*fk))*0.7;
+      float rock=length(vec3(q.x-rx,(q.y-rr*0.55)*1.6,q.z-rz))-rr;
+      if(rock<res.x) res=vec2(rock,2.0);
     }
   }
-  float beacon = sdCapsule(p, vec3(uGatePos.x,0.0,uGatePos.z), vec3(uGatePos.x,70.0,uGatePos.z), 0.30);
-  if(beacon < res.x) res = vec2(beacon, 7.0);
+  if(type<0.5 || type>2.5){                                 // crates: open / yard / ruin
+    for(int k=0;k<3;k++){
+      float fk=float(k);
+      if(fract(h*(13.0+7.0*fk))<0.6){
+        float cx0=fract(h*(29.0+11.0*fk))*14.0-7.0;
+        float cz0=fract(h*(53.0+17.0*fk))*14.0-7.0;
+        float crate=sdBox(q-vec3(cx0,0.55,cz0), vec3(0.55));
+        if(crate<res.x) res=vec2(crate,8.0);
+      }
+    }
+  }
+  if(type>0.5 && type<1.5){                                 // barracks
+    float bx=fract(h*11.7)*4.0-2.0, bz=fract(h*19.3)*4.0-2.0;
+    float shell=sdBox(q-vec3(bx,1.8,bz), vec3(5.0,1.8,3.6));
+    shell=max(shell, -sdBox(q-vec3(bx,1.70,bz), vec3(4.6,1.68,3.2)));
+    shell=max(shell, -sdBox(q-vec3(bx,1.05,bz), vec3(5.4,1.05,0.75)));
+    if(shell<res.x) res=vec2(shell,3.0);
+    float roof=sdBox(q-vec3(bx,3.75,bz), vec3(5.35,0.12,3.95));
+    if(roof<res.x) res=vec2(roof,6.0);
+    float rod=sdCapsule(q, vec3(bx,3.35,bz), vec3(bx,3.0,bz), 0.03);
+    if(rod<res.x) res=vec2(rod,9.0);
+    float lens=sdSphere(q-vec3(bx,2.9,bz),0.12);
+    if(lens<res.x) res=vec2(lens,10.0);
+  }else if(type>1.5 && type<2.5){                           // watchtower
+    float tx=fract(h*11.7)*6.0-3.0, tz=fract(h*19.3)*6.0-3.0;
+    vec3 tq=q-vec3(tx,0.0,tz);
+    float legs=1e5;
+    for(int k=0;k<4;k++){
+      float sx=(k<2)?1.0:-1.0, sz=(k==0||k==2)?1.0:-1.0;
+      legs=min(legs, sdBox(tq-vec3(sx*1.2,2.6,sz*1.2), vec3(0.18,2.6,0.18)));
+    }
+    float plat=sdBox(tq-vec3(0.0,5.3,0.0), vec3(2.0,0.15,2.0));
+    float para=max(sdBox(tq-vec3(0.0,5.95,0.0), vec3(2.0,0.5,2.0)),
+                  -sdBox(tq-vec3(0.0,6.05,0.0), vec3(1.75,0.7,1.75)));
+    float post=sdBox(tq-vec3(0.0,6.9,0.0), vec3(0.09,0.75,0.09));
+    float wood=min(min(legs,plat),min(para,post));
+    if(wood<res.x) res=vec2(wood,4.0);
+    float troof=sdBox(tq-vec3(0.0,7.6,0.0), vec3(2.3,0.1,2.3));
+    if(troof<res.x) res=vec2(troof,6.0);
+  }else if(type>2.5 && type<3.5){                           // walled yard
+    float gx=fract(h*23.9)*6.0-3.0;
+    float ring=max(sdBox(q-vec3(0.0,1.6,0.0), vec3(6.5,1.6,6.5)),
+                  -sdBox(q-vec3(0.0,1.7,0.0), vec3(5.9,1.8,5.9)));
+    ring=max(ring, -sdBox(q-vec3(gx,1.5,0.0), vec3(1.4,1.8,7.2)));
+    if(ring<res.x) res=vec2(ring,5.0);
+  }else if(type>3.5){                                       // ruin
+    float wx=fract(h*11.7)*6.0-3.0, wz=fract(h*19.3)*6.0-3.0;
+    float hA=0.8+fract(h*13.1)*1.6, hB=0.6+fract(h*17.7)*1.4;
+    float wA=sdBox(q-vec3(wx,hA,wz), vec3(3.5,hA,0.3));
+    float wB=sdBox(q-vec3(wx+2.2,hB,wz-1.5), vec3(0.3,hB,3.0));
+    float ruin=min(wA,wB);
+    if(ruin<res.x) res=vec2(ruin,3.0);
+  }
+  if(h>0.45 && !(type>0.5&&type<1.5)){                      // lamp post (barracks light hangs inside)
+    float lx=fract(h*23.3)*7.0-3.5, lz=fract(h*41.7)*7.0-3.5;
+    float pole=sdCylY(vec3(q.x-lx,q.y-2.0,q.z-lz), 0.07, 2.0);
+    pole=min(pole, sdBox(q-vec3(lx,4.12,lz), vec3(0.34,0.1,0.34)));
+    if(pole<res.x) res=vec2(pole,9.0);
+    float lens=sdSphere(q-vec3(lx,3.92,lz),0.13);
+    if(lens<res.x) res=vec2(lens,10.0);
+  }
   return res;
 }
 
+vec2 mapStatic(vec3 p){
+  float tH=terrainH(p.xz);
+  vec2 res=vec2((p.y-tH)*0.62, tH>1.5?2.0:1.0);   // ground: dirt floor, rock slopes
+  float cellSize=20.0;
+  vec2 cellId=floor((p.xz+cellSize*0.5)/cellSize);
+  vec2 camCell=floor((ro.xz+cellSize*0.5)/cellSize);
+  if(abs(cellId.y)<=2.0 && max(abs(cellId.x-camCell.x),abs(cellId.y-camCell.y))<=4.0){
+    vec3 q=p;
+    q.xz=mod(q.xz+cellSize*0.5,cellSize)-cellSize*0.5;
+    bool isGate=(cellId==uGateCell);
+    float h=hash(cellId+uSeed);
+    vec2 cell=cellSDF(q,h,isGate);
+    if(cell.x<res.x) res=cell;
+  }
+  float beacon=sdCapsule(p, vec3(uGatePos.x,0.0,uGatePos.z), vec3(uGatePos.x,70.0,uGatePos.z), 0.30);
+  if(beacon<res.x) res=vec2(beacon,7.0);
+  return res;
+}
+
+// ---- hero props: the Tool and the rucksack ----
+float sdGun(vec3 p, bool cfgd){
+  float d=sdBox(p-vec3(0.0,0.045,0.02), vec3(0.035,0.045,0.17));                 // receiver
+  d=min(d, sdCapsule(p, vec3(0.0,0.075,0.18), vec3(0.0,0.075,0.34), 0.021));     // barrel
+  d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
+  d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
+  d=min(d, sdBox(p-vec3(0.0,0.115,0.10), vec3(0.008,0.02,0.012)));               // iron sight
+  if(cfgd){
+    if(uToolCfg.x>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.075,0.34), vec3(0.0,0.075,0.45), 0.032)); // suppressor
+    if(uToolCfg.y>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.135,0.00), vec3(0.0,0.135,0.11), 0.026)); // long glass
+    if(uToolCfg.z>0.5) d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));        // magazine
+  }else{
+    d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));
+  }
+  return d;
+}
+float sdBackpack(vec3 p){
+  float d=sdBox(p, vec3(0.24,0.30,0.11))-0.05;                                   // body
+  d=min(d, sdBox(p-vec3(0.0,-0.10,0.14), vec3(0.15,0.12,0.045))-0.03);           // front pouch
+  d=min(d, sdBox(p-vec3(0.0,0.24,0.06), vec3(0.20,0.075,0.10))-0.03);            // flap
+  d=min(d, sdCapsule(p, vec3(-0.14,0.26,-0.13), vec3(-0.14,-0.24,-0.13), 0.028));// straps
+  d=min(d, sdCapsule(p, vec3( 0.14,0.26,-0.13), vec3( 0.14,-0.24,-0.13), 0.028));
+  return d;
+}
+
 // ============================================================
-// FULL SCENE (static + items + enemies + tracers)
+// FULL SCENE (static + items + enemies + tracers + viewmodel)
 // ============================================================
 vec2 map(vec3 p){
-
-  // Camera Space (Diegetic Menus & View Model)
-  vec3 cp = p - ro;
-  float cy = cos(uCamYaw), sy = sin(uCamYaw);
-  cp.xz = mat2(cy, -sy, sy, cy) * cp.xz;
-  float cpitch = cos(uCamPitch), spitch = sin(uCamPitch);
-  cp.yz = mat2(cpitch, -spitch, spitch, cpitch) * cp.yz;
-
-  if(uInvOpen > 0) {
-    vec3 bp = cp - vec3(-0.6, -0.3, 1.2);
-    float backpack = sdBox(bp, vec3(0.4, 0.4, 0.15));
-    backpack = min(backpack, sdBox(bp - vec3(0.0, 0.0, -0.1), vec3(0.35, 0.3, 0.1)));
-    if(backpack < res.x) res = vec2(backpack, 8.0); // Material 8 (Crate Wood)
-  } else if(uToolOpen > 0) {
-    vec3 tp = cp - vec3(0.6, -0.2, 1.2);
-    float station = sdBox(tp, vec3(0.4, 0.3, 0.2));
-    station = min(station, sdCylY(tp - vec3(0.0, 0.3, 0.0), 0.05, 0.1));
-    if(station < res.x) res = vec2(station, 4.0); // Material 4 (Concrete)
-  } else {
-    // View Model (Player Weapon)
-    vec3 wp = cp - vec3(0.15, -0.1, 0.4);
-    float barrel = sdBox(wp, vec3(0.02, 0.02, 0.2));
-    float grip = sdBox(wp - vec3(0.0, -0.05, -0.08), vec3(0.018, 0.06, 0.03));
-    float gun = min(barrel, grip);
-    if(gun < res.x) res = vec2(gun, 31.0); // Material 31 (Weapon Metal)
-  }
   vec2 res = mapStatic(p);
+  vec3 fwd=normalize(rd);
 
   for(int i=0;i<${RLIM.ITEMS};i++){
     if(i>=worldItemCount) break;
@@ -670,24 +740,21 @@ vec2 map(vec3 p){
     float bd = length(iPos) - 0.55;
     if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
     float t = worldItemData[i].x;
-    vec3 lp = rotY(iPos, -worldItemData[i].y);
+    vec3 lp = rotX(rotY(iPos, -worldItemData[i].y), -worldItemData[i].w);
     float d = 1000.0;
-    if(t < 0.5){        d = sdBox(lp, vec3(0.12)); }
-    else if(t < 1.5){   float barrel=sdBox(lp-vec3(0.0,0.06,0.14),vec3(0.045,0.045,0.26));
-                        float grip  =sdBox(lp-vec3(0.0,-0.08,-0.06),vec3(0.04,0.12,0.07));
-                        float rail  =sdBox(lp-vec3(0.0,0.12,0.10),vec3(0.02,0.01,0.20));
-                        d=min(barrel,min(grip,rail)); }
-    else if(t < 2.5){   float mag = sdBox(lp, vec3(0.035,0.11,0.06));
-                        float base = sdBox(lp-vec3(0.0,-0.11,0.0), vec3(0.04,0.02,0.07));
-                        d = min(mag, base); }
-    else if(t < 3.5){   float box = sdBox(lp, vec3(0.09,0.06,0.075));
-                        float lid = sdBox(lp-vec3(0.0,0.06,0.0), vec3(0.095,0.015,0.08));
-                        d = min(box, lid); }
-    else if(t < 4.5){   float tube = max(length(lp.xy)-0.035, abs(lp.z)-0.12);
-                        float lens = max(length(lp.xy)-0.045, abs(lp.z+0.1)-0.02);
-                        d = min(tube, lens); }
-    else if(t < 5.5){   d = max(length(lp.xy)-0.035, abs(lp.z)-0.18); }
-    else {              d = sdOcta(lp, 0.13); }
+    if(t < 0.5){        d = sdBox(lp, vec3(0.13,0.10,0.13));
+                        d = min(d, sdBox(lp-vec3(0.0,0.10,0.0), vec3(0.14,0.015,0.14))); }
+    else if(t < 1.5){   d = sdGun(lp,false); }
+    else if(t < 2.5){   d = min(sdBox(lp, vec3(0.030,0.085,0.048)),
+                                sdBox(lp-vec3(0.0,-0.075,0.028), vec3(0.030,0.040,0.048))); }
+    else if(t < 3.5){   d = sdBox(lp, vec3(0.09,0.052,0.07));
+                        d = min(d, sdBox(lp-vec3(0.0,0.052,0.0), vec3(0.095,0.012,0.075))); }
+    else if(t < 4.5){   d = sdCylY(lp, 0.105, 0.040);
+                        d = min(d, sdSphere(lp-vec3(0.0,0.055,0.0), 0.030)); }
+    else if(t < 5.5){   d = length(vec3(lp.x,lp.y*2.1,lp.z))-0.085;
+                        d = min(d, sdCylY(lp-vec3(0.0,0.05,0.0), 0.016, 0.024)); }
+    else {              d = sdOcta(lp, 0.12);
+                        d = min(d, sdSphere(lp, 0.055)); }
     if(d < res.x) res = vec2(d, 30.0 + t);
   }
 
@@ -697,10 +764,18 @@ vec2 map(vec3 p){
     float bd = length(ep - vec3(0.0,0.95,0.0)) - 1.35;
     if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
     vec3 lp = rotY(ep, -enemyData[i].x);
-    float body = sdCapsule(lp, vec3(0.0,0.45,0.0), vec3(0.0,1.30,0.0), 0.32);
-    float head = sdSphere(lp - vec3(0.0,1.60,0.0), 0.20);
-    float gun  = sdBox(lp - vec3(0.20,1.10,0.30), vec3(0.045,0.055,0.22));
-    float d = min(min(body,head),gun);
+    float ph=iTime*6.5+float(i)*2.13;
+    float sw=sin(ph)*mix(0.16,0.38,clamp(enemyData[i].y,0.0,1.0));
+    float legL=sdCapsule(lp, vec3(-0.12,0.92,0.0), vec3(-0.12,0.10, sw*0.5), 0.10);
+    float legR=sdCapsule(lp, vec3( 0.12,0.92,0.0), vec3( 0.12,0.10,-sw*0.5), 0.10);
+    float torso=sdCapsule(lp, vec3(0.0,0.98,0.0), vec3(0.0,1.44,0.0), 0.23);
+    float vest=sdBox(lp-vec3(0.0,1.22,0.0), vec3(0.25,0.20,0.16));
+    float armR=sdCapsule(lp, vec3(0.27,1.40,0.0), vec3(0.13,1.18,0.30), 0.075);
+    float armL=sdCapsule(lp, vec3(-0.27,1.40,0.0), vec3(-0.04,1.20,0.28), 0.075);
+    float head=sdSphere(lp-vec3(0.0,1.62,0.0), 0.155);
+    float helm=max(sdSphere(lp-vec3(0.0,1.66,0.0), 0.19), 1.585-lp.y);
+    float gun=sdBox(lp-vec3(0.10,1.20,0.42), vec3(0.035,0.05,0.22));
+    float d=min(min(min(legL,legR),min(torso,vest)),min(min(armR,armL),min(min(head,helm),gun)));
     if(d < res.x) res = vec2(d, 40.0 + float(i));
   }
 
@@ -712,15 +787,42 @@ vec2 map(vec3 p){
     float d = sdCapsule(p, tracerA[i], tracerB[i], 0.035);
     if(d < res.x) res = vec2(d, 50.0 + float(i));
   }
+
+  // first-person Tool + arm, or the raised menu prop
+  vec3 vp=p-ro;
+  if(dot(vp,vp)<2.6){
+    vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
+    if(uMenu>0.001){
+      float rise=(1.0-uMenu)*0.7;
+      if(uMenuMode==1){
+        vec3 bp=vl-vec3(0.0,-0.04-rise,0.85);
+        bp=rotY(bp, sin(iTime*0.5)*0.08);
+        float d=sdBackpack(bp);
+        if(d<res.x) res=vec2(d,22.0);
+      }else{
+        vec3 tp=vl-vec3(0.0,-0.02-rise,0.60);
+        tp=rotY(tp,-1.5708+sin(iTime*0.5)*0.06);
+        float d=sdGun(tp/2.1,true)*2.1;
+        if(d<res.x) res=vec2(d,20.0);
+      }
+    }else if(uHasTool>0.5){
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0,-0.215), uAim);
+      vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, 0.46-uBob.z);
+      float g=sdGun(vl,true);
+      if(g<res.x) res=vec2(g,20.0);
+      float arm=sdCapsule(vl, vec3(0.14,-0.30,-0.36), vec3(0.005,-0.10,-0.055), 0.052);
+      if(arm<res.x) res=vec2(arm,21.0);
+    }
+  }
   return res;
 }
 
 vec2 raycast(vec3 o, vec3 dir){
   float t=0.0; float m=-1.0;
-  for(int i=0;i<200;i++){
+  for(int i=0;i<220;i++){
     vec3 pp=o+dir*t;
     vec2 r=map(pp);
-    if(r.x < (0.0007*t+0.0006)){ m=r.y; break; }
+    if(r.x < (0.0007*t+0.0005)){ m=r.y; break; }
     t += r.x;
     if(t > 220.0) break;
   }
@@ -730,11 +832,11 @@ vec2 raycast(vec3 o, vec3 dir){
 
 float softShadow(vec3 o, vec3 dir, float maxDist){
   float res=1.0; float t=0.06;
-  for(int i=0;i<48;i++){
+  for(int i=0;i<44;i++){
     float d=mapStatic(o+dir*t).x;
     if(d < 0.001) return 0.0;
     res = min(res, 9.0*d/t);
-    t += clamp(d, 0.04, 1.2);
+    t += clamp(d, 0.05, 1.2);
     if(t > maxDist) break;
   }
   return clamp(res,0.0,1.0);
@@ -753,6 +855,10 @@ vec3 skyColor(vec3 dir){
   float sd = clamp(dot(dir, uLightDir), 0.0, 1.0);
   sky += uLightCol * pow(sd,180.0)*2.0;
   sky += uLightCol * pow(sd,10.0)*0.25;
+  if(dir.y>0.03){
+    float cl=vnoise(dir.xz/max(0.08,dir.y)*1.6 + iTime*0.008);
+    sky += vec3(0.9,0.88,0.85)*smoothstep(0.58,0.86,cl)*clamp(dir.y*1.6,0.0,1.0)*0.16*clamp(uAmbient*3.0,0.15,1.0);
+  }
   if(uAmbient < 0.14){
     vec2 sp = floor(dir.xz/max(0.05,abs(dir.y))*40.0);
     float st = step(0.997, hash(sp));
@@ -765,12 +871,10 @@ void main(){
   vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
   uv *= fov;
   vec3 forward=normalize(rd);
-  vec3 right=normalize(cross(vec3(0.0,1.0,0.0),forward));
-  vec3 up=cross(forward,right);
-  vec3 rayDir=normalize(forward + uv.x*right + uv.y*up);
+  vec3 rayDir=normalize(forward + uv.x*uRight + uv.y*uUp);
 
   vec2 hit=raycast(ro,rayDir);
-  vec3 col=skyColor(rayDir);
+  vec3 col;
 
   if(hit.y > 0.0){
     vec3 p=ro+rayDir*hit.x;
@@ -779,45 +883,55 @@ void main(){
     vec3 matCol=vec3(0.5);
     float emiss=0.0;
 
-    if(m<1.5){ matCol=vec3(0.16,0.15,0.13); }                                    // dirt
-    else if(m<5.5){ matCol=vec3(0.38,0.38,0.42);                                 // concrete
-      float stripe=step(0.94, fract(p.y*0.5+0.03)); matCol -= vec3(stripe*0.06); }
-    else if(m<7.5){ matCol=vec3(0.15,0.9,0.55); emiss=1.0; }                     // gate/beacon
-    else if(m<29.5){ matCol=vec3(0.34,0.24,0.15); }                              // crate wood (mat 8)
-    else if(m<39.5){                                                              // items 30+type
-      float t=m-30.0;
-      int ii=0; float best=1e9;
-      for(int i=0;i<${RLIM.ITEMS};i++){ if(i>=worldItemCount)break;
-        float dd=dot(p-worldItemPos[i],p-worldItemPos[i]); if(dd<best){best=dd;ii=i;} }
-      if(t<0.5) matCol=vec3(0.45,0.42,0.36);
-      else if(t<1.5) matCol=vec3(0.30,0.33,0.36);
-      else if(t<2.5) matCol=vec3(0.12,0.13,0.15);
-      else if(t<3.5) matCol=vec3(0.78,0.60,0.22);
-      else if(t<4.5) matCol=vec3(0.42,0.50,0.62);
-      else if(t<5.5) matCol=vec3(0.80,0.76,0.62);
-      else { matCol=vec3(0.55,0.34,0.90); emiss=0.25; }
-      if(worldItemData[ii].z > 0.5){
-        float fres=pow(1.0-abs(dot(n,rayDir)),2.0);
-        matCol += vec3(0.25,0.45,0.55)*fres; emiss=max(emiss,0.15*fres);
-      }
+    if(m<1.5){        matCol=vec3(0.30,0.27,0.21)*(0.75+0.5*vnoise(p.xz*0.7));
+                      matCol*=0.9+0.2*vnoise(p.xz*4.0); }                          // packed dirt
+    else if(m<2.5){   matCol=vec3(0.33,0.31,0.29)*(0.7+0.6*vnoise(p.xz*0.5+vec2(p.y*0.3)));
+                      matCol*=1.0-0.10*step(0.5,fract(p.y*0.35)); }                // strata rock
+    else if(m<3.5){   matCol=vec3(0.60,0.55,0.45)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*1.4));
+                      matCol*=mix(0.55,1.0,smoothstep(0.0,1.3,p.y)); }             // stucco, grimy hem
+    else if(m<4.5){   matCol=vec3(0.38,0.28,0.17)*(0.8+0.4*vnoise(vec2((p.x+p.z)*6.0,p.y*0.7))); } // timber
+    else if(m<5.5){   matCol=vec3(0.44,0.44,0.42)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*0.9));
+                      matCol*=mix(0.7,1.0,smoothstep(0.0,0.9,p.y)); }              // concrete
+    else if(m<6.5){   matCol=vec3(0.30,0.33,0.36)*(0.9+0.1*sin((p.x+p.z)*12.0)); } // corrugated roof
+    else if(m<7.5){   matCol=vec3(0.15,0.9,0.55); emiss=1.0; }                     // gate/beacon
+    else if(m<8.5){   matCol=vec3(0.45,0.34,0.20)*(0.8+0.4*vnoise(vec2((p.x+p.z)*5.0,p.y*5.0)));
+                      if(fract(p.y*1.2+0.05)<0.10) matCol*=0.55; }                 // stenciled crate
+    else if(m<9.5){   matCol=vec3(0.15,0.16,0.17); }                               // lamp iron
+    else if(m<10.5){  matCol=vec3(1.0,0.85,0.55); emiss=(uAmbient<0.25)?1.3:0.12; }// lamp lens
+    else if(m<20.5){  matCol=vec3(0.16,0.17,0.19);
+                      float fr=pow(1.0-abs(dot(n,-rayDir)),3.0);
+                      matCol+=vec3(0.18,0.20,0.24)*fr; }                           // gunmetal
+    else if(m<21.5){  matCol=vec3(0.36,0.31,0.24); }                               // sleeve
+    else if(m<22.5){  matCol=vec3(0.36,0.31,0.20)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*9.0)); } // canvas
+    else if(m<40.0){
+      float it=m-30.0;
+      if(it<0.5)      matCol=vec3(0.42,0.33,0.20);
+      else if(it<1.5) matCol=vec3(0.20,0.22,0.26);
+      else if(it<2.5) matCol=vec3(0.14,0.15,0.18);
+      else if(it<3.5) matCol=vec3(0.62,0.48,0.20);
+      else if(it<4.5) matCol=vec3(0.42,0.47,0.52);
+      else if(it<5.5) matCol=vec3(0.55,0.45,0.28);
+      else {          matCol=vec3(0.55,0.34,0.90); emiss=0.30; }
+      float fr=pow(1.0-abs(dot(n,-rayDir)),2.0);
+      matCol += vec3(0.22,0.35,0.42)*fr;
+      emiss=max(emiss,0.16*fr);                                                    // loot shimmer
     }
-    else if(m<49.5){                                                              // enemies
+    else if(m<50.0){
       int ei=int(m-40.0+0.5);
-      vec4 ed=enemyData[ei];
-      vec3 calm=vec3(0.52,0.50,0.44), susp=vec3(0.72,0.55,0.25), alrt=vec3(0.75,0.22,0.14);
-      matCol = ed.y<0.5 ? calm : (ed.y<1.5 ? susp : alrt);
-      matCol = mix(matCol, vec3(1.0), clamp(ed.w,0.0,1.0)*0.8);                  // hurt flash
-      emiss = ed.z*0.6;                                                           // muzzle glow
+      matCol=vec3(0.25,0.25,0.19);
+      matCol=mix(matCol, vec3(0.45,0.22,0.12), clamp(enemyData[ei].y-1.0,0.0,1.0)*0.4);
+      matCol+=vec3(0.9,0.1,0.05)*enemyData[ei].w;
+      emiss=enemyData[ei].z*0.7;
     }
-    else if(m<69.5){                                                              // tracers
+    else{
       int ti=int(m-50.0+0.5);
       matCol=tracerCol[ti]; emiss=1.0;
     }
 
+    // scorch decals
     for(int i=0;i<${RLIM.DECALS};i++){
       if(i>=decalCount) break;
-      vec3 dp=p-decalPos[i].xyz;
-      float ds=decalPos[i].w;
+      vec3 dp=p-decalPos[i].xyz; float ds=decalPos[i].w;
       float d2=dot(dp,dp);
       if(d2 < ds*ds && dot(n,decalNorm[i]) > 0.5){
         matCol = mix(matCol, vec3(0.02), (1.0-sqrt(d2)/ds)*0.85);
@@ -828,20 +942,27 @@ void main(){
       col = matCol*(1.0+emiss);
     }else{
       float dif = clamp(dot(n,uLightDir),0.0,1.0);
-      float sh  = dif > 0.01 ? softShadow(p+n*0.04, uLightDir, 60.0) : 0.0;
+      float sh  = dif > 0.01 ? softShadow(p+n*0.05, uLightDir, 60.0) : 0.0;
       vec3 lit = matCol * uLightCol * dif * sh;
-      lit += matCol * uAmbient * (0.55+0.45*n.y);
+      float ao = clamp(mapStatic(p+n*0.30).x/0.30, 0.0, 1.0);
+      lit += matCol * uAmbient * (0.55+0.45*n.y) * (0.45+0.55*ao);
 
       vec2 cellId=floor((p.xz+10.0)/20.0);
-      float hL=hash(cellId+uSeed);
-      if(hL > 0.45 && cellId != uGateCell){
-        vec3 lpos=vec3(cellId.x*20.0 + fract(hL*23.3)*7.0-3.5, 6.6,
-                       cellId.y*20.0 + fract(hL*41.7)*7.0-3.5);
-        vec3 ld=lpos-p; float lDist=length(ld); ld/=lDist;
-        float lDif=clamp(dot(n,ld),0.0,1.0);
-        float lAtt=1.0/(1.0+0.15*lDist+0.06*lDist*lDist);
-        float lSh = lDif>0.01 ? softShadow(p+n*0.04, ld, lDist) : 0.0;
-        lit += matCol * vec3(1.0,0.83,0.58) * lDif * lAtt * lSh * 5.5;
+      if(abs(cellId.y)<=2.0){
+        float hL=hash(cellId+uSeed);
+        if(hL > 0.45 && cellId != uGateCell){
+          float type=floor(hL*5.0);
+          vec3 lpos;
+          if(type>0.5 && type<1.5)
+            lpos=vec3(cellId.x*20.0 + fract(hL*11.7)*4.0-2.0, 2.75, cellId.y*20.0 + fract(hL*19.3)*4.0-2.0);
+          else
+            lpos=vec3(cellId.x*20.0 + fract(hL*23.3)*7.0-3.5, 3.85, cellId.y*20.0 + fract(hL*41.7)*7.0-3.5);
+          vec3 ld=lpos-p; float lDist=length(ld); ld/=lDist;
+          float lDif=clamp(dot(n,ld),0.0,1.0);
+          float lAtt=1.0/(1.0+0.22*lDist+0.08*lDist*lDist);
+          float lSh = lDif>0.01 ? softShadow(p+n*0.04, ld, lDist) : 0.0;
+          lit += matCol * vec3(1.0,0.82,0.55) * lDif * lAtt * lSh * 4.6;
+        }
       }
 
       if(flashlightOn){
@@ -864,7 +985,10 @@ void main(){
       col = lit + matCol*emiss;
     }
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.30 : 1.0);
-    col = mix(col, skyColor(rayDir), fogAmt);
+    col = mix(col, mix(skyColor(rayDir), uSkyLo, 0.4), fogAmt);
+  }else{
+    col = skyColor(rayDir);
+    col = mix(col, uSkyLo, smoothstep(0.10,-0.02,rayDir.y));   // valley haze — never a raw hole
   }
   col = pow(col, vec3(0.4545));
   fragColor = vec4(col, 1.0);
@@ -899,7 +1023,9 @@ gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
-['iResolution','iTime','ro','rd','fov','uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uCamYaw','uCamPitch','uInvOpen','uToolOpen']
+['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uAim','uBob','uHasTool','uToolCfg',
+ 'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog',
+ 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
 U.itemPos  = locArray('worldItemPos', RLIM.ITEMS);
@@ -939,61 +1065,92 @@ function sdBoxJS(px,py,pz,bx,by,bz){
 }
 function modJS(x,y){ return x-y*Math.floor(x/y); }
 
+function vnoiseJS(x,y){
+  const ix=Math.floor(x), iy=Math.floor(y);
+  let fx=x-ix, fy=y-iy;
+  fx=fx*fx*(3-2*fx); fy=fy*fy*(3-2*fy);
+  const a=cellHash(ix,iy), b=cellHash(ix+1,iy), c=cellHash(ix,iy+1), d=cellHash(ix+1,iy+1);
+  return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy;
+}
+function terrainHJS(x,z){
+  const az=Math.abs(z);
+  let w=clamp((az-52)/48,0,1); w=w*w*(3-2*w);
+  let h=w*w*72;
+  h+=(vnoiseJS(x*0.11,z*0.11)-0.5)*12*w;
+  h+=(vnoiseJS(x*0.37,z*0.37)-0.5)*3*w;
+  return h;
+}
+
 function mapWorldJS(px,py,pz){
-  let res = py;                                        // ground plane
+  let res=(py-terrainHJS(px,pz))*0.62;
   const cs=20.0;
   const cx=Math.floor((px+cs*0.5)/cs), cz=Math.floor((pz+cs*0.5)/cs);
   const pcx=Math.floor((playerPos.x+cs*0.5)/cs), pcz=Math.floor((playerPos.z+cs*0.5)/cs);
-  if(Math.max(Math.abs(cx-pcx),Math.abs(cz-pcz)) > 4) return res;
+  if(Math.abs(cz)>2 || Math.max(Math.abs(cx-pcx),Math.abs(cz-pcz))>4) return res;
   const qx=modJS(px+cs*0.5,cs)-cs*0.5;
   const qz=modJS(pz+cs*0.5,cs)-cs*0.5;
-  const isGate=(cx===GATE.cx && cz===GATE.cz);
+  const qy=py;
+  if(cx===GATE.cx && cz===GATE.cz){
+    let pil=Math.min(sdBoxJS(qx-2.6,qy-2.6,qz,0.5,2.6,0.5), sdBoxJS(qx+2.6,qy-2.6,qz,0.5,2.6,0.5));
+    pil=Math.min(pil, sdBoxJS(qx,qy-5.2,qz,3.4,0.4,0.5));
+    return Math.min(res,pil);
+  }
   const h=cellHash(cx+SEED.x, cz+SEED.y);
-
-  const wall =sdBoxJS(qx,py-4.0,qz, 10.0,4.0,10.0);
-  const inner=sdBoxJS(qx,py-3.75,qz, 9.5,3.75,9.5);
-  let room=Math.max(wall,-inner);
-  if(isGate){
-    room=Math.max(room, -sdBoxJS(qx,py-6.0,qz, 9.5,3.5,9.5));
-  }else{
-    if(h<0.2){
-      room=Math.min(room, sdBoxJS(qx,py-4.0,qz, 2.5,4.0,2.5));
-    }else if(h<0.4){
-      room=Math.min(room, sdBoxJS(Math.abs(qx)-5.0,py-4.0,Math.abs(qz)-5.0, 1.5,4.0,1.5));
-    }else if(h<0.6){
-      let w1=sdBoxJS(qx,py-4.0,qz-3.0, 6.0,4.0,0.5);
-      let w2=sdBoxJS(qx-3.0,py-4.0,qz, 0.5,4.0,6.0);
-      room=Math.min(room, Math.min(w1,w2));
-    }else if(h<0.8){
-      room=Math.min(room, sdBoxJS(qx,py-0.5,qz, 6.5,0.5,6.5));
-    }else{
-      room=Math.max(room, -sdBoxJS(qx,py-0.0,qz, 4.0,1.0,4.0));
+  const type=Math.floor(h*5);
+  let d=res;
+  for(let k=0;k<2;k++){                                    // boulders
+    if(fractJS(h*(7+13*k))<0.5){
+      const rx=fractJS(h*(31+17*k))*16-8, rz=fractJS(h*(57+23*k))*16-8, rr=0.5+fractJS(h*(71+29*k))*0.7;
+      const ax=qx-rx, ay=(qy-rr*0.55)*1.6, az=qz-rz;
+      d=Math.min(d, Math.sqrt(ax*ax+ay*ay+az*az)-rr);
     }
   }
-  room=Math.max(room, -sdBoxJS(qx,py-1.15,qz, 10.6,1.15,1.5));
-  room=Math.max(room, -sdBoxJS(qx,py-1.15,qz, 1.5,1.15,10.6));
-  if(!isGate){
-    if(fractJS(h*7.31)<0.40){
-      const sx=fractJS(h*51.3)*8.0-4.0, sz=fractJS(h*67.7)*8.0-4.0;
-      room=Math.max(room, -sdBoxJS(qx-sx,py-7.75,qz-sz, 1.4,1.0,1.4));
-    }
-    if(fractJS(h*3.77)<0.55) room=Math.max(room, -sdBoxJS(qx,py-5.2,qz, 10.6,0.45,2.4));
-    if(fractJS(h*4.91)<0.55) room=Math.max(room, -sdBoxJS(qx,py-5.2,qz, 2.4,0.45,10.6));
+  if(type===0||type>2){                                    // crates
     for(let k=0;k<3;k++){
-      if(fractJS(h*(13.0+k*7.0))<0.65){
-        const cx0=fractJS(h*(29.0+k*11.0))*13.0-6.5;
-        const cz0=fractJS(h*(53.0+k*17.0))*13.0-6.5;
-        room=Math.min(room, sdBoxJS(qx-cx0,py-0.55,qz-cz0, 0.55,0.55,0.55));
+      if(fractJS(h*(13+7*k))<0.6){
+        const cx0=fractJS(h*(29+11*k))*14-7, cz0=fractJS(h*(53+17*k))*14-7;
+        d=Math.min(d, sdBoxJS(qx-cx0,qy-0.55,qz-cz0,0.55,0.55,0.55));
       }
     }
-  }else{
-    let pil=Math.min(sdBoxJS(qx-2.4,py-2.2,qz,0.45,2.2,0.45), sdBoxJS(qx+2.4,py-2.2,qz,0.45,2.2,0.45));
-    pil=Math.min(pil, sdBoxJS(qx,py-4.5,qz,3.0,0.35,0.45));
-    room=Math.min(room,pil);
   }
-  return Math.min(res,room);
+  if(type===1){                                            // barracks
+    const bx=fractJS(h*11.7)*4-2, bz=fractJS(h*19.3)*4-2;
+    let shell=sdBoxJS(qx-bx,qy-1.8,qz-bz,5.0,1.8,3.6);
+    shell=Math.max(shell,-sdBoxJS(qx-bx,qy-1.70,qz-bz,4.6,1.68,3.2));
+    shell=Math.max(shell,-sdBoxJS(qx-bx,qy-1.05,qz-bz,5.4,1.05,0.75));
+    d=Math.min(d,shell);
+    d=Math.min(d, sdBoxJS(qx-bx,qy-3.75,qz-bz,5.35,0.12,3.95));
+  }else if(type===2){                                      // watchtower
+    const tx=fractJS(h*11.7)*6-3, tz=fractJS(h*19.3)*6-3;
+    const ax=qx-tx, az=qz-tz;
+    for(let k=0;k<4;k++){
+      const sx=k<2?1:-1, sz=(k===0||k===2)?1:-1;
+      d=Math.min(d, sdBoxJS(ax-sx*1.2,qy-2.6,az-sz*1.2,0.18,2.6,0.18));
+    }
+    d=Math.min(d, sdBoxJS(ax,qy-5.3,az,2.0,0.15,2.0));
+    d=Math.min(d, Math.max(sdBoxJS(ax,qy-5.95,az,2.0,0.5,2.0), -sdBoxJS(ax,qy-6.05,az,1.75,0.7,1.75)));
+    d=Math.min(d, sdBoxJS(ax,qy-6.9,az,0.09,0.75,0.09));
+    d=Math.min(d, sdBoxJS(ax,qy-7.6,az,2.3,0.1,2.3));
+  }else if(type===3){                                      // walled yard
+    const gx=fractJS(h*23.9)*6-3;
+    let ring=Math.max(sdBoxJS(qx,qy-1.6,qz,6.5,1.6,6.5), -sdBoxJS(qx,qy-1.7,qz,5.9,1.8,5.9));
+    ring=Math.max(ring, -sdBoxJS(qx-gx,qy-1.5,qz,1.4,1.8,7.2));
+    d=Math.min(d,ring);
+  }else if(type===4){                                      // ruin
+    const wx=fractJS(h*11.7)*6-3, wz=fractJS(h*19.3)*6-3;
+    const hA=0.8+fractJS(h*13.1)*1.6, hB=0.6+fractJS(h*17.7)*1.4;
+    d=Math.min(d, sdBoxJS(qx-wx,qy-hA,qz-wz,3.5,hA,0.3));
+    d=Math.min(d, sdBoxJS(qx-wx-2.2,qy-hB,qz-wz+1.5,0.3,hB,3.0));
+  }
+  if(h>0.45 && type!==1){                                  // lamp post
+    const lx=fractJS(h*23.3)*7-3.5, lz=fractJS(h*41.7)*7-3.5;
+    const rxz=Math.hypot(qx-lx,qz-lz);
+    const dv=Math.abs(qy-2.0)-2.0, dh=rxz-0.07;
+    d=Math.min(d, Math.min(Math.max(dh,dv),0)+Math.hypot(Math.max(dh,0),Math.max(dv,0)));
+    d=Math.min(d, sdBoxJS(qx-lx,qy-4.12,qz-lz,0.34,0.1,0.34));
+  }
+  return d;
 }
-
 function worldNormalJS(x,y,z,out){
   const e=0.02;
   out.x=mapWorldJS(x+e,y,z)-mapWorldJS(x-e,y,z);
@@ -1052,6 +1209,7 @@ const playerPos={
   flashlightOn:false,
   noiseLevel:0.2, exposure:0.5, muzzleGlow:0,
   camYawOffset:0,camPitchOffset:0,
+  aimAmt:0, bobX:0, bobY:0, viewKick:0, walkCycle:0,
 };
 let cameraYaw=0.6, cameraPitch=0;
 let gameTime=0, timeScale=1, runClock=0, kills=0, depth=1;
@@ -1111,12 +1269,14 @@ function updateExposure(dt){
   }
   const cs=20, cx=Math.floor((px+cs*0.5)/cs), cz=Math.floor((pz+cs*0.5)/cs);
   const h=cellHash(cx+SEED.x,cz+SEED.y);
-  if(h>0.45 && !(cx===GATE.cx&&cz===GATE.cz)){
-    const lx=cx*20+fractJS(h*23.3)*7.0-3.5, ly=6.6, lz=cz*20+fractJS(h*41.7)*7.0-3.5;
-    const dx=lx-px, dy=ly-py, dz=lz-pz;
-    const dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
+  if(Math.abs(cz)<=2 && h>0.45 && !(cx===GATE.cx&&cz===GATE.cz)){
+    const type=Math.floor(h*5);
+    let lx,ly,lz;
+    if(type===1){ lx=cx*20+fractJS(h*11.7)*4-2; ly=2.75; lz=cz*20+fractJS(h*19.3)*4-2; }
+    else{         lx=cx*20+fractJS(h*23.3)*7-3.5; ly=3.85; lz=cz*20+fractJS(h*41.7)*7-3.5; }
+    const dist=Math.hypot(lx-px,ly-py,lz-pz);
     if(losClearJS(px,py,pz,lx,ly,lz)){
-      e += 1.15/(1.0+0.15*dist+0.06*dist*dist)*3.2;
+      e += 3.4/(1.0+0.22*dist+0.08*dist*dist);
     }
   }
   if(playerPos.flashlightOn) e+=0.5;
@@ -1164,7 +1324,6 @@ class Magazine extends Item{
   desc(){ return 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
 }
 class Tool extends Item{
-  get renderType(){ return 1; }
   constructor(name,color){
     super(name,2,2,color);
     this.grid=Array(4).fill(null).map(()=>Array(4).fill(null));
@@ -1230,6 +1389,7 @@ let activeTool=null;
 let grabbedItem=null;                 // item riding the inventory cursor
 let isInventoryOpen=false,isToolMenuOpen=false,isManualOpen=false,isDebugOpen=false;
 let currentFocus=0, cursorX=0, cursorY=0;
+let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
 
 function uiOpen(){ return isInventoryOpen||isToolMenuOpen||isManualOpen||isDebugOpen||gameState!=='play'; }
 function pausedUI(){ return isManualOpen||isDebugOpen||gameState!=='play'; }   // bag/tool do NOT pause the world
@@ -1284,20 +1444,31 @@ function toolMagazine(tool){
   return null;
 }
 
-function toggleInventory(){
-  if(isToolMenuOpen) toggleToolMenu();
-  isInventoryOpen=!isInventoryOpen;
-  document.getElementById('backpackUI').classList.toggle('hidden',!isInventoryOpen);
-  if(isInventoryOpen){ currentFocus=0; document.exitPointerLock&&document.exitPointerLock(); refreshInvUI(); }
-  else{ stashCursorItem(); hideTooltip(); requestLock(); }
+function closeAllInv(){
+  isInventoryOpen=false; isToolMenuOpen=false; inspectItem=null;
+  document.getElementById('backpackUI').classList.add('hidden');
+  document.getElementById('toolUI').classList.add('hidden');
+  document.getElementById('inspectUI').classList.add('hidden');
+  stashCursorItem(); hideTooltip(); requestLock();
 }
-function toggleToolMenu(){
-  if(isInventoryOpen) toggleInventory();
-  isToolMenuOpen=!isToolMenuOpen;
-  document.getElementById('toolUI').classList.toggle('hidden',!isToolMenuOpen);
-  if(isToolMenuOpen){ currentFocus=1; document.exitPointerLock&&document.exitPointerLock(); refreshInvUI(); }
-  else{ stashCursorItem(); hideTooltip(); requestLock(); }
+function openBag(){
+  isToolMenuOpen=false; inspectItem=null;
+  document.getElementById('toolUI').classList.add('hidden');
+  isInventoryOpen=true; menuMode=1; currentFocus=0; cursorX=0; cursorY=0;
+  document.getElementById('backpackUI').classList.remove('hidden');
+  document.exitPointerLock&&document.exitPointerLock();
+  refreshInvUI();
 }
+function openToolMenu(){
+  isInventoryOpen=false; inspectItem=null;
+  document.getElementById('backpackUI').classList.add('hidden');
+  isToolMenuOpen=true; menuMode=2; currentFocus=1; cursorX=0; cursorY=0;
+  document.getElementById('toolUI').classList.remove('hidden');
+  document.exitPointerLock&&document.exitPointerLock();
+  refreshInvUI();
+}
+function toggleInventory(){ isInventoryOpen?closeAllInv():openBag(); }
+function toggleToolMenu(){ isToolMenuOpen?closeAllInv():openToolMenu(); }
 function stashCursorItem(){
   if(!grabbedItem) return;
   if(autoPlace(grabbedItem,bagGrid,BAG_COLS,BAG_ROWS)){ grabbedItem=null; return; }
@@ -1305,13 +1476,30 @@ function stashCursorItem(){
   grabbedItem=null;
 }
 
-function focusGrid(){ return currentFocus===0
-  ? {grid:bagGrid,cols:BAG_COLS,rows:BAG_ROWS}
-  : {grid:activeTool?activeTool.grid:null,cols:GUN_COLS,rows:GUN_ROWS}; }
+function focusGrid(){
+  if(currentFocus===2 && inspectItem instanceof Tool) return {grid:inspectItem.grid,cols:GUN_COLS,rows:GUN_ROWS};
+  return currentFocus===0
+    ? {grid:bagGrid,cols:BAG_COLS,rows:BAG_ROWS}
+    : {grid:activeTool?activeTool.grid:null,cols:GUN_COLS,rows:GUN_ROWS};
+}
 
 function interactInventory(){
   const f=focusGrid(); if(!f.grid) return;
   const cell=f.grid[cursorY]?f.grid[cursorY][cursorX]:null;
+
+  // a carried world item drops straight into the slot under the cursor
+  if(heldWorld && grabbedItem===null){
+    const it=heldWorld.w.item;
+    if(currentFocus!==0 && (it instanceof Tool || it instanceof Gadget)){ playSound('empty'); return; }
+    if(gridFits(it,cursorX,cursorY,f.grid,f.cols,f.rows)){
+      placeInGrid(it,cursorX,cursorY,f.grid);
+      const wi=worldItems.indexOf(heldWorld.w); if(wi>=0) worldItems.splice(wi,1);
+      heldWorld.w.held=false; heldWorld=null;
+      document.getElementById('crosshair').classList.remove('carrying');
+      playSound('place'); refreshInvUI(); return;
+    }
+    playSound('empty'); return;
+  }
 
   // pour loose rounds into a magazine under the cursor
   if(grabbedItem instanceof Ammunition && cell instanceof Magazine && cell.acceptedType===grabbedItem.ammoType){
@@ -1323,11 +1511,11 @@ function interactInventory(){
   }
   if(grabbedItem===null){
     if(cell!==null){
-      // tools may not nest inside their own rack
       grabbedItem=cell; removeFromGrid(cell,f.grid); playSound('grab');
     }
   }else{
-    if(currentFocus===1 && (grabbedItem instanceof Tool || grabbedItem instanceof Gadget)){ playSound('empty'); return; }
+    if(currentFocus>=1 && (grabbedItem instanceof Tool || grabbedItem instanceof Gadget)){ playSound('empty'); return; }
+    if(currentFocus===2 && grabbedItem===inspectItem){ playSound('empty'); return; }   // no nesting a tool in itself
     if(gridFits(grabbedItem,cursorX,cursorY,f.grid,f.cols,f.rows)){
       placeInGrid(grabbedItem,cursorX,cursorY,f.grid); grabbedItem=null; playSound('place');
     }else if(cell && cell.w===grabbedItem.w && cell.h===grabbedItem.h){
@@ -1337,6 +1525,56 @@ function interactInventory(){
     }else playSound('empty');
   }
   refreshInvUI();
+}
+
+// [X] — inspect · activate. Magazines & spare tools open their own pockets.
+function activateAtCursor(){
+  const f=focusGrid();
+  const cell=(f.grid&&f.grid[cursorY])?f.grid[cursorY][cursorX]:null;
+  if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
+    if(!cell){ closeInspect(); return; }
+    playSound('click'); return;
+  }
+  if(!cell){ if(inspectItem) closeInspect(); return; }
+  if(cell===inspectItem){ closeInspect(); return; }
+  if(cell instanceof Magazine){ inspectItem=cell; playSound('click'); renderInspect(); refreshInvUI(); return; }
+  if(cell instanceof Tool){
+    inspectItem=cell; currentFocus=2; cursorX=0; cursorY=0;
+    playSound('click'); renderInspect(); refreshInvUI(); return;
+  }
+  if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
+  if(cell instanceof Ammunition && activeTool){         // X on rounds feeds the wielded mag
+    const mag=toolMagazine(activeTool);
+    if(mag && mag.acceptedType===cell.ammoType && mag.loaded<mag.maxCapacity){
+      const t=Math.min(mag.maxCapacity-mag.loaded, cell.count);
+      mag.loaded+=t; cell.count-=t;
+      if(cell.count<=0) removeFromGrid(cell,f.grid);
+      playSound('reload'); refreshInvUI(); return;
+    }
+  }
+  playSound('click');
+}
+function closeInspect(){
+  inspectItem=null;
+  if(currentFocus===2) currentFocus=isToolMenuOpen?1:0;
+  playSound('click'); renderInspect(); refreshInvUI();
+}
+function renderInspect(){
+  const ui=document.getElementById('inspectUI');
+  if(!inspectItem || !uiMenusOpen()){ ui.classList.add('hidden'); return; }
+  ui.classList.remove('hidden');
+  document.getElementById('inspectTitle').textContent=inspectItem.name.toUpperCase()+' — POCKETS';
+  const body=document.getElementById('inspectBody');
+  if(inspectItem instanceof Magazine){
+    body.innerHTML='<div class="hintline" style="margin-top:8px;">'
+      +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · feeds '+inspectItem.acceptedType
+      +'<br>Grab loose rounds with <b>E</b> and place them on this magazine to pour.'
+      +'<br><b>X / ✕</b> on it again closes these pockets.</div>';
+  }else if(inspectItem instanceof Tool){
+    body.innerHTML='<div class="gridWrap" id="inspectGrid" style="grid-template-columns:repeat(4,44px);"></div>'
+      +'<div class="hintline"><b>X / ✕</b> again (or on empty pocket) closes. Rack mods here without wielding it.</div>';
+    renderGrid('inspectGrid',inspectItem.grid,GUN_COLS,GUN_ROWS,2);
+  }else body.innerHTML='';
 }
 
 // right-click / [F] — the analog "use" verb
@@ -1394,7 +1632,7 @@ function hasGadget(kind){
 // WORLD ITEMS — spawning, physgun carry, take
 // ============================================================
 function spawnWorldItem(item,x,y,z,vel){
-  worldItems.push({item,pos:new Vec3(x,y,z),vel:vel||new Vec3(),ry:runRng()*6.28,rotVel:0,held:false});
+  worldItems.push({item,pos:new Vec3(x,y,z),vel:vel||new Vec3(),ry:runRng()*6.28,rotVel:0,pitch:0,rotVelP:0,held:false});
 }
 function dropItemToWorld(item,dist,vy){
   const f=camForward();
@@ -1408,6 +1646,21 @@ function camForward(){
 }
 function camPos(){ return new Vec3(playerPos.x+Math.cos(cameraYaw)*playerPos.currentLean,
   playerPos.y+playerPos.baseHeight, playerPos.z-Math.sin(cameraYaw)*playerPos.currentLean); }
+function camBasis(){
+  const cy=Math.cos(cameraYaw),sy=Math.sin(cameraYaw);
+  const cp=Math.cos(cameraPitch),sp=Math.sin(cameraPitch);
+  return {right:new Vec3(cy,0,-sy), up:new Vec3(-sp*sy,cp,-sp*cy)};
+}
+// where the Tool's muzzle actually sits (matches the viewmodel offsets)
+function muzzleWorld(){
+  const o=camPos(), f=camForward(), b=camBasis();
+  const a=playerPos.aimAmt||0;
+  const gx=0.24*(1-a), gy=-0.245+0.03*a, gz=0.84;
+  return new Vec3(
+    o.x + b.right.x*gx + b.up.x*gy + f.x*gz,
+    o.y + b.right.y*gx + b.up.y*gy + f.y*gz,
+    o.z + b.right.z*gx + b.up.z*gy + f.z*gz);
+}
 
 // which world item sits under the crosshair?
 function itemUnderCrosshair(maxDist){
@@ -1426,47 +1679,67 @@ function itemUnderCrosshair(maxDist){
   return {idx:best,t:bestT};
 }
 
-let interactHoldT=0, interactWasDown=false;
+// item rotation parity with the shader: local = rotX(rotY(p,-yaw),-pitch)
+function rotYJS(x,y,z,a){ const c=Math.cos(a),s=Math.sin(a); return {x:c*x-s*z, y:y, z:s*x+c*z}; }
+function rotXJS(x,y,z,a){ const c=Math.cos(a),s=Math.sin(a); return {x:x, y:c*y-s*z, z:s*y+c*z}; }
+function itemLocalJS(x,y,z,ry,pitch){ const q=rotYJS(x,y,z,-ry); return rotXJS(q.x,q.y,q.z,-pitch); }
+function itemWorldJS(x,y,z,ry,pitch){ const q=rotXJS(x,y,z,pitch); return rotYJS(q.x,q.y,q.z,ry); }
+
+// world-side verbs — tap E/□: set down · grab (sipping ammo from it) · else reload from the rucksack
 function updateInteract(dt){
-  const d=down('interact');
-  const hover=heldWorld?{idx:-1}:itemUnderCrosshair(3.2);
+  const hover=heldWorld?{idx:-1,t:0}:itemUnderCrosshair(3.2);
   const prompt=document.getElementById('interactPrompt');
   if(heldWorld){
-    prompt.innerHTML='<b>release E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance';
+    prompt.innerHTML='<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · open the rucksack to stow';
     prompt.classList.add('show');
   }else if(hover.idx>=0){
     const it=worldItems[hover.idx].item;
-    prompt.innerHTML='<b>E</b> take '+it.name+' · <b>hold E</b> carry';
+    prompt.innerHTML='<b>E</b> grab '+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':'');
     prompt.classList.add('show');
   }else prompt.classList.remove('show');
 
-  if(d&&!interactWasDown){ interactHoldT=0; }
-  if(d) interactHoldT+=dt;
-
-  if(d && !heldWorld && interactHoldT>0.22 && hover.idx>=0){
-    grabWorld(hover.idx, 1.9, 'hands');
+  if(pressed('interact')){
+    if(heldWorld){ releaseHeld(false); }
+    else if(hover.idx>=0){ grabWorld(hover.idx, clamp(hover.t,1.2,2.6), 'hands'); sipFromHeld(); }
+    else tryReload();
   }
-  if(!d && interactWasDown){
-    if(heldWorld && heldWorld.mode==='hands'){ releaseHeld(false); }
-    else if(interactHoldT<=0.22 && hover.idx>=0){ takeWorldItem(hover.idx); }
-  }
-  interactWasDown=d;
 }
-function takeWorldItem(idx){
-  const w=worldItems[idx];
-  if(w.item instanceof Tool && !activeTool){
-    activeTool=w.item; worldItems.splice(idx,1); playSound('pickup');
-    toast('WIELDING · '+w.item.name); refreshInvUI(); return;
+function canSipFrom(it){
+  if(!activeTool) return false;
+  const mag=toolMagazine(activeTool);
+  if(!mag || mag.loaded>=mag.maxCapacity) return false;
+  if(it instanceof Ammunition && it.ammoType===mag.acceptedType && it.count>0) return true;
+  if(it instanceof Magazine && it.acceptedType===mag.acceptedType && it!==mag && it.loaded>0) return true;
+  return false;
+}
+function sipFromHeld(){
+  if(!heldWorld||!activeTool) return;
+  const it=heldWorld.w.item, mag=toolMagazine(activeTool);
+  if(!mag||!canSipFrom(it)) return;
+  const space=mag.maxCapacity-mag.loaded;
+  if(it instanceof Ammunition){
+    const t=Math.min(space,it.count); mag.loaded+=t; it.count-=t;
+    toast('FED '+t+' ROUNDS');
+    if(it.count<=0){
+      const wi=worldItems.indexOf(heldWorld.w); if(wi>=0) worldItems.splice(wi,1);
+      heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
+    }
+  }else if(it instanceof Magazine){
+    const t=Math.min(space,it.loaded); mag.loaded+=t; it.loaded-=t;
+    toast('SWAPPED '+t+' ROUNDS ACROSS');
   }
-  if(autoPlace(w.item,bagGrid,BAG_COLS,BAG_ROWS)){
-    worldItems.splice(idx,1); playSound('pickup'); refreshInvUI();
-  }else{
-    grabWorld(idx, 1.9, 'hands'); toast('SATCHEL FULL — carrying');
-  }
+  playSound('reload'); addNoise(playerPos.x,playerPos.y,playerPos.z,4); refreshInvUI();
 }
 function grabWorld(idx,dist,mode){
-  heldWorld={w:worldItems[idx], holdDist:dist, mode};
-  heldWorld.w.held=true;
+  const w=worldItems[idx];
+  const o=camPos(), f=camForward();
+  // pin: remember where on the item the crosshair landed, in the item's own frame
+  const gx=o.x+f.x*dist-w.pos.x, gy=o.y+f.y*dist-w.pos.y, gz=o.z+f.z*dist-w.pos.z;
+  const l=itemLocalJS(gx,gy,gz, w.ry||0, w.pitch||0);
+  const m=Math.hypot(l.x,l.y,l.z), cap=0.26;
+  if(m>cap){ l.x*=cap/m; l.y*=cap/m; l.z*=cap/m; }
+  heldWorld={w, holdDist:dist, mode, lx:l.x, ly:l.y, lz:l.z};
+  w.held=true;
   document.getElementById('crosshair').classList.add('carrying');
   playSound('grab');
 }
@@ -1477,30 +1750,37 @@ function releaseHeld(hurl){
     const f=camForward();
     w.vel.set(f.x*20,f.y*20+2.0,f.z*20);
     w.rotVel=(runRng()*2-1)*9;
+    w.rotVelP=(runRng()*2-1)*7;
     playSound('drop'); addNoise(w.pos.x,w.pos.y,w.pos.z,6);
   }else playSound('place');
   heldWorld=null;
   document.getElementById('crosshair').classList.remove('carrying');
 }
+// pin + hinge: a spring pins the grabbed point to the crosshair ray;
+// its off-centre pull becomes torque, so the item swings on the hinge
 function updateHeldPhysics(dt){
   if(!heldWorld) return;
-  INPUT.wheel!==0 && (heldWorld.holdDist=clamp(heldWorld.holdDist+INPUT.wheel*0.35,1.1,heldWorld.mode==='beam'?16:3.6));
+  if(INPUT.wheel!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+INPUT.wheel*0.35,1.1,heldWorld.mode==='beam'?16:3.2);
   const o=camPos(), f=camForward();
-  const tx=o.x+f.x*heldWorld.holdDist, ty=o.y+f.y*heldWorld.holdDist, tz=o.z+f.z*heldWorld.holdDist;
   const w=heldWorld.w;
-  const k=heldWorld.mode==='beam'?34:58, damp=heldWorld.mode==='beam'?6:9;
-  w.vel.x+=(tx-w.pos.x)*k*dt - w.vel.x*damp*dt;
-  w.vel.y+=(ty-w.pos.y)*k*dt - w.vel.y*damp*dt;
-  w.vel.z+=(tz-w.pos.z)*k*dt - w.vel.z*damp*dt;
-  const sp=w.vel.length(); if(sp>26) w.vel.multiplyScalar(26/sp);
-  // Hinged holding mechanic: apply angular spring to align item with camera
-  let angDiff = cameraYaw - w.ry;
-  while(angDiff > Math.PI) angDiff -= Math.PI*2;
-  while(angDiff < -Math.PI) angDiff += Math.PI*2;
-  w.rotVel += angDiff * 40.0 * dt - w.rotVel * 8.0 * dt;
-  const stretch=Math.hypot(tx-w.pos.x,ty-w.pos.y,tz-w.pos.z);
-  if(stretch>5.0) releaseHeld(false);              // yanked through a wall — let go
-  if(pressed('fire')&&heldWorld&&heldWorld.mode==='hands'){ releaseHeld(true); }
+  const off=itemWorldJS(heldWorld.lx,heldWorld.ly,heldWorld.lz, w.ry||0, w.pitch||0);
+  const gx=w.pos.x+off.x, gy=w.pos.y+off.y, gz=w.pos.z+off.z;   // pin, world space
+  const tx=o.x+f.x*heldWorld.holdDist, ty=o.y+f.y*heldWorld.holdDist, tz=o.z+f.z*heldWorld.holdDist;
+  const k=heldWorld.mode==='beam'?30:52, damp=heldWorld.mode==='beam'?6:9;
+  const Fx=(tx-gx)*k - w.vel.x*damp;
+  const Fy=(ty-gy)*k - w.vel.y*damp;
+  const Fz=(tz-gz)*k - w.vel.z*damp;
+  w.vel.x+=Fx*dt; w.vel.y+=Fy*dt; w.vel.z+=Fz*dt;
+  const sp=w.vel.length(); if(sp>24) w.vel.multiplyScalar(24/sp);
+  // hinge: τ = r × F, split into yaw (world Y) and pitch (camera-right axis)
+  const invI=8.0;
+  const tqX=off.y*Fz-off.z*Fy, tqY=off.z*Fx-off.x*Fz, tqZ=off.x*Fy-off.y*Fx;
+  const {right}=camBasis();
+  w.rotVel =clamp((w.rotVel ||0)*Math.max(0,1-6*dt) + tqY*invI*dt, -8, 8);
+  w.rotVelP=clamp((w.rotVelP||0)*Math.max(0,1-6*dt) + (tqX*right.x+tqY*right.y+tqZ*right.z)*invI*dt, -8, 8);
+  const stretch=Math.hypot(tx-gx,ty-gy,tz-gz);
+  if(stretch>4.5) releaseHeld(false);              // yanked through a wall — let go
+  if(pressed('fire')&&heldWorld&&heldWorld.mode==='hands'&&!uiMenusOpen()) releaseHeld(true);
 }
 
 // ============================================================
@@ -1605,8 +1885,10 @@ function tryFirePlayer(dt){
 
   const mag=toolMagazine(activeTool);
   const o=camPos(), f=camForward();
-  const rx=Math.cos(cameraYaw), rz=-Math.sin(cameraYaw);
-  const origin=new Vec3(o.x+rx*0.15+f.x*0.5, o.y-0.1+f.y*0.5, o.z+rz*0.15+f.z*0.5);
+  const origin=muzzleWorld();
+  // converge: shots leave the muzzle but land where the crosshair looks
+  const tAim=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,60);
+  const fireDir=new Vec3(o.x+f.x*tAim-origin.x, o.y+f.y*tAim-origin.y, o.z+f.z*tAim-origin.z).normalize();
 
   for(let b=0;b<res.burst;b++){
     if(shot.kind==='bolt'){
@@ -1616,12 +1898,13 @@ function tryFirePlayer(dt){
       if(activeTool.charge<18){ playSound('empty'); fireCooldown=0.3; break; }
       activeTool.charge-=18;
     }
-    emitProjectile('player',origin,f,shot,res);
+    emitProjectile('player',origin,fireDir,shot,res);
     const silent=shot.pend.silent||res.silenced;
     playSound(shot.kind==='spark'?'spark':(silent?'silenced':'shoot'));
     addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
     if(!silent){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
     cameraPitch+=0.012+res.dmg*0.0004;
+    playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4);
   }
   activeTool.cycle++;
   fireCooldown=res.fireRate;
@@ -1659,7 +1942,7 @@ function runBeam(dt,res,shot){
   if(res.pulse&&heldWorld&&heldWorld.mode==='beam'){ /* held items already follow */ }
   const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
   const col=res.grip?[0.3,0.9,1.0]:(res.pulse?[1.0,0.85,0.3]:[1.0,0.25,0.35]);
-  beamSegs.push({a:new Vec3(o.x+f.x*0.4,o.y-0.08,o.z+f.z*0.4),b:end,col,ttl:0.05});
+  beamSegs.push({a:muzzleWorld(),b:end,col,ttl:0.05});
   addDyn(end.x,end.y,end.z,col,1.2,0.05);
   addNoise(playerPos.x,playerPos.y,playerPos.z,5);
   if(!res.grip&&!res.pulse&&t<maxLen-0.1&&!hitEnemy&&Math.random()<dt*8){
@@ -1783,7 +2066,7 @@ class Zealot{
   }
   newPatrolTarget(){
     const a=runRng()*Math.PI*2, r=2+runRng()*6;
-    return new Vec3(this.startPos.x+Math.cos(a)*r, 0, this.startPos.z+Math.sin(a)*r);
+    return new Vec3(this.startPos.x+Math.cos(a)*r, 0, clamp(this.startPos.z+Math.sin(a)*r,-46,46));
   }
   buildTool(){
     const t=ITEM_DEFS.tool(); t.name='Zealot Tool';
@@ -1973,6 +2256,7 @@ function maybeSpawnCellLoot(cx,cz){
   const key=cx+','+cz+','+depth;
   if(visitedCells.has(key)) return;
   visitedCells.add(key);
+  if(Math.abs(cz)>2) return;                  // no loot up on the cliffs
   if(cx===GATE.cx&&cz===GATE.cz) return;
   const h=cellHash(cx+SEED.x+311, cz+SEED.y+733);
   if(h<0.5) return;
@@ -1988,11 +2272,10 @@ function maybeSpawnCellLoot(cx,cz){
 
 function placeGate(){
   const rr=mulberry32((SEED.x*73856093)^(SEED.y*19349663));
-  const a=rr()*Math.PI*2;
   const d=4+depth;
-  GATE.cx=Math.round(Math.cos(a)*d)||d;
-  GATE.cz=Math.round(Math.sin(a)*d);
-  if(GATE.cx===0&&GATE.cz===0) GATE.cx=d;
+  const dir=rr()<0.5?-1:1;                    // down-valley or up-valley
+  GATE.cx=dir*(d+Math.floor(rr()*3));
+  GATE.cz=Math.floor(rr()*3)-1;               // stays inside the valley strip
   GATE.x=GATE.cx*20; GATE.z=GATE.cz*20;
 }
 function resetLevel(){
@@ -2008,8 +2291,9 @@ function resetLevel(){
   PARAMS.maxEnemies.v=Math.min(6,2+depth);
   enemies.length=0;
   for(let i=0;i<P('maxEnemies');i++){
-    const a=runRng()*Math.PI*2, r=22+runRng()*24;
-    enemies.push(new Zealot(Math.cos(a)*r, Math.sin(a)*r));
+    const ex=(runRng()<0.5?-1:1)*(18+runRng()*32);
+    const ez=runRng()*76-38;                  // valley strip only
+    enemies.push(new Zealot(ex,ez));
   }
   playerPos.health=Math.min(playerPos.maxHealth, playerPos.health+25);
   document.getElementById('hudDepth').textContent=roman(depth);
@@ -2089,6 +2373,127 @@ function showTooltip(item){
 }
 function hideTooltip(){ tooltipEl.style.display='none'; }
 
+// ---- item thumbnails: little canvas paintings, cached by kind ----
+if(window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    this.moveTo(x+r,y); this.arcTo(x+w,y,x+w,y+h,r); this.arcTo(x+w,y+h,x,y+h,r);
+    this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath(); };
+}
+const iconCache=new Map();
+function iconKey(it){
+  if(it instanceof Tool) return 'tool';
+  if(it instanceof Magazine) return 'mag:'+(it.maxCapacity>20?'drum':'std');
+  if(it instanceof Ammunition) return 'ammo';
+  if(it instanceof ToolMod) return 'mod:'+it.cat+':'+it.color+':'+it.name;
+  if(it instanceof Gadget) return 'gad:'+it.kind;
+  return 'box:'+(it.color||'');
+}
+function shade(hex,f){ // lighten/darken a #rrggbb
+  const n=parseInt(hex.slice(1),16);
+  const r=clamp(((n>>16)&255)*f,0,255), g=clamp(((n>>8)&255)*f,0,255), b=clamp((n&255)*f,0,255);
+  return 'rgb('+(r|0)+','+(g|0)+','+(b|0)+')';
+}
+function makeIcon(it){
+  const key=iconKey(it);
+  if(iconCache.has(key)) return iconCache.get(key);
+  const W=it.w*48, H=it.h*48;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const g=cv.getContext('2d');
+  g.lineJoin='round'; g.lineCap='round';
+  const base=(it.color&&it.color[0]==='#')?it.color:'#7a828c';
+  const lo=shade(base,0.55), hi=shade(base,1.5);
+  const rr=(x,y,w,h,r)=>{ g.beginPath(); g.roundRect(x,y,w,h,r); };
+
+  if(it instanceof Tool){                                   // side profile, muzzle right
+    g.save(); g.translate(0,H*0.06);
+    g.fillStyle=lo;   rr(W*0.30,H*0.44,W*0.10,H*0.30,3); g.fill();          // grip
+    g.fillStyle=base; rr(W*0.06,H*0.34,W*0.22,H*0.14,3); g.fill();          // stock
+    g.fillStyle=base; rr(W*0.24,H*0.30,W*0.40,H*0.16,3); g.fill();          // receiver
+    g.fillStyle=lo;   rr(W*0.46,H*0.44,W*0.09,H*0.24,2); g.fill();          // magazine
+    g.fillStyle=hi;   rr(W*0.62,H*0.345,W*0.30,H*0.075,3); g.fill();        // barrel
+    g.fillStyle=hi;   rr(W*0.52,H*0.24,W*0.03,H*0.07,1); g.fill();          // sight
+    g.restore();
+  }else if(it instanceof Magazine && it.maxCapacity>20){    // drum
+    g.fillStyle=base; g.beginPath(); g.arc(W*0.5,H*0.62,W*0.34,0,6.29); g.fill();
+    g.fillStyle=hi;   g.beginPath(); g.arc(W*0.5,H*0.62,W*0.13,0,6.29); g.fill();
+    g.fillStyle=lo;   rr(W*0.40,H*0.14,W*0.20,H*0.24,3); g.fill();          // tower
+    g.fillStyle='#c9a24a'; rr(W*0.44,H*0.08,W*0.12,H*0.08,2); g.fill();     // brass lip
+  }else if(it instanceof Magazine){                          // stick mag, slight curve
+    g.save(); g.translate(W*0.5,H*0.5); g.rotate(0.10);
+    g.fillStyle=base; rr(-W*0.16,-H*0.34,W*0.32,H*0.68,4); g.fill();
+    g.fillStyle=hi;   rr(-W*0.16,-H*0.34,W*0.32,H*0.10,4); g.fill();        // feed lips
+    g.fillStyle='#c9a24a'; rr(-W*0.08,-H*0.42,W*0.16,H*0.10,2); g.fill();   // seated round
+    g.fillStyle=lo;   rr(-W*0.18,H*0.26,W*0.36,H*0.10,3); g.fill();         // baseplate
+    g.restore();
+  }else if(it instanceof Ammunition){                        // three cartridges
+    for(let i=0;i<3;i++){
+      g.save(); g.translate(W*(0.28+i*0.22),H*0.56); g.rotate(-0.12);
+      g.fillStyle='#c9a24a'; rr(-W*0.055,-H*0.20,W*0.11,H*0.34,2); g.fill();
+      g.fillStyle='#8a6f33'; g.beginPath();
+      g.moveTo(-W*0.055,-H*0.20); g.lineTo(0,-H*0.32); g.lineTo(W*0.055,-H*0.20); g.closePath(); g.fill();
+      g.restore();
+    }
+  }else if(it instanceof ToolMod){                           // tinted chip + cat glyph
+    g.fillStyle=lo; rr(W*0.10,H*0.10,W*0.80,H*0.80,7); g.fill();
+    g.fillStyle=base; rr(W*0.14,H*0.14,W*0.72,H*0.72,6); g.fill();
+    g.strokeStyle='#0b0d10'; g.fillStyle=hi; g.lineWidth=2;
+    if(it.cat==='proj'){                                     // diamond core
+      g.beginPath(); g.moveTo(W*0.5,H*0.20); g.lineTo(W*0.78,H*0.5); g.lineTo(W*0.5,H*0.80); g.lineTo(W*0.22,H*0.5);
+      g.closePath(); g.fill(); g.stroke();
+      g.fillStyle='#fff'; g.beginPath(); g.arc(W*0.5,H*0.5,W*0.07,0,6.29); g.fill();
+    }else if(it.cat==='mod'){                                // chevrons »
+      g.strokeStyle=hi; g.lineWidth=5;
+      for(let i=0;i<2;i++){ g.beginPath();
+        g.moveTo(W*(0.30+i*0.20),H*0.28); g.lineTo(W*(0.48+i*0.20),H*0.5); g.lineTo(W*(0.30+i*0.20),H*0.72); g.stroke(); }
+    }else if(it.cat==='util'){                               // ring emitter
+      g.strokeStyle=hi; g.lineWidth=4;
+      g.beginPath(); g.arc(W*0.5,H*0.5,W*0.22,0,6.29); g.stroke();
+      g.beginPath(); g.arc(W*0.5,H*0.5,W*0.09,0,6.29); g.fillStyle=hi; g.fill();
+    }else{                                                    // stat: slider bars
+      g.strokeStyle=hi; g.lineWidth=4;
+      for(let i=0;i<3;i++){ const y=H*(0.32+i*0.18);
+        g.beginPath(); g.moveTo(W*0.24,y); g.lineTo(W*0.76,y); g.stroke();
+        g.fillStyle='#fff'; g.beginPath(); g.arc(W*(0.34+i*0.16),y,3.4,0,6.29); g.fill(); }
+    }
+  }else if(it instanceof Gadget){
+    g.fillStyle=lo; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.34,0,6.29); g.fill();
+    g.fillStyle=base; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.29,0,6.29); g.fill();
+    g.strokeStyle='#0d0f12'; g.fillStyle='#0d0f12'; g.lineWidth=3;
+    if(it.kind==='watch'){
+      g.fillStyle=hi; rr(W*0.42,H*0.06,W*0.16,H*0.10,2); g.fill();          // crown
+      g.strokeStyle='#0d0f12';
+      g.beginPath(); g.moveTo(W*0.5,H*0.52); g.lineTo(W*0.5,H*0.30); g.stroke();
+      g.beginPath(); g.moveTo(W*0.5,H*0.52); g.lineTo(W*0.66,H*0.58); g.stroke();
+    }else if(it.kind==='compass'){
+      g.beginPath(); g.moveTo(W*0.5,H*0.28); g.lineTo(W*0.58,H*0.52); g.lineTo(W*0.5,H*0.76); g.lineTo(W*0.42,H*0.52);
+      g.closePath(); g.fillStyle='#b03a2e'; g.fill();
+      g.fillStyle='#fff'; g.beginPath(); g.arc(W*0.5,H*0.52,3,0,6.29); g.fill();
+    }else if(it.kind==='optics'){
+      g.fillStyle=hi; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.17,0,6.29); g.fill();
+      g.fillStyle='#fff'; g.beginPath(); g.arc(W*0.44,H*0.46,W*0.05,0,6.29); g.fill();
+    }else if(it.kind==='volume'){
+      g.strokeStyle=hi; g.lineWidth=4;
+      g.beginPath(); g.moveTo(W*0.5,H*0.52); g.lineTo(W*0.36,H*0.34); g.stroke();
+      for(let a=0;a<5;a++){ const th=-2.4+a*1.2;
+        g.fillStyle='#0d0f12'; g.beginPath();
+        g.arc(W*0.5+Math.cos(th)*W*0.36,H*0.52+Math.sin(th)*W*0.36,1.8,0,6.29); g.fill(); }
+    }else{ // manual: little book
+      g.fillStyle=hi; rr(W*0.30,H*0.32,W*0.40,H*0.40,3); g.fill();
+      g.strokeStyle='#0d0f12'; g.lineWidth=2;
+      g.beginPath(); g.moveTo(W*0.5,H*0.34); g.lineTo(W*0.5,H*0.70); g.stroke();
+      g.beginPath(); g.moveTo(W*0.36,H*0.44); g.lineTo(W*0.46,H*0.44); g.stroke();
+      g.beginPath(); g.moveTo(W*0.36,H*0.52); g.lineTo(W*0.46,H*0.52); g.stroke();
+    }
+  }else{ // generic crate-ish
+    g.fillStyle=base; rr(W*0.18,H*0.22,W*0.64,H*0.56,4); g.fill();
+    g.fillStyle=hi; rr(W*0.18,H*0.22,W*0.64,H*0.12,4); g.fill();
+  }
+  const url=cv.toDataURL();
+  iconCache.set(key,url);
+  return url;
+}
+
+const CELL_PITCH=47, GRID_PAD=6;      // 44px cell + 3px gap · 6px wrap padding
 function renderGrid(containerId,grid,cols,rows,focusIdx){
   const container=document.getElementById(containerId);
   container.innerHTML='';
@@ -2097,12 +2502,8 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
     div.className='cell';
     const item=grid?grid[r][c]:null;
     if(item){
-      div.style.background=item.color;
-      if(item.x===c&&item.y===r){
-        div.classList.add('origin');
-        let extra=item instanceof Ammunition?' ×'+item.count:(item instanceof Magazine?' '+item.loaded+'/'+item.maxCapacity:'');
-        div.innerHTML='<span class="lbl">'+item.name+extra+'</span>';
-      }
+      if(item===inspectItem) div.style.borderColor='var(--gate)';
+      if(item.x===c&&item.y===r) div.classList.add('origin');
     }
     if(currentFocus===focusIdx&&cursorX===c&&cursorY===r) div.classList.add('cursor');
     if(grabbedItem&&currentFocus===focusIdx&&cursorX===c&&cursorY===r){
@@ -2119,8 +2520,28 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       if(e.button===0) interactInventory();
       else if(e.button===2) quickUse();
+      else if(e.button===1){ e.preventDefault(); activateAtCursor(); }
     });
     container.appendChild(div);
+  }
+  // thumbnails span their whole footprint, floating over the slots
+  if(grid) for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const item=grid[r][c];
+    if(!item||item.x!==c||item.y!==r) continue;
+    const span=document.createElement('div');
+    span.className='itemSpan';
+    span.style.left=(GRID_PAD+item.x*CELL_PITCH)+'px';
+    span.style.top =(GRID_PAD+item.y*CELL_PITCH)+'px';
+    span.style.width =(item.w*CELL_PITCH-3)+'px';
+    span.style.height=(item.h*CELL_PITCH-3)+'px';
+    const img=document.createElement('img');
+    img.src=makeIcon(item); img.alt=item.name; img.draggable=false;
+    span.appendChild(img);
+    const extra=item instanceof Ammunition?'×'+item.count:(item instanceof Magazine?item.loaded+'/'+item.maxCapacity:'');
+    const lbl=document.createElement('div'); lbl.className='lbl2';
+    lbl.textContent=item.name+(extra?' '+extra:'');
+    span.appendChild(lbl);
+    container.appendChild(span);
   }
 }
 function refreshInvUI(){
@@ -2130,6 +2551,7 @@ function refreshInvUI(){
     if(activeTool) activeTool._res=resolveTool(activeTool);
     document.getElementById('modSequence').innerHTML=describeSequence(activeTool?activeTool._res:resolveTool(null));
   }
+  renderInspect();
   updateToolReadout();
 }
 function updateToolReadout(){
@@ -2259,24 +2681,33 @@ let stepAcc=0;
 const _c1=new Vec3(), _c2=new Vec3();
 
 function updatePlayer(dt){
+  const menus=uiMenusOpen();
   // look
   const lx=INPUT.mdx*0.0022*INPUT.sensMouse + INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1);
   let ly=INPUT.mdy*0.0022*INPUT.sensMouse + INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1);
   if(INPUT.invertY) ly=-ly;
-  if(pointerLocked()||Math.abs(INPUT.padAxes[2])>0||Math.abs(INPUT.padAxes[3])>0){
+  if(!menus && (pointerLocked()||Math.abs(INPUT.padAxes[2])>0||Math.abs(INPUT.padAxes[3])>0)){
     cameraYaw+=lx;
     cameraPitch=clamp(cameraPitch-ly,-1.5,1.5);
   }
-  playerPos.isAiming=down('aim')&&!uiMenusOpen()&&!heldWorld;
-  if(pressed('crouch')){ playerPos.isCrouching=!playerPos.isCrouching; }
+  playerPos.isAiming=down('aim')&&!menus&&!heldWorld;
+  playerPos.aimAmt+=((playerPos.isAiming?1:0)-playerPos.aimAmt)*Math.min(1,12*dt);
+  if(pressed('crouch')&&!menus){ playerPos.isCrouching=!playerPos.isCrouching; }
 
   // move
   let mx=(down('right')?1:0)-(down('left')?1:0)+INPUT.padAxes[0];
   let mz=(down('forward')?1:0)-(down('back')?1:0)-INPUT.padAxes[1];
   const ml=Math.hypot(mx,mz);
   if(ml>1){ mx/=ml; mz/=ml; }
-  const moving=ml>0.05;
-  playerPos.isSprinting=down('sprint')&&moving&&!playerPos.isCrouching&&!playerPos.isAiming;
+  const menuDamp=1-clamp(menuAnim,0,1)*0.85;         // rummaging: barely shuffle
+  mx*=menuDamp; mz*=menuDamp;
+  const moving=Math.hypot(mx,mz)>0.05;
+
+  // sprint is a toggle — crouching or aiming drops it
+  if(pressed('sprint')&&!menus) sprintOn=!sprintOn;
+  if(playerPos.isCrouching||playerPos.isAiming) sprintOn=false;
+  playerPos.isSprinting=sprintOn&&moving&&!playerPos.isCrouching&&!playerPos.isAiming;
+
   let speed=P('playerSpeed');
   if(playerPos.isSprinting) speed*=P('sprintMult');
   if(playerPos.isCrouching) speed*=P('crouchMult');
@@ -2301,21 +2732,28 @@ function updatePlayer(dt){
     const gd=mapWorldJS(playerPos.x,playerPos.y+0.05,playerPos.z);
     if(playerPos.velY<=0&&gd<0.14){ playerPos.onGround=true; playerPos.velY=0; }
     else playerPos.onGround=false;
-    if(pressed('jump')&&playerPos.onGround&&!playerPos.isCrouching&&!uiMenusOpen()){
+    if(pressed('jump')&&playerPos.onGround&&!playerPos.isCrouching&&!menus){
       playerPos.velY=P('jumpVel'); playerPos.onGround=false; playSound('step');
     }
   }
 
-  // stance & lean
+  // stance & lean — leaning waits outside the menus
   const targetH=playerPos.isCrouching?0.72:1.32;
   playerPos.baseHeight+=(targetH-playerPos.baseHeight)*10*dt;
-  const targetLean=((down('leanR')?1:0)-(down('leanL')?1:0))*0.5;
+  const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5;
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
   // aim fov
   const res=activeTool?(activeTool._res||(activeTool._res=resolveTool(activeTool))):resolveTool(null);
   const targetFov=playerPos.isAiming?res.fovAim:1.0;
   playerPos.currentFov+=(targetFov-playerPos.currentFov)*14*dt;
+
+  // viewmodel sway/bob + recoil recovery
+  if(moving&&playerPos.onGround) playerPos.walkCycle+=speed*dt*2.6;
+  const bobAmt=(moving&&playerPos.onGround?1:0)*(playerPos.isSprinting?1.5:1)*(1-playerPos.aimAmt*0.8);
+  playerPos.bobX+=(Math.sin(playerPos.walkCycle)*0.010*bobAmt-playerPos.bobX)*Math.min(1,10*dt);
+  playerPos.bobY+=((Math.abs(Math.cos(playerPos.walkCycle))*0.008-0.004)*bobAmt-playerPos.bobY)*Math.min(1,10*dt);
+  playerPos.viewKick*=Math.max(0,1-9*dt);
 
   // noise from movement + footfalls
   playerPos.noiseLevel=moving?(playerPos.isSprinting?9:(playerPos.isCrouching?1.0:3.4)):0.25;
@@ -2324,42 +2762,49 @@ function updatePlayer(dt){
     if(stepAcc>2.1){ stepAcc=0; playSound(playerPos.isSprinting?'stepRun':'step'); }
   }
   // lantern toggle
-  if(pressed('flash')&&!uiMenusOpen()&&!isManualOpen){
+  if(pressed('flash')&&!menus&&!isManualOpen){
     if(res.flashlight){ playerPos.flashlightOn=!playerPos.flashlightOn; playSound('click'); }
     else { toast('NO LANTERN RACKED IN TOOL'); playSound('empty'); }
   }
-  if(pressed('throwHeld')&&heldWorld) releaseHeld(true);
+  if(pressed('throwHeld')&&heldWorld&&!menus) releaseHeld(true);
 }
 
 function updateWorldItems(dt){
   for(const w of worldItems){
-    if(!w.held) w.vel.y-=P('gravity')*0.9*dt;
+    // gravity always tugs the centre — a held item hangs and swings on its pin
+    w.vel.y-=P('gravity')*(w.held?0.45:0.9)*dt;
     w.pos.addScaledVector(w.vel,dt);
     _c1.copy(w.pos); _c1.y+=0.02;
     resolveCollision(_c1,0.2);
     w.pos.set(_c1.x,_c1.y-0.02,_c1.z);
     const d=mapWorldJS(w.pos.x,w.pos.y,w.pos.z);
     if(d<0.22&&!w.held){
-      if(w.vel.y<-1.2){ w.vel.y*=-0.35; w.rotVel += (Math.random()-0.5)*15.0; playSound('drop'); }
+      if(w.vel.y<-1.2){ w.vel.y*=-0.35; w.rotVelP=(runRng()*2-1)*2.2; playSound('drop'); }
       else if(w.vel.y<0) w.vel.y=0;
       w.vel.x*=Math.max(0,1-6*dt); w.vel.z*=Math.max(0,1-6*dt);
       w.rotVel*=Math.max(0,1-4*dt);
+      w.pitch=(w.pitch||0)*Math.max(0,1-6*dt);          // settle flat
+      w.rotVelP=(w.rotVelP||0)*Math.max(0,1-8*dt);
     }
     w.ry+=w.rotVel*dt;
+    w.pitch=(w.pitch||0)+(w.rotVelP||0)*dt;
+    if(w.pitch>Math.PI) w.pitch-=Math.PI*2; else if(w.pitch<-Math.PI) w.pitch+=Math.PI*2;
   }
 }
 
 function menuNav(){
-  const f=focusGrid(); if(!f.grid) return;
+  const f=focusGrid();
   let moved=false;
-  const step=(dx,dy)=>{ cursorX=clamp(cursorX+dx,0,f.cols-1); cursorY=clamp(cursorY+dy,0,f.rows-1); moved=true; };
-  if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1,0);
-  if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1,0);
-  if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(0,-1);
-  if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(0,1);
-  if(pressed('interact')||INPUT.rawKey['Enter']) { interactInventory(); moved=true; }
-  if(INPUT.rawKey['KeyF']||INPUT.rawPad[3]) { quickUse(); moved=true; }
-  if(INPUT.rawPad[1]){ if(isInventoryOpen)toggleInventory(); else if(isToolMenuOpen)toggleToolMenu(); return; }
+  if(f.grid){
+    const step=(dx,dy)=>{ cursorX=clamp(cursorX+dx,0,f.cols-1); cursorY=clamp(cursorY+dy,0,f.rows-1); moved=true; };
+    if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1,0);
+    if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1,0);
+    if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(0,-1);
+    if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(0,1);
+    if(pressed('interact')||INPUT.rawKey['Enter']){ interactInventory(); moved=true; }   // E · □ · Enter — pick·place
+    if(INPUT.rawKey['KeyX']||INPUT.rawPad[0]){ activateAtCursor(); moved=true; }         // X · ✕ — inspect·activate
+    if(INPUT.rawKey['KeyF']||INPUT.rawPad[3]){ quickUse(); moved=true; }                 // F · △ — wield·feed
+  }
   if(moved) refreshInvUI();
 }
 
@@ -2375,15 +2820,15 @@ function frame(){
   fpsEma=lerp(fpsEma,1/Math.max(dt,1e-4),0.04);
   pollGamepad();
 
-  // menu toggles
+  // menu toggles — ○/Tab open the tool rack outside, back out of any menu inside
   if(gameState==='play'&&!listeningBind){
     if(pressed('bag')&&!isManualOpen&&!isDebugOpen) toggleInventory();
-    if(pressed('tool')&&!isManualOpen&&!isDebugOpen) toggleToolMenu();
+    if(pressed('tool')&&!isManualOpen&&!isDebugOpen){ uiMenusOpen()?closeAllInv():openToolMenu(); }
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
-      else if(isInventoryOpen)toggleInventory(); else if(isToolMenuOpen)toggleToolMenu();
+      else if(uiMenusOpen())closeAllInv();
     }
   }
 
@@ -2394,7 +2839,7 @@ function frame(){
     if(!uiMenusOpen()){
       updateInteract(dt);
       tryFirePlayer(dt);
-      if(pressed('reload')) tryReload();
+      if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
     }else if(beamActive) endBeam();
     updateHeldPhysics(dt);
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
@@ -2422,12 +2867,12 @@ function frame(){
   if(uiMenusOpen()) menuNav();
   updateDayNight();
 
-  // ---- camera ----
-  let tYawOff=0,tPitchOff=0;
-  if(isInventoryOpen){ tYawOff=-0.5; tPitchOff=-0.3; }
-  else if(isToolMenuOpen){ tYawOff=0.5; }
+  // ---- camera & menu presentation ----
+  menuAnim+=((uiMenusOpen()?1:0)-menuAnim)*Math.min(1,9*dt);
+  if(isInventoryOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2;
+  const tYawOff=0, tPitchOff=uiMenusOpen()?-0.40:0;    // the camera dips to the raised prop
   playerPos.camYawOffset+=(tYawOff-playerPos.camYawOffset)*10*dt;
-  playerPos.camPitchOffset+=(tPitchOff-playerPos.camPitchOffset)*10*dt;
+  playerPos.camPitchOffset+=(tPitchOff-playerPos.camPitchOffset)*8*dt;
   const finalYaw=cameraYaw+playerPos.camYawOffset;
   const finalPitch=clamp(cameraPitch+playerPos.camPitchOffset,-1.5,1.5);
   const cp=camPos();
@@ -2440,12 +2885,14 @@ function frame(){
   gl.uniform1f(U.iTime,gameTime);
   gl.uniform3f(U.ro,cp.x,cp.y,cp.z);
   gl.uniform3f(U.rd,rdx,rdy,rdz);
-  gl.uniform1f(U.fov,playerPos.currentFov);
-  gl.uniform1f(U.uCamYaw, finalYaw);
-  gl.uniform1f(U.uCamPitch, finalPitch);
-  gl.uniform1i(U.uInvOpen, isInventoryOpen ? 1 : 0);
-  gl.uniform1i(U.uToolOpen, isToolMenuOpen ? 1 : 0);
-
+  const fcy=Math.cos(finalYaw),fsy=Math.sin(finalYaw),fcp=Math.cos(finalPitch),fsp=Math.sin(finalPitch);
+  gl.uniform3f(U.uRight,fcy,0,-fsy);
+  gl.uniform3f(U.uUp,-fsp*fsy,fcp,-fsp*fcy);
+  gl.uniform1f(U.fov,playerPos.currentFov*(1-0.22*menuAnim));
+  gl.uniform1f(U.uMenu,menuAnim);
+  gl.uniform1i(U.uMenuMode,menuMode);
+  gl.uniform1f(U.uAim,playerPos.aimAmt);
+  gl.uniform3f(U.uBob,playerPos.bobX,playerPos.bobY,playerPos.viewKick*0.09);
   gl.uniform3f(U.uLightDir,dayNight.lightDir.x,dayNight.lightDir.y,dayNight.lightDir.z);
   gl.uniform3f(U.uLightCol,dayNight.lightCol[0],dayNight.lightCol[1],dayNight.lightCol[2]);
   gl.uniform1f(U.uAmbient,dayNight.ambient);
@@ -2457,6 +2904,9 @@ function frame(){
   gl.uniform3f(U.uGatePos,GATE.x,0,GATE.z);
   const resT=activeTool?(activeTool._res||resolveTool(activeTool)):null;
   gl.uniform1i(U.flashlightOn,(playerPos.flashlightOn&&resT&&resT.flashlight)?1:0);
+  gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld)?1:0);
+  const magNow=activeTool?toolMagazine(activeTool):null;
+  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, 0);
 
   // items (nearest first)
   renderItemsBuf.length=0;
@@ -2470,7 +2920,7 @@ function frame(){
   for(let i=0;i<nItems;i++){
     const w=renderItemsBuf[i][1];
     gl.uniform3f(U.itemPos[i],w.pos.x,w.pos.y,w.pos.z);
-    gl.uniform4f(U.itemData[i],w.item.renderType,w.ry,w.held?1:0,0);
+    gl.uniform4f(U.itemData[i],w.item.renderType,w.ry,w.held?1:0,w.pitch||0);
   }
 
   // enemies (alive only)
