@@ -274,7 +274,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20l';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20m';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -3466,18 +3466,22 @@ function menuNav(){
   if(f.grid||f.rack){
     clampCursor(f);
     const step=(dx,dy)=>{
-      const nx=cursorX+dx, ny=cursorY+dy;
+      // racks draw slot 0 at the BOTTOM: screen-down must move toward the grip (index 0)
+      const nx=cursorX+dx, ny=cursorY+(f.rack?-dy:dy);
       const inspGrid=inspectItem instanceof Tool;         // the pockets panel sits to the RIGHT
       if(dx>0 && nx>=f.cols && inspGrid && currentFocus!==2){
         const tz=rackZone(inspectItem);
-        setFocus(2, 0, clamp(cursorY,0,tz.rowsOf(0)-1)); moved=true; return;
+        const rows=tz.rowsOf(0);
+        const entry=f.rack?cursorY:(rows-1-clamp(cursorY,0,rows-1));   // grid rows are top-origin
+        setFocus(2, 0, clamp(entry,0,rows-1)); moved=true; return;
       }
       if(dx<0 && nx<0 && currentFocus===2){
         const back=isToolMenuOpen?1:0;
-        if(back===0){ setFocus(0, BAG_COLS-1, clamp(cursorY,0,BAG_ROWS-1)); }
+        if(back===0){ const rows=f.rowsOf?f.rowsOf(cursorX):BAG_ROWS;
+                      setFocus(0, BAG_COLS-1, clamp(rows-1-cursorY,0,BAG_ROWS-1)); }   // invert back to top-origin
         else{ const tz=activeTool?rackZone(activeTool):null;
               const bc=tz?tz.cols:1;
-              setFocus(1, bc-1, clamp(cursorY,0,tz?tz.rowsOf(bc-1)-1:0)); }
+              setFocus(1, bc-1, clamp(cursorY,0,tz?tz.rowsOf(bc-1)-1:0)); }            // rack -> rack: same origin
         moved=true; return;
       }
       cursorX=clamp(nx,0,f.cols-1);
