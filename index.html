@@ -1386,7 +1386,6 @@ const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoS
 const BAG_COLS=10,BAG_ROWS=6,GUN_COLS=4,GUN_ROWS=4;
 let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
 let activeTool=null;
-let grabbedItem=null;                 // item riding the inventory cursor
 let isInventoryOpen=false,isToolMenuOpen=false,isManualOpen=false,isDebugOpen=false;
 let currentFocus=0, cursorX=0, cursorY=0;
 let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
@@ -1449,7 +1448,7 @@ function closeAllInv(){
   document.getElementById('backpackUI').classList.add('hidden');
   document.getElementById('toolUI').classList.add('hidden');
   document.getElementById('inspectUI').classList.add('hidden');
-  stashCursorItem(); hideTooltip(); requestLock();
+  hideTooltip(); requestLock();
 }
 function openBag(){
   isToolMenuOpen=false; inspectItem=null;
@@ -1469,12 +1468,6 @@ function openToolMenu(){
 }
 function toggleInventory(){ isInventoryOpen?closeAllInv():openBag(); }
 function toggleToolMenu(){ isToolMenuOpen?closeAllInv():openToolMenu(); }
-function stashCursorItem(){
-  if(!grabbedItem) return;
-  if(autoPlace(grabbedItem,bagGrid,BAG_COLS,BAG_ROWS)){ grabbedItem=null; return; }
-  dropItemToWorld(grabbedItem,1.2,2.0);
-  grabbedItem=null;
-}
 
 function focusGrid(){
   if(currentFocus===2 && inspectItem instanceof Tool) return {grid:inspectItem.grid,cols:GUN_COLS,rows:GUN_ROWS};
@@ -1483,54 +1476,75 @@ function focusGrid(){
     : {grid:activeTool?activeTool.grid:null,cols:GUN_COLS,rows:GUN_ROWS};
 }
 
+function clampCursor(f){ cursorX=clamp(cursorX,0,f.cols-1); cursorY=clamp(cursorY,0,f.rows-1); }
+function cellAt(f){ const row=f.grid[cursorY]; return (row&&row[cursorX])||null; }
+
+// lift an inventory item into the player's hand: it becomes a pinned world item
+function handHold(item){
+  const cy=Math.cos(cameraYaw),sy=Math.sin(cameraYaw);
+  const cp=Math.cos(cameraPitch),sp=Math.sin(cameraPitch);
+  const d=1.5;
+  spawnWorldItem(item, playerPos.x+sy*cp*d, playerPos.y+playerPos.baseHeight+sp*d-0.15, playerPos.z+cy*cp*d);
+  const w=worldItems[worldItems.length-1];
+  w.ry=cameraYaw+Math.PI; w.rotVel=0; w.pitch=0; w.rotVelP=0; w.held=true;
+  heldWorld={w, holdDist:d, mode:'hands', lx:0, ly:0, lz:0};
+  document.getElementById('crosshair').classList.add('carrying');
+  playSound('grab');
+}
+// the held item leaves the world (it went into a pocket)
+function consumeHeld(){
+  const wi=worldItems.indexOf(heldWorld.w); if(wi>=0) worldItems.splice(wi,1);
+  heldWorld.w.held=false; heldWorld=null;
+  document.getElementById('crosshair').classList.remove('carrying');
+}
+
 function interactInventory(){
   const f=focusGrid(); if(!f.grid) return;
-  const cell=f.grid[cursorY]?f.grid[cursorY][cursorX]:null;
+  clampCursor(f);
+  const cell=cellAt(f);
 
-  // a carried world item drops straight into the slot under the cursor
-  if(heldWorld && grabbedItem===null){
+  if(heldWorld){
     const it=heldWorld.w.item;
+    // held rounds pour straight into a magazine under the cursor
+    if(it instanceof Ammunition && cell instanceof Magazine
+       && cell.acceptedType===it.ammoType && cell.loaded<cell.maxCapacity){
+      const t=Math.min(cell.maxCapacity-cell.loaded, it.count);
+      cell.loaded+=t; it.count-=t;
+      if(it.count<=0) consumeHeld();
+      playSound('reload'); refreshInvUI(); return;
+    }
     if(currentFocus!==0 && (it instanceof Tool || it instanceof Gadget)){ playSound('empty'); return; }
+    if(currentFocus===2 && it===inspectItem){ playSound('empty'); return; }   // no nesting a tool in itself
     if(gridFits(it,cursorX,cursorY,f.grid,f.cols,f.rows)){
       placeInGrid(it,cursorX,cursorY,f.grid);
-      const wi=worldItems.indexOf(heldWorld.w); if(wi>=0) worldItems.splice(wi,1);
-      heldWorld.w.held=false; heldWorld=null;
-      document.getElementById('crosshair').classList.remove('carrying');
+      consumeHeld();
+      playSound('place'); refreshInvUI(); return;
+    }
+    if(cell && cell.w===it.w && cell.h===it.h){          // swap: stow the held, lift the occupant
+      const ox=cell.x, oy=cell.y;
+      if(cell===inspectItem) closeInspect();
+      removeFromGrid(cell,f.grid);
+      placeInGrid(it,ox,oy,f.grid);
+      heldWorld.w.item=cell;                              // the occupant takes over the hand
       playSound('place'); refreshInvUI(); return;
     }
     playSound('empty'); return;
   }
 
-  // pour loose rounds into a magazine under the cursor
-  if(grabbedItem instanceof Ammunition && cell instanceof Magazine && cell.acceptedType===grabbedItem.ammoType){
-    const space=cell.maxCapacity-cell.loaded;
-    const t=Math.min(space,grabbedItem.count);
-    cell.loaded+=t; grabbedItem.count-=t;
-    if(grabbedItem.count<=0) grabbedItem=null;
-    playSound('reload'); refreshInvUI(); return;
+  if(cell){                                               // hand empty: lift it out of the pocket
+    if(cell===inspectItem) closeInspect();
+    removeFromGrid(cell,f.grid);
+    handHold(cell);
+    refreshInvUI(); return;
   }
-  if(grabbedItem===null){
-    if(cell!==null){
-      grabbedItem=cell; removeFromGrid(cell,f.grid); playSound('grab');
-    }
-  }else{
-    if(currentFocus>=1 && (grabbedItem instanceof Tool || grabbedItem instanceof Gadget)){ playSound('empty'); return; }
-    if(currentFocus===2 && grabbedItem===inspectItem){ playSound('empty'); return; }   // no nesting a tool in itself
-    if(gridFits(grabbedItem,cursorX,cursorY,f.grid,f.cols,f.rows)){
-      placeInGrid(grabbedItem,cursorX,cursorY,f.grid); grabbedItem=null; playSound('place');
-    }else if(cell && cell.w===grabbedItem.w && cell.h===grabbedItem.h){
-      removeFromGrid(cell,f.grid);
-      placeInGrid(grabbedItem,cell.x,cell.y,f.grid);
-      grabbedItem=cell; playSound('place');
-    }else playSound('empty');
-  }
-  refreshInvUI();
+  playSound('click');
 }
 
 // [X] — inspect · activate. Magazines & spare tools open their own pockets.
 function activateAtCursor(){
-  const f=focusGrid();
-  const cell=(f.grid&&f.grid[cursorY])?f.grid[cursorY][cursorX]:null;
+  const f=focusGrid(); if(!f.grid){ if(inspectItem) closeInspect(); return; }
+  clampCursor(f);
+  const cell=cellAt(f);
   if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
     if(!cell){ closeInspect(); return; }
     playSound('click'); return;
@@ -1580,7 +1594,8 @@ function renderInspect(){
 // right-click / [F] — the analog "use" verb
 function quickUse(){
   const f=focusGrid(); if(!f.grid) return;
-  const cell=f.grid[cursorY]?f.grid[cursorY][cursorX]:null;
+  clampCursor(f);
+  const cell=cellAt(f);
   if(!cell) return;
   if(cell instanceof Tool && currentFocus===0){ wieldTool(cell); return; }
   if(cell instanceof Ammunition && activeTool){
@@ -1588,7 +1603,7 @@ function quickUse(){
     if(mag && mag.acceptedType===cell.ammoType && mag.loaded<mag.maxCapacity){
       const t=Math.min(mag.maxCapacity-mag.loaded, cell.count);
       mag.loaded+=t; cell.count-=t;
-      if(cell.count<=0) removeFromGrid(cell,bagGrid);
+      if(cell.count<=0) removeFromGrid(cell,f.grid);
       playSound('reload'); refreshInvUI(); return;
     }
   }
@@ -1690,7 +1705,7 @@ function updateInteract(dt){
   const hover=heldWorld?{idx:-1,t:0}:itemUnderCrosshair(3.2);
   const prompt=document.getElementById('interactPrompt');
   if(heldWorld){
-    prompt.innerHTML='<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · open the rucksack to stow';
+    prompt.innerHTML='<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow';
     prompt.classList.add('show');
   }else if(hover.idx>=0){
     const it=worldItems[hover.idx].item;
@@ -2300,7 +2315,6 @@ function resetLevel(){
 }
 function initLoadout(){
   bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
-  grabbedItem=null;
   const t=ITEM_DEFS.tool(); t.name='Foundling Tool';
   const mag=ITEM_DEFS.magStd(); mag.loaded=8;
   placeInGrid(mag,0,0,t.grid);
@@ -2506,9 +2520,9 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       if(item.x===c&&item.y===r) div.classList.add('origin');
     }
     if(currentFocus===focusIdx&&cursorX===c&&cursorY===r) div.classList.add('cursor');
-    if(grabbedItem&&currentFocus===focusIdx&&cursorX===c&&cursorY===r){
+    if(heldWorld&&currentFocus===focusIdx&&cursorX===c&&cursorY===r){
       const f=focusGrid();
-      div.style.outline='2px solid '+(gridFits(grabbedItem,c,r,f.grid,f.cols,f.rows)?'#57e0a3':'#e0492e');
+      div.style.outline='2px solid '+(gridFits(heldWorld.w.item,c,r,f.grid,f.cols,f.rows)?'#57e0a3':'#e0492e');
     }
     div.addEventListener('mouseenter',()=>{
       if(currentFocus===focusIdx && cursorX===c && cursorY===r) return;
@@ -2796,6 +2810,7 @@ function menuNav(){
   const f=focusGrid();
   let moved=false;
   if(f.grid){
+    clampCursor(f);
     const step=(dx,dy)=>{ cursorX=clamp(cursorX+dx,0,f.cols-1); cursorY=clamp(cursorY+dy,0,f.rows-1); moved=true; };
     if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1,0);
     if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1,0);
