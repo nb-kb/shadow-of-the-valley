@@ -289,7 +289,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20q';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20r';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1559,23 +1559,37 @@ class Platform extends Item{
 }
 
 const BATTERY_TIERS={
-  small: {cap:40,  life:400,  w:1,h:1, color:'#7a6a3a'},
-  medium:{cap:70,  life:900,  w:1,h:2, color:'#8a7a2e'},
-  heavy: {cap:120, life:2000, w:2,h:2, color:'#9a8a22'},
+  small: {cap:40,  w:1,h:1, color:'#7a6a3a'},
+  medium:{cap:70,  w:1,h:2, color:'#8a7a2e'},
+  heavy: {cap:120, w:2,h:2, color:'#9a8a22'},
 };
 class Battery extends Item{
   constructor(size){
     const t=BATTERY_TIERS[size];
     super(size[0].toUpperCase()+size.slice(1)+' Battery',t.w,t.h,t.color);
     this.size=size;
-    this.capMax=t.cap;
-    this.cap=t.cap;
-    this.life=t.life;
+    this.capMax=t.cap;        // design capacity
+    this.cap=t.cap;           // every shot has a 1.5% chance of eating one of these
     this.charge=t.cap;
   }
   get renderType(){ return 7; }
-  desc(){ return this.charge.toFixed(0)+'/'+this.cap+'\u26a1 \u00b7 '+(this.life>0?this.life.toFixed(0)+' regen left':'DEPLETED')
-    +(this.cap<this.capMax?' \u00b7 worn '+this.cap+'/'+this.capMax:''); }
+  desc(){ return battFunctional(this)
+    ? this.charge.toFixed(0)+'/'+this.cap+'\u26a1'+(this.cap<this.capMax?' \u00b7 worn from '+this.capMax:'')
+    : 'DEPLETED \u00b7 worn to nothing ('+this.cap+'/'+this.capMax+')'; }
+}
+// a battery worn to 2 or less is electrically dead — it powers nothing at all.
+// (at 3 it can still whisper: HUSH costs exactly 3\u26a1. That is not a rule, just arithmetic.)
+function battFunctional(b){ return b.cap>2; }
+function toolPowerCells(tool){ return toolBatteries(tool).filter(battFunctional); }
+// every shot that draws power rolls the dice against the cell that paid
+function wearRoll(cells){
+  for(const b of cells){
+    if(runRng()<0.015){
+      b.cap=Math.max(0,b.cap-1);
+      if(b.charge>b.cap) b.charge=b.cap;
+      if(!battFunctional(b)) toast(b.name.toUpperCase()+' \u00b7 DEPLETED');
+    }
+  }
 }
 class Tool extends Item{
   constructor(name,color){
@@ -1585,7 +1599,7 @@ class Tool extends Item{
   }
   get renderType(){ return 1; }
   desc(){ return 'The Tool. Everyone carries one. Right-click to wield.'; }
-  get charge(){ let c=0; for(const b of toolBatteries(this)) c+=b.charge; return c; }
+  get charge(){ let c=0; for(const b of toolPowerCells(this)) c+=b.charge; return c; }
   set charge(v){ const d=v-this.charge; if(d<0) spendCharge(this,-d); else refundCharge(this,d); }
 }
 function toolBatteries(tool){
@@ -1594,35 +1608,28 @@ function toolBatteries(tool){
     for(const r of col.refs){ const it=readRef(r); if(it instanceof Battery) out.push(it); }
   return out;
 }
-function toolChargeMax(tool){ let c=0; for(const b of toolBatteries(tool)) c+=b.cap; return c; }
+function toolChargeMax(tool){ let c=0; for(const b of toolPowerCells(tool)) c+=b.cap; return c; }
 function spendCharge(tool,amt){
-  for(const b of toolBatteries(tool)){
+  const tapped=[];
+  for(const b of toolPowerCells(tool)){
     if(amt<=0) break;
-    const take=Math.min(b.charge,amt); b.charge-=take; amt-=take;
+    const take=Math.min(b.charge,amt);
+    if(take>0){ b.charge-=take; amt-=take; tapped.push(b); }
   }
+  return tapped;
 }
 function refundCharge(tool,amt){
-  for(const b of toolBatteries(tool)){
+  for(const b of toolPowerCells(tool)){
     if(amt<=0) break;
     const put=Math.min(b.cap-b.charge,amt); b.charge+=put; amt-=put;
   }
 }
-let _regenAcc=0;
 function regenBatteries(tool,dt){
-  _regenAcc+=16*dt;
-  const whole=Math.floor(_regenAcc);
-  if(whole<1) return;
-  _regenAcc-=whole;
-  let need=whole;
-  for(const b of toolBatteries(tool)){
-    if(need<=0) break;
-    if(b.life<=0) continue;
-    while(need>0 && b.life>0 && b.charge<b.cap){
-      b.charge=Math.min(b.cap,b.charge+1);
-      b.life--; need--;
-      if(runRng()<0.015 && b.cap>5) b.cap--;      // wear: ~1.5% per regenerated unit
-      if(b.charge>b.cap) b.charge=b.cap;
-    }
+  let pour=16*dt;
+  for(const b of toolPowerCells(tool)){
+    if(pour<=0) break;
+    const put=Math.min(b.cap-b.charge,pour);
+    b.charge+=put; pour-=put;
   }
 }
 
@@ -2464,7 +2471,7 @@ function heldUse(it){
     refreshInvUI(); return;
   }
   if(it instanceof Gadget){ useGadget(it); return; }
-  if(it instanceof Battery){ toast('BATTERY · '+it.charge.toFixed(0)+'/'+it.cap+'\u26a1 · '+(it.life>0?it.life.toFixed(0)+' regen left':'DEPLETED')); playSound('click'); return; }
+  if(it instanceof Battery){ toast('BATTERY · '+(battFunctional(it)?it.charge.toFixed(0)+'/'+it.cap+'\u26a1':'DEPLETED')); playSound('click'); return; }
   if(it instanceof ToolMod && it.effect && it.effect.laser){
     it.pointing=!it.pointing;
     toast(it.pointing?'BEAM · POINTING':'BEAM · DARK'); playSound('click'); return;
@@ -2556,7 +2563,7 @@ function tryFirePlayer(dt){
     }
     if(pick<0) continue;                                 // starved column: cycle HOLDS
     const sh=lane.shots[pick];
-    activeTool.charge-=(sh.cost||0);                     // price the shot, not the copies
+    wearRoll(spendCharge(activeTool,sh.cost||0));        // price the shot, not the copies — and roll the dice
     for(let b=0;b<res.burst;b++){
       if(sh.kind==='bolt'){
         if(!mag||mag.loaded<=0) break;
@@ -2600,7 +2607,8 @@ function runContinuousBeams(dt){
     if(activeTool.charge<rate*dt){ continue; }        // starved thread gutters out
     spendCharge(activeTool,rate*dt);
     any=true;
-    let st=_beamLanes.get(li); if(!st){ st={acc:0}; _beamLanes.set(li,st); }
+    let st=_beamLanes.get(li);
+    if(!st){ st={acc:0}; _beamLanes.set(li,st); wearRoll(toolPowerCells(activeTool).slice(0,1)); }
     st.engaged=true;
     let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,50);
     // enemies intercept the thread
@@ -3239,8 +3247,9 @@ function tipBrief(it){                                  // the info square's row
   if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
     rows:[it.slots.length+' side slots','each fires alone']};
   if(it instanceof Battery) return {kind:'BATTERY · '+it.size.toUpperCase(),
-    rows:[it.charge.toFixed(0)+' / '+it.cap+' \u26a1', it.life>0?it.life.toFixed(0)+' regen left':'DEPLETED',
-          it.cap<it.capMax?'worn: '+it.cap+' of '+it.capMax:'unworn']};
+    rows: battFunctional(it)
+      ? [it.charge.toFixed(0)+' / '+it.cap+' \u26a1', it.cap<it.capMax?'worn: '+it.cap+' of '+it.capMax:'unworn']
+      : ['DEPLETED', 'worn to '+it.cap+' of '+it.capMax]};
   if(it instanceof Tool) return {kind:'THE TOOL', rows:['charge '+it.charge.toFixed(0)+'%']};
   if(it instanceof Gadget) return {kind:'GADGET', rows:[]};
   return {kind:it.constructor.name.toUpperCase(), rows:[]};
@@ -3264,7 +3273,8 @@ function syncTip(){
     +b.rows.map(r=>'<div>'+r+'</div>').join('')
     +'<div class="tt-cat" style="margin-top:4px;">'+(it.desc?it.desc():'')+'</div>';
   tooltipEl.style.display='block';
-  // position beside the focused cell when we can find it; otherwise keep last spot
+  // the card rides the mouse when the mouse is driving; the d-pad anchors it to the cell
+  if(tipMouseT>=tipPadT){ positionTipAtMouse(); return; }
   const host=document.querySelector?document.querySelector('.cellFocus'):null;
   if(host&&host.getBoundingClientRect){
     const rc=host.getBoundingClientRect();
@@ -3290,7 +3300,14 @@ function paintToolStats(){
   tipDetailEl.innerHTML=describeSequence(res);
 }
 let mouseX=0,mouseY=0;
-document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;});
+let tipMouseT=1, tipPadT=0;
+function positionTipAtMouse(){
+  tooltipEl.style.left=Math.min(window.innerWidth-260,mouseX+16)+'px';
+  tooltipEl.style.top=Math.min(window.innerHeight-120,mouseY+14)+'px';
+}
+document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;
+  tipMouseT=performance.now();
+  if(tooltipEl.style.display==='block') positionTipAtMouse();});
 function showTooltip_DEAD(item){
   const cat=item instanceof ToolMod?('MOD · '+item.cat.toUpperCase()):
             item instanceof Tool?'TOOL':item instanceof Magazine?'MAGAZINE':
@@ -3954,7 +3971,7 @@ function menuNav(){
     if(INPUT.rawKey['KeyX']||INPUT.rawPad[0]){ activateAtCursor(); moved=true; }         // X · ✕ — inspect·activate
     if(INPUT.rawKey['KeyF']||INPUT.rawPad[3]){ quickUse(); moved=true; }                 // F · △ — wield·feed
   }
-  if(moved) refreshInvUI();
+  if(moved){ tipPadT=performance.now(); refreshInvUI(); }
 }
 
 // ============================================================
