@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21b';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21d';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -821,6 +821,7 @@ vec2 cellSDF(vec3 q, float h, bool isGate){
 uniform int   uLevelOn;
 uniform vec4  uLevelBounds;   // x0, z0, invTileW, invTileH
 uniform vec4  uLevelGround;   // rimH, rimW, noiseAmp, (pad)
+bool gNoGround=false;                 // primary rays split ground from structures
 uniform highp sampler2D uLevelTex;  // rows0-15 tilemap(r,g=ids), row16 headers x3, row17+ pool
 
 float lvGround(vec2 xz){
@@ -957,7 +958,7 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
 }
 vec2 levelSDF(vec3 p){
   float tH=lvGround(p.xz);
-  vec2 res=vec2((p.y-tH)*0.62, tH>4.0?2.0:1.0);
+  vec2 res = gNoGround ? vec2(1e5,1.0) : vec2((p.y-tH)*0.62, tH>4.0?2.0:1.0);
   ivec2 t=ivec2(floor((p.xz-uLevelBounds.xy)*vec2(uLevelBounds.z,uLevelBounds.w)));
   if(all(greaterThanEqual(t,ivec2(0))) && all(lessThanEqual(t,ivec2(15)))){
     vec4 ids=lvTexel(t.x,t.y)*255.0;
@@ -967,15 +968,48 @@ vec2 levelSDF(vec3 p){
       vec2 rr=lvRegion(ri,p,cut);
       if(rr.x<res.x) res=rr;
     }
-    if(cut<1e4) res.x=max(res.x,-cut);
+    if(!gNoGround && cut<1e4) res.x=max(res.x,-cut);
   }
   return res;
+}
+
+// the ground-only heightfield, valid at any distance — regions ignored out here
+float groundHF(vec2 xz){ return (uLevelOn==1) ? lvGround(xz) : terrainH(xz); }
+uniform vec4 uLevelCutA;              // trench cut: center.xyz, half.x
+uniform vec4 uLevelCutB;              // half.y, half.z, enabled, _
+// sign-exact support field: negative inside solid ground, cut carved out.
+// Bracketing needs only the SIGN, so no Lipschitz games, no 0.62, no starvation.
+float groundField(vec3 p){
+  float f = p.y - groundHF(p.xz);
+  if(uLevelCutB.z>0.5){
+    vec3 q=abs(p-uLevelCutA.xyz)-vec3(uLevelCutA.w,uLevelCutB.x,uLevelCutB.y);
+    float cutD=length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0);
+    f=max(f,-cutD);
+  }
+  return f;
+}
+// growing strides + bisection: converges at ANY grazing angle, out to the true horizon
+vec2 traceGround(vec3 o, vec3 dir, float maxT){
+  float t=0.05;
+  if(groundField(o+dir*t)<0.0) return vec2(t,1.0);
+  for(int i=0;i<170;i++){
+    float tn=t+clamp(t*0.045,0.35,14.0);
+    if(groundField(o+dir*tn)<0.0){
+      float lo=t,hi=tn;
+      for(int k=0;k<9;k++){ float mid=0.5*(lo+hi);
+        if(groundField(o+dir*mid)<0.0) hi=mid; else lo=mid; }
+      return vec2(hi,1.0);
+    }
+    t=tn;
+    if(t>maxT) break;
+  }
+  return vec2(-1.0,0.0);
 }
 
 vec2 mapStatic(vec3 p){
   if(uLevelOn==1) return levelSDF(p);
   float tH=terrainH(p.xz);
-  vec2 res=vec2((p.y-tH)*0.62, tH>1.5?2.0:1.0);   // ground: dirt floor, rock slopes
+  vec2 res = gNoGround ? vec2(1e5,1.0) : vec2((p.y-tH)*0.62, tH>1.5?2.0:1.0);   // ground: dirt floor, rock slopes
   float cellSize=20.0;
   vec2 cellId=floor((p.xz+cellSize*0.5)/cellSize);
   vec2 camCell=floor((ro.xz+cellSize*0.5)/cellSize);
@@ -1168,16 +1202,27 @@ vec2 map(vec3 p){
 }
 
 vec2 raycast(vec3 o, vec3 dir){
+  // GROUND: bracket-marched to the true horizon — grazing rays cannot starve
+  vec2 g=traceGround(o,dir,2800.0);
+  float tG = g.x>0.0 ? g.x : 1e9;
+  // STRUCTURES (+dynamics): sphere-traced with the ground hit as their ceiling
+  gNoGround=true;
   float t=0.0; float m=-1.0;
+  float tMax=min(uFar, tG+0.5);
   for(int i=0;i<150;i++){
     vec3 pp=o+dir*t;
     vec2 r=map(pp);
     if(r.x < (0.0007*t+0.0004)){ m=r.y; break; }
-    t += r.x*0.93;                     // conservative step: smin terrain understates gradients
-    if(t > uFar) break;
+    t += r.x*0.93;
+    if(t > tMax) break;
   }
-  if(t > uFar) m=-1.0;
-  return vec2(t,m);
+  gNoGround=false;
+  if(m>=0.0 && t<=tG) return vec2(t,m);
+  if(tG<2800.0){
+    float gh=groundHF((o+dir*tG).xz);
+    return vec2(tG, gh>(uLevelOn==1?4.0:1.5)?2.0:1.0);
+  }
+  return vec2(uFar+1.0,-1.0);
 }
 
 float softShadow(vec3 o, vec3 dir, float maxDist){
@@ -1201,8 +1246,6 @@ vec3 calcNormal(vec3 p){
                   + k.xxx*map(p+k.xxx*e).x );
 }
 
-// the ground-only heightfield, valid at any distance — regions ignored out here
-float groundHF(vec2 xz){ return (uLevelOn==1) ? lvGround(xz) : terrainH(xz); }
 vec3 skyColor(vec3 dir){
   vec3 sky = mix(uSkyLo, uSkyHi, clamp(dir.y*0.7+0.35, 0.0, 1.0));
   float sd = clamp(dot(dir, uLightDir), 0.0, 1.0);
@@ -1347,47 +1390,7 @@ void main(){
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
     col = mix(col, skyColor(rayDir), fogAmt);            // aerial perspective, one truth
   }else{
-    col = skyColor(rayDir);
-    // ---- FAR FIELD: the world does not end at the march budget. Rays that outran
-    // ---- it march on against the bare heightfield in a dozen giant strides, so the
-    // ---- horizon is real terrain fading into real fog — never a painted band.
-    if(rayDir.y < 0.08){
-      float t=uFar;
-      float hPrev = ro.y + rayDir.y*t - groundHF(ro.xz + rayDir.xz*t);
-      float tHit=-1.0;
-      if(hPrev < 0.0){
-        // already under the surface at the first sample: the crossing happened
-        // inside the main march's range on a grazing path it exhausted itself on.
-        // Recover it by bisection — this cohort WAS the sky-stripe.
-        float lo=uFar*0.40, hi=uFar;
-        for(int i=0;i<10;i++){
-          float mid=0.5*(lo+hi);
-          vec3 mp=ro+rayDir*mid;
-          if(mp.y-groundHF(mp.xz) < 0.0) hi=mid; else lo=mid;
-        }
-        tHit=hi;
-      }else{
-        for(int i=0;i<12;i++){
-          float tn = t*1.30 + 10.0;
-          vec3 fp = ro + rayDir*tn;
-          float h = fp.y - groundHF(fp.xz);
-          if(h < 0.0){ tHit = mix(t, tn, hPrev/max(1e-3, hPrev-h)); break; }
-          t=tn; hPrev=h;
-          if(t>2800.0) break;
-        }
-      }
-      if(tHit>0.0){
-        vec3 fp=ro+rayDir*tHit;
-        float e=tHit*0.012+1.5;
-        vec3 n=normalize(vec3(groundHF(fp.xz-vec2(e,0.0))-groundHF(fp.xz+vec2(e,0.0)), 2.0*e,
-                              groundHF(fp.xz-vec2(0.0,e))-groundHF(fp.xz+vec2(0.0,e))));
-        float dif=clamp(dot(n,uLightDir),0.0,1.0);
-        vec3 gcol=vec3(0.42,0.38,0.30);
-        vec3 lit = gcol*uLightCol*dif + gcol*uAmbient*(0.55+0.45*n.y);
-        float fg = 1.0-exp(-uFog*tHit);
-        col = mix(lit, col, fg);
-      }
-    }
+    col = skyColor(rayDir);   // a true miss is sky; the ground march owns the land
   }
   col = pow(col, vec3(0.4545));
   // ---- optic reticle: the player looks THROUGH the glass while aiming ----
@@ -1451,7 +1454,7 @@ gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
-['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
@@ -3780,7 +3783,8 @@ function finishReload(){
 // ============================================================
 class Zealot{
   constructor(x,z){
-    this.position=new Vec3(x,0,z);
+    const gy=activeLevel ? levelGroundJS(x,z) : terrainHJS(x,z);
+    this.position=new Vec3(x, restOnSurface(x, gy+2.5, z), z);
     this.startPos=this.position.clone();
     this.velocity=new Vec3();
     this.health=34;
@@ -5447,11 +5451,17 @@ function frame(){
   const nd=Math.min(RLIM.DYN,dsorted.length);
   const lvOn=activeLevel&&activeLevel.kind==='authored';
   gl.uniform1i(U.uLevelOn,lvOn?1:0);
+  if(!lvOn){ gl.uniform4f(U.uLevelCutA,0,0,0,0); gl.uniform4f(U.uLevelCutB,0,0,0,0); }
   if(lvOn){
     const b=activeLevel.bounds;
     gl.uniform4f(U.uLevelBounds,b.x0,b.z0,16/(b.x1-b.x0),16/(b.z1-b.z0));
     const lg=activeLevel.ground;
     gl.uniform4f(U.uLevelGround,lg.rim,lg.rimW,lg.noise,0);
+    const pits=activeLevel.regions.find(r=>r.trench);
+    if(pits){ const t=pits.trench;
+      gl.uniform4f(U.uLevelCutA,(t[0]+t[2])/2, 0.4-pits.trenchD, (t[1]+t[3])/2, (t[2]-t[0])/2);
+      gl.uniform4f(U.uLevelCutB,pits.trenchD,(t[3]-t[1])/2,1,0);
+    }else{ gl.uniform4f(U.uLevelCutA,0,0,0,0); gl.uniform4f(U.uLevelCutB,0,0,0,0); }
     if(levelTexDirty) uploadLevelTex();
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,_levelTexGL);   // belt & braces
     gl.uniform1i(U.uLevelTex,2);
