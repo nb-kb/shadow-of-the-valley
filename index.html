@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21k';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21l';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -621,7 +621,7 @@ function beamAudio(on){
 // ============================================================
 // SHADERS
 // ============================================================
-const RLIM = { ITEMS:16, ENEMIES:8, TRACERS:12, DECALS:20, DYN:4 };
+const RLIM = { ITEMS:16, ENEMIES:10, TRACERS:12, DECALS:20, DYN:4 };
 
 const vertexShaderSource = `#version 300 es
 in vec4 a_position;
@@ -1860,18 +1860,23 @@ LEVELS.area1={
     {id:'facN', x:150,  z:127.4,face:'N', target:null, returnAt:null},
   ],
   spawn:{
-    zealots:[ {region:'pits',n:2},{region:'armory',n:1},{region:'forest',n:2},
-              {region:'testing',n:3},{region:'tentsA',n:2},{region:'tentsB',n:2},
-              {region:'facility',n:2,outside:true} ],
+    zealots:[ {region:'pits',n:3},{region:'armory',n:2},{region:'forest',n:3},
+              {region:'testing',n:3},{region:'tentsA',n:3},{region:'tentsB',n:3},
+              {region:'lab',n:2},{region:'facility',n:3,outside:true} ],
     lootN:32, minSpace:6,
     lootTiers:{
-      common:['ammo9','ammo9','ammo9','battS','battS','ration','ration','magStd'],
-      gear:  ['beltBasic','holster1','holster2','goggles','headphones','helmetCap','harnessL','battM'],
-      mods:  ['dmgPlus','velPlus','twin','gripField','reflex','barrelC','magStd',
-              'silentMod','fuseMod','splinter'],
-      cores: ['boltCore','sparkCore','pickCore','beamCore'],
-      rare:  ['scope','scope2x','suppressor','barrelU','platS','harnessM','harnessH',
-              'platesL','platesH','helmetSteel','helmetRig','battH','cyanide']
+      common:['ammo9','ammo9','ammo9','ration','ration','battS','battS','battM',
+              'magStd','magStd','watch','compass'],
+      gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
+              'helmetCap','harnessL','battH','lantern','magDrum'],
+      mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
+              'splinter','bounce','pierce','heavy','compensator','hairTrigger',
+              'barrelC','heavyBarrel'],
+      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse'],
+      rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
+              'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
+              'platesH','helmetSteel','helmetRig','autoSear','burstCam','rucksack',
+              'tool','cyanide']
     },
     regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
                  testing:['mods','common','rare'], tentsA:['common','gear','gear'],
@@ -1902,9 +1907,9 @@ LEVELS.hideout={
   terminal:{x:-3.4,z:-0.6},
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
-  crates:[[92,-6,0.85],[93.3,-5.2,0.7],[108,8,0.8],[88,14,0.7],[112,-12,0.85],[106,16,0.75]],
+  crates:[[6,-3,0.85],[7.2,-2.4,0.7],[-5,6,0.8],[-6,-5,0.7],[8,5,0.85],[-3,8,0.75]],
   crateTiers:['common','gear','mods'],
-  spawn:{lootN:10} };   // the endless world — supplies huddle by the gate
+  spawn:{lootN:26} };   // the endless world — supplies scattered through the ruins
 
 // ---- bake: tile -> (<=2) region ids. Throws loudly if authoring breaks the budget. ----
 function bakeLevel(level){
@@ -4184,26 +4189,8 @@ const enemies=[];
 // ============================================================
 // LOOT · GATE · RUN FLOW
 // ============================================================
-const GROUND_LOOT=['ammo9','ammo9','magStd','suppressor','reflex','dmgPlus','twin','bounce','pierce',
-  'velPlus','heavy','silentMod','sparkCore','beamCore','boltCore','gripField','pulse','lantern',
-  'compensator','hairTrigger','burstCam','autoSear','heavyBarrel','magDrum','scope','opticsDial','volumeKnob'];
-function maybeSpawnCellLoot(cx,cz){
-  const key=cx+','+cz+','+depth;
-  if(visitedCells.has(key)) return;
-  visitedCells.add(key);
-  if(Math.abs(cz)>2) return;                  // no loot up on the cliffs
-  if(cx===GATE.cx&&cz===GATE.cz) return;
-  const h=cellHash(cx+SEED.x+311, cz+SEED.y+733);
-  if(h<0.5) return;
-  const n=h>0.85?2:1;
-  for(let i=0;i<n;i++){
-    const h2=cellHash(cx+SEED.x+i*13+97, cz+SEED.y+i*29+41);
-    const def=GROUND_LOOT[Math.floor(h2*GROUND_LOOT.length)%GROUND_LOOT.length];
-    const ox=(cellHash(cx+i*7+SEED.x,cz+SEED.y+551)*10-5);
-    const oz=(cellHash(cx+SEED.x+643,cz+i*11+SEED.y)*10-5);
-    spawnWorldItem(ITEM_DEFS[def](), cx*20+ox, 0.6, cz*20+oz);
-  }
-}
+// (ground scatter retired in v21l — the world's loot lives in crates now)
+function maybeSpawnCellLoot(){}
 
 function placeGate(){
   const rr=mulberry32((SEED.x*73856093)^(SEED.y*19349663));
@@ -4223,14 +4210,18 @@ function resetLevel(){
   heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
   cameraYaw=Math.atan2(GATE.x,GATE.z);
-  PARAMS.maxEnemies.v=Math.min(6,2+depth);
+  PARAMS.maxEnemies.v=Math.min(14, 4+2*depth);
   enemies.length=0;
+  const _lo=Math.min(-34, GATE.x*1.1), _hi=Math.max(34, GATE.x*1.1);
   for(let i=0;i<P('maxEnemies');i++){
-    const ex=(runRng()<0.5?-1:1)*(18+runRng()*32);
-    const ez=runRng()*76-38;                  // valley strip only
+    let ex=_lo+runRng()*(_hi-_lo);
+    if(Math.abs(ex)<14) ex=14*Math.sign(ex||1);          // not on top of the insertion
+    const ez=runRng()*76-38;                              // valley strip only
     enemies.push(new Zealot(ex,ez));
   }
   playerPos.health=Math.min(playerPos.maxHealth, playerPos.health+25);
+  buildCrateRegistry(LEVELS.valley);
+  seedLevelSpawns(LEVELS.valley);
   document.getElementById('hudDepth').textContent=roman(depth);
 }
 function initLoadout(){
@@ -4314,9 +4305,7 @@ function deployTo(levelId){
   }else{
     activeLevel=null; levelBake=null;
     gameState='play';
-    resetLevel();                       // the endless valley keeps its ring machinery
-    buildCrateRegistry(L);
-    seedLevelSpawns(L);
+    resetLevel();                       // the endless valley keeps its ring machinery (crates seed inside)
     playerPos.x=0; playerPos.z=0; playerPos.y=0;
   }
   _exfilHold=0;
@@ -4339,6 +4328,22 @@ function buildCrateRegistry(L){
     for(const c of r.crates) add(c, r.loot||['common']);
   }
   if(L.crates) for(const c of L.crates) add(c, L.crateTiers||['common']);
+  if(L.kind==='rings'){
+    // VALLEY-CELL-CRATE twin of cellSDF's crate hash — same cells, same boxes, now openable
+    const base=L.crateTiers||['common'];
+    const tiers=depth>=3?[...base,'rare','cores']:base;
+    for(let cy=-2;cy<=2;cy++) for(let cx=-10;cx<=10;cx++){
+      if(cx===GATE.cx&&cy===GATE.cz) continue;
+      const h=cellHash(cx+SEED.x, cy+SEED.y);
+      const type=Math.floor(h*5);
+      if(!(type<0.5||type>2.5)) continue;
+      for(let k=0;k<3;k++){
+        if(((h*(13+7*k))%1)>=0.6) continue;
+        const cx0=((h*(29+11*k))%1)*14-7, cz0=((h*(53+17*k))%1)*14-7;
+        add([cx*20+cx0, cy*20+cz0, 1.1], tiers);
+      }
+    }
+  }
 }
 function nearestCrateTo(x,z,skipFull){
   const order=crateRegistry.map(c=>[(c.x-x)**2+(c.z-z)**2,c]).sort((a,b)=>a[0]-b[0]);
