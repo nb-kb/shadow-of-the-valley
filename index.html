@@ -339,7 +339,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <p><b>Follow the valley to the beacon.</b> Every zealot carries the same Tool you do — take theirs apart and make yours stranger.</p>
   <p>Shadow hides you. Light betrays you. Noise carries.</p>
   <p style="font-size:10px;">WASD move · <b>E</b> grab / reload / place · <b>LMB</b> fire or hurl · Shift sprint toggles · <b>B</b> rucksack · <b>Tab</b> tool · <b>X</b> inspect in menus · F light · M manual</p>
-  <div class="go" id="bootStatus" style="visibility:hidden;">&nbsp;</div>
+  <div class="go" id="bootStatus">COMPILING THE VALLEY…</div>
 </div></div>
 <div id="deathScreen" class="screen hidden"><div class="inner panel">
   <h1 style="color:var(--alert);">RECLAIMED</h1>
@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21i';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21j';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -5292,10 +5292,17 @@ function updatePlayer(dt){
     playerPos.velY-=P('gravity')*dt;
     if(playerPos.velY<-34) playerPos.velY=-34;           // terminal velocity
     playerPos.y+=playerPos.velY*dt;
+    const _ix=playerPos.x, _iz=playerPos.z, _wasGrounded=playerPos.onGround;
     _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
     playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
     _c2.set(playerPos.x,playerPos.y+0.95,playerPos.z); resolveCollision(_c2,0.34);
     playerPos.x=_c2.x; playerPos.y=_c2.y-0.95; playerPos.z=_c2.z;
+    // idle on tilted dirt: the ground's push-out leans sideways a few mm a frame.
+    // small idle displacement is creep, not a wall — a planted stance ignores it.
+    if(_wasGrounded && !moving){
+      const _cd=Math.hypot(playerPos.x-_ix, playerPos.z-_iz);
+      if(_cd>0 && _cd<0.06){ playerPos.x=_ix; playerPos.z=_iz; }
+    }
     // grounded: resting equilibrium on scaled terrain reads ~0.15 at the feet,
     // on structure floors ~0.04 — 0.22 covers both without licking walls
     const gd=mapWorldJS(playerPos.x,playerPos.y+0.05,playerPos.z);
