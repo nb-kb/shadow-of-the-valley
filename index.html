@@ -128,8 +128,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .hintline{margin-top:12px;font-size:9px;letter-spacing:.12em;color:var(--dust);line-height:1.7;}
 .hintline b{color:var(--bone);}
 
-/* tooltip (legacy floating — dead, kept for id safety) */
-#tooltip{display:none !important;position:absolute;z-index:60;pointer-events:none;max-width:240px;padding:8px 10px;font-size:10px;
+/* floating item card */
+#tooltip{display:none;position:absolute;z-index:60;pointer-events:none;max-width:250px;padding:9px 11px;font-size:10px;
   letter-spacing:.06em;line-height:1.5;background:var(--panel);border:1px solid var(--dust);color:var(--bone);display:none;}
 #tooltip .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;}
 #tooltip .tt-cat{color:var(--dust);font-size:9px;}
@@ -210,7 +210,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="toolUI" class="hidden">
   <div class="stencil">THE TOOL · BARREL RACK</div>
   <div id="rackWrap"></div>
-  <div class="seqReadout"><div id="modSequence">—</div></div>
+  <div class="seqReadout hidden"><div id="modSequence">—</div></div>
 </div>
 
 <!-- Docked tip panel: one info square + one dashed detail square (any menu) -->
@@ -248,7 +248,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="debugUI" class="panel hidden">
   <div class="stencil" style="color:var(--alert);">⚠ <b>DEBUG CONSOLE</b> — not part of the world</div>
   <h3>Spawn</h3>
-  <div class="drow"><select id="dbgItemSel"></select><button id="dbgSpawnItem">item →</button></div>
+  <div class="drow" style="display:block;"><div id="dbgItems" style="display:grid;grid-template-columns:repeat(8,36px);gap:3px;max-height:190px;overflow:auto;"></div></div>
   <div class="drow"><button id="dbgSpawnEnemy">spawn zealot</button><button id="dbgKillAll">drop all zealots</button></div>
   <div class="drow"><button id="dbgTpGate">teleport to beacon</button><button id="dbgNextRing">force next ring</button></div>
   <h3>Watch</h3>
@@ -289,7 +289,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20o';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20p';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -310,7 +310,7 @@ const PARAMS = {
   enemySpeed:  {v:2.6, min:0.5, max:6,    step:0.1, label:'zealot speed'},
   enemyDamage: {v:11,  min:0,   max:40,   step:1,   label:'zealot bolt dmg'},
   maxEnemies:  {v:3,   min:0,   max:6,    step:1,   label:'zealot count'},
-  renderScale: {v:0.7, min:0.3, max:1.5,  step:0.05,label:'render scale'},
+  renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   fogDensity:  {v:0.028,min:0,  max:0.1,  step:0.002,label:'fog density'},
 };
 const P = k => PARAMS[k].v;
@@ -376,7 +376,7 @@ const ACTIONS = [
   {id:'bag',      label:'Rucksack',            kb:'KeyB',        pad:8},   // share
   {id:'tool',     label:'Tool rack / close layer',kb:'Tab',       pad:1},   // circle
   {id:'manual',   label:'Field manual',        kb:'KeyM',        pad:9},   // options
-  {id:'debug',    label:'Debug console',       kb:'Backquote',   pad:null},
+  {id:'debug',    label:'Debug console',       kb:'Backquote',   pad:17},   // touchpad
 ];
 const BIND = {};            // action -> {kb, pad}
 ACTIONS.forEach(a=>BIND[a.id]={kb:a.kb, pad:a.pad});
@@ -579,7 +579,10 @@ uniform bool  flashlightOn;
 uniform float uMenu;        // 0..1 — inventory presentation blend
 uniform int   uMenuMode;    // 1 rucksack · 2 tool
 uniform int   uColCount;    // rack columns (menu presentation only)
-uniform vec4  uCols[8];     // x len(slots) · y filled frac · z chain joints · w hasMuzzleMod
+uniform vec4  uCols[8];     // x len(slots) · y x-offset · z chain joints · w hasMuzzleMod
+uniform int   uReticle;     // 0 none · 1 red dot · 2 holo · 3 2x · 4 3x
+uniform int   uGlobCount;   // glue globs
+uniform vec4  uGlobs[10];   // xyz center · w radius
 uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uHasTool;
@@ -762,6 +765,16 @@ vec2 mapStatic(vec3 p){
     if(ed.w<0.0){ res.x=max(res.x,-sph); }
     else if(sph<res.x){ res=vec2(sph,2.0); }
   }
+  for(int i=0;i<10;i++){                          // glue globs — smin, lockstep with applyGlobsJS
+    if(i>=uGlobCount) break;
+    vec4 g=uGlobs[i];
+    float gd=length(p-g.xyz)-g.w;
+    float k=0.22;
+    float h=clamp(0.5+0.5*(res.x-gd)/k,0.0,1.0);
+    float blended=mix(res.x,gd,h)-k*h*(1.0-h);
+    if(gd<res.x) res.y=60.0;
+    res.x=blended;
+  }
   return res;
 }
 
@@ -847,7 +860,8 @@ vec2 map(vec3 p){
     vec3 mid = (tracerA[i]+tracerB[i])*0.5;
     float bd = length(p-mid) - (length(tracerA[i]-tracerB[i])*0.5 + 0.15);
     if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
-    float d = sdCapsule(p, tracerA[i], tracerB[i], 0.035);
+    float hot = step(1.5, tracerCol[i].x+tracerCol[i].y+tracerCol[i].z);
+    float d = sdCapsule(p, tracerA[i], tracerB[i], mix(0.035, 0.011, hot));   // gossamer for lasers
     if(d < res.x) res = vec2(d, 50.0 + float(i));
   }
 
@@ -924,11 +938,11 @@ vec2 map(vec3 p){
 
 vec2 raycast(vec3 o, vec3 dir){
   float t=0.0; float m=-1.0;
-  for(int i=0;i<140;i++){
+  for(int i=0;i<150;i++){
     vec3 pp=o+dir*t;
     vec2 r=map(pp);
-    if(r.x < (0.0010*t+0.0006)){ m=r.y; break; }
-    t += r.x;
+    if(r.x < (0.0007*t+0.0004)){ m=r.y; break; }
+    t += r.x*0.93;                     // conservative step: smin terrain understates gradients
     if(t > 180.0) break;
   }
   if(t > 180.0) m=-1.0;
@@ -993,6 +1007,7 @@ void main(){
                       matCol*=0.9+0.2*vnoise(p.xz*4.0); }                          // packed dirt
     else if(m<2.5){   matCol=vec3(0.33,0.31,0.29)*(0.7+0.6*vnoise(p.xz*0.5+vec2(p.y*0.3)));
                       matCol*=1.0-0.10*step(0.5,fract(p.y*0.35)); }                // strata rock
+    else if(m>59.5&&m<60.5){ matCol=vec3(0.30,0.62,0.55); }   // glue glob: wet teal
     else if(m<3.5){   matCol=vec3(0.60,0.55,0.45)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*1.4));
                       matCol*=mix(0.55,1.0,smoothstep(0.0,1.3,p.y)); }             // stucco, grimy hem
     else if(m<4.5){   matCol=vec3(0.38,0.28,0.17)*(0.8+0.4*vnoise(vec2((p.x+p.z)*6.0,p.y*0.7))); } // timber
@@ -1097,6 +1112,25 @@ void main(){
     col = mix(col, uSkyLo, smoothstep(0.10,-0.02,rayDir.y));   // valley haze — never a raw hole
   }
   col = pow(col, vec3(0.4545));
+  // ---- optic reticle: the player looks THROUGH the glass while aiming ----
+  if(uReticle>0 && uAim>0.55){
+    vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
+    float r=length(uv);
+    float a=smoothstep(0.55,1.0,uAim);
+    if(uReticle==1){                                    // red dot
+      col+=vec3(1.0,0.12,0.12)*a*smoothstep(0.006,0.0,r)*1.6;
+    }else if(uReticle==2){                              // holo: ring + dot
+      float ring=smoothstep(0.0026,0.0,abs(r-0.035));
+      col+=vec3(0.2,1.0,0.75)*a*(ring*0.9+smoothstep(0.004,0.0,r)*1.2);
+    }else{                                              // magnified: vignette + fine cross
+      float rad=(uReticle==3)?0.40:0.31;
+      col*=mix(1.0, smoothstep(rad+0.10,rad-0.01,r), a*0.92);
+      float cross=max(smoothstep(0.0012,0.0,abs(uv.x))*step(abs(uv.y),rad*0.8),
+                      smoothstep(0.0012,0.0,abs(uv.y))*step(abs(uv.x),rad*0.8));
+      col+=vec3(0.1,0.9,0.5)*a*cross*0.5;
+      col+=vec3(0.1,0.9,0.5)*a*smoothstep(0.0022,0.0,r)*0.8;
+    }
+  }
   fragColor = vec4(col, 1.0);
 }`;
 
@@ -1139,12 +1173,13 @@ gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
-['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uAim','uBob','uHasTool','uToolCfg',
+['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
 U.edits    = locArray('uEdits', 16);
+U.uGlobs   = locArray('uGlobs', 10);
 U.itemPos  = locArray('worldItemPos', RLIM.ITEMS);
 U.itemData = locArray('worldItemData',RLIM.ITEMS);
 U.enemyPos = locArray('enemyPos',     RLIM.ENEMIES);
@@ -1294,8 +1329,18 @@ function applySdfEditsJS(px,py,pz,res){
   }
   return res;
 }
+function applyGlobsJS(px,py,pz,res){
+  for(let i=0;i<GLOBS.length;i++){
+    const g=GLOBS[i];
+    const gd=Math.hypot(px-g.x,py-g.y,pz-g.z)-g.r;
+    const k=0.22;
+    const h=Math.min(1,Math.max(0,0.5+0.5*(res-gd)/k));
+    res=res*(1-h)+gd*h - k*h*(1-h);
+  }
+  return res;
+}
 function mapWorldJS(px,py,pz){
-  return applySdfEditsJS(px,py,pz, mapWorldBase(px,py,pz));
+  return applyGlobsJS(px,py,pz, applySdfEditsJS(px,py,pz, mapWorldBase(px,py,pz)));
 }
 function worldNormalJS(x,y,z,out){
   const e=0.02;
@@ -1513,16 +1558,72 @@ class Platform extends Item{
   desc(){ return 'Slots into a column · adds '+(this.perSide*2)+' side slots — each fires on its own, or roots a barrel'; }
 }
 
+const BATTERY_TIERS={
+  small: {cap:40,  life:400,  w:1,h:1, color:'#7a6a3a'},
+  medium:{cap:70,  life:900,  w:1,h:2, color:'#8a7a2e'},
+  heavy: {cap:120, life:2000, w:2,h:2, color:'#9a8a22'},
+};
+class Battery extends Item{
+  constructor(size){
+    const t=BATTERY_TIERS[size];
+    super(size[0].toUpperCase()+size.slice(1)+' Battery',t.w,t.h,t.color);
+    this.size=size;
+    this.capMax=t.cap;
+    this.cap=t.cap;
+    this.life=t.life;
+    this.charge=t.cap;
+  }
+  get renderType(){ return 7; }
+  desc(){ return this.charge.toFixed(0)+'/'+this.cap+'\u26a1 \u00b7 '+(this.life>0?this.life.toFixed(0)+' regen left':'DEPLETED')
+    +(this.cap<this.capMax?' \u00b7 worn '+this.cap+'/'+this.capMax:''); }
+}
 class Tool extends Item{
   constructor(name,color){
     super(name,2,2,color);
-    // base column: 4 fixed agnostic slots + a native muzzle, never removable
     this.base={slots:new Array(4).fill(null), muzzle:null};
-    this.baseCycle=0;                              // the main column's cycle root
-    this.charge=100;
+    this.baseCycle=0;
   }
   get renderType(){ return 1; }
   desc(){ return 'The Tool. Everyone carries one. Right-click to wield.'; }
+  get charge(){ let c=0; for(const b of toolBatteries(this)) c+=b.charge; return c; }
+  set charge(v){ const d=v-this.charge; if(d<0) spendCharge(this,-d); else refundCharge(this,d); }
+}
+function toolBatteries(tool){
+  const out=[];
+  for(const col of toolColumns(tool))
+    for(const r of col.refs){ const it=readRef(r); if(it instanceof Battery) out.push(it); }
+  return out;
+}
+function toolChargeMax(tool){ let c=0; for(const b of toolBatteries(tool)) c+=b.cap; return c; }
+function spendCharge(tool,amt){
+  for(const b of toolBatteries(tool)){
+    if(amt<=0) break;
+    const take=Math.min(b.charge,amt); b.charge-=take; amt-=take;
+  }
+}
+function refundCharge(tool,amt){
+  for(const b of toolBatteries(tool)){
+    if(amt<=0) break;
+    const put=Math.min(b.cap-b.charge,amt); b.charge+=put; amt-=put;
+  }
+}
+let _regenAcc=0;
+function regenBatteries(tool,dt){
+  _regenAcc+=16*dt;
+  const whole=Math.floor(_regenAcc);
+  if(whole<1) return;
+  _regenAcc-=whole;
+  let need=whole;
+  for(const b of toolBatteries(tool)){
+    if(need<=0) break;
+    if(b.life<=0) continue;
+    while(need>0 && b.life>0 && b.charge<b.cap){
+      b.charge=Math.min(b.cap,b.charge+1);
+      b.life--; need--;
+      if(runRng()<0.015 && b.cap>5) b.cap--;      // wear: ~1.5% per regenerated unit
+      if(b.charge>b.cap) b.charge=b.cap;
+    }
+  }
 }
 
 // -------- column assembly: the rack is a TREE now. Barrels are slot items that ------
@@ -1649,12 +1750,17 @@ const ITEM_DEFS={
   barrelR:    ()=>new Barrel('rare'),
   barrelE:    ()=>new Barrel('epic'),
   barrelL:    ()=>new Barrel('legendary'),
+  battS:      ()=>new Battery('small'),
+  battM:      ()=>new Battery('medium'),
+  battH:      ()=>new Battery('heavy'),
   platS:      ()=>new Platform('small'),
   platM:      ()=>new Platform('medium'),
   platL:      ()=>new Platform('large'),
   // --- basic rack mods (order-independent stats) ---
-  reflex:     ()=>new ToolMod('Reflex','#3949ab','stat',{fov:0.78,unique:'fov'},'Aim view ×0.78 · one optic only'),
-  scope:      ()=>new ToolMod('Long Glass','#283593','stat',{fov:0.42,unique:'fov'},'Aim view ×0.42 — patient work · one optic only'),
+  reflex:     ()=>new ToolMod('Red Dot','#c62828','stat',{fov:0.60,spread:0.92,unique:'fov',reticle:1},'A red point of agreement · spread ×0.92'),
+  scope:      ()=>new ToolMod('Holo Sight','#00897b','stat',{fov:0.56,spread:0.86,unique:'fov',reticle:2},'A ring of light that does not lie · spread ×0.86'),
+  scope2x:    ()=>new ToolMod('2× Optic','#283593','stat',{fov:0.31,spread:0.74,unique:'fov',reticle:3},'Twice as close, steadier hands · spread ×0.74'),
+  scope3x:    ()=>new ToolMod('3× Optic','#1a237e','stat',{fov:0.21,spread:0.60,unique:'fov',reticle:4},'The far made near · spread ×0.60'),
   suppressor: ()=>new ToolMod('Suppressor','#37474f','muzzle',{silenced:true},'Muzzle slot · this column whispers'),
   heavyBarrel:()=>new ToolMod('Heavy Frame','#4e5a63','stat',{dmg:8,spread:0.85},'+8 hurt, steadier'),
   compensator:()=>new ToolMod('Compensator','#546e7a','muzzle',{spread:0.55},'Muzzle slot · this column, spread ×0.55'),
@@ -1664,7 +1770,7 @@ const ITEM_DEFS={
   // --- sequence: projectile cores ---
   boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt',base:0},'Core · fires a slug from the magazine'),
   sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18},'Core · bursting ember · 18⚡'),
-  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: laser variant · atop a column alone: tactical laser'),
+  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: the shot becomes a held, continuous thread (less hurt) · alone atop a column: tactical laser'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
@@ -1677,7 +1783,7 @@ const ITEM_DEFS={
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, then blows 1.2s later · +4⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
-  gripField:  ()=>new ToolMod('GRIP FIELD','#2f8f9f','util',{grip:true},'Beam carries objects — pin the world to your crosshair'),
+  gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
   lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'A light of your own. It sees you back. [F]'),
   // --- analog settings, as objects ---
@@ -1690,7 +1796,7 @@ const ITEM_DEFS={
 const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
                 'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter',
                 'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
-                'barrelC','barrelU','barrelR','platS','platM'];
+                'barrelC','barrelU','barrelR','platS','platM','battS','battM','scope2x','scope3x'];
 
 // ============================================================
 // INVENTORY GRIDS (Tarkov-style, mouse + cursor driven)
@@ -2011,12 +2117,21 @@ function useGadget(g){
       const steps=[0,0.35,0.7,1.0];
       const i=(steps.findIndex(s=>Math.abs(s-volumeLevel)<0.03)+1)%steps.length;
       setVolume(steps[i]); toast('SOUND · '+Math.round(steps[i]*100)+'%'); playSound('click'); break; }
+    case 'watch':{ g.on=g.on===false?true:false;
+      toast(g.on===false?'WATCH · STOPPED':'WATCH · TICKING'); playSound('click'); break; }
     case 'manual': openManual(); break;
     case 'watch': toast(dayNight.clock+' — the hands glow faintly'); playSound('click'); break;
     case 'compass':{
       const dx=GATE.x-playerPos.x, dz=GATE.z-playerPos.z;
       toast('BEACON · '+Math.round(Math.hypot(dx,dz))+'m'); playSound('click'); break; }
   }
+}
+function findGadget(kind){
+  for(let r=0;r<BAG_ROWS;r++) for(let c=0;c<BAG_COLS;c++){
+    const it=bagGrid[r][c];
+    if(it instanceof Gadget && it.kind===kind && it.x===c && it.y===r) return it;
+  }
+  return null;
 }
 function hasGadget(kind){
   for(let r=0;r<BAG_ROWS;r++) for(let c=0;c<BAG_COLS;c++){
@@ -2225,8 +2340,8 @@ function foldFrame(out,m){
     if(e.spread) out.spread*=e.spread;
     if(e.dmg) out.dmg+=e.dmg;
     if(e.fov) out.fovAim=e.fov;
+    if(e.reticle!==undefined) out.reticle=e.reticle;
   }else{
-    if(e.grip) out.grip=true;
     if(e.pulse) out.pulse=true;
     if(e.flashlight) out.flashlight=true;
   }
@@ -2285,7 +2400,7 @@ function resolveLane(col,out){
 }
 function resolveTool(tool){
   const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:24,silenced:false,
-             fovAim:0.62,flashlight:false,grip:false,pulse:false,columns:[],shots:[]};
+             fovAim:0.62,flashlight:false,pulse:false,reticle:0,columns:[],shots:[]};
   if(tool) for(const col of toolColumns(tool)){
     const lane=resolveLane(col,out);
     lane.cycleRef=col.cycleRef; lane.micro=!!col.micro; lane.x=col.x;
@@ -2325,7 +2440,59 @@ function describeSequence(res){
   }).join('<br>');
 }
 
+// triangle, hand full: the held item does its thing
+function heldUse(it){
+  if(it instanceof Magazine){
+    if(it.loaded>0){                                     // dump the rounds into the rucksack
+      const rounds=new Ammunition(it.acceptedType+' rounds','#a07c2c',it.acceptedType,it.loaded);
+      it.loaded=0;
+      if(!autoPlace(rounds,bagGrid,BAG_COLS,BAG_ROWS)) dropItemToWorld(rounds,0.8,1.2);
+      toast('DUMPED '+rounds.count+' ROUNDS'); playSound('reload');
+    }else{                                               // refill from rucksack ammo
+      let took=0;
+      for(let r=0;r<BAG_ROWS&&it.loaded<it.maxCapacity;r++) for(let c=0;c<BAG_COLS&&it.loaded<it.maxCapacity;c++){
+        const b=bagGrid[r][c];
+        if(b instanceof Ammunition && b.ammoType===it.acceptedType && b.x===c && b.y===r){
+          const take=Math.min(b.count,it.maxCapacity-it.loaded);
+          b.count-=take; it.loaded+=take; took+=take;
+          if(b.count<=0) removeFromGrid(b,bagGrid);
+        }
+      }
+      toast(took?('LOADED '+took+' ROUNDS'):'NO '+it.acceptedType.toUpperCase()+' IN THE BAG');
+      playSound(took?'reload':'empty');
+    }
+    refreshInvUI(); return;
+  }
+  if(it instanceof Gadget){ useGadget(it); return; }
+  if(it instanceof Battery){ toast('BATTERY · '+it.charge.toFixed(0)+'/'+it.cap+'\u26a1 · '+(it.life>0?it.life.toFixed(0)+' regen left':'DEPLETED')); playSound('click'); return; }
+  if(it instanceof ToolMod && it.effect && it.effect.laser){
+    it.pointing=!it.pointing;
+    toast(it.pointing?'BEAM · POINTING':'BEAM · DARK'); playSound('click'); return;
+  }
+  playSound('click');
+}
 const beamSegs=[];      // {a,b,col,ttl}
+// ---- glue globs: SDF metaballs, merged when kin lands close ------------------------
+const GLOBS=[]; const GLOB_MAX=10;
+function addGlob(pos){
+  for(const g of GLOBS){
+    const d=Math.hypot(g.x-pos.x,g.y-pos.y,g.z-pos.z);
+    if(d<g.r+0.45){                                   // sticks to its kin: grow toward it
+      g.x=Math.fround((g.x+pos.x)*0.5); g.y=Math.fround((g.y+pos.y)*0.5); g.z=Math.fround((g.z+pos.z)*0.5);
+      g.r=Math.fround(Math.min(0.85,g.r+0.11));
+      playSound('place'); return;
+    }
+  }
+  if(GLOBS.length>=GLOB_MAX) GLOBS.shift();
+  GLOBS.push({x:Math.fround(pos.x),y:Math.fround(pos.y),z:Math.fround(pos.z),r:0.32});
+  playSound('place');
+}
+function globSlow(pos){                               // enemies wade through glue
+  for(const g of GLOBS){
+    if(Math.hypot(g.x-pos.x,g.y-pos.y,g.z-pos.z)<g.r+0.35) return 0.45;
+  }
+  return 1;
+}
 let beamActive=false, beamWasHeld=false;
 
 function emitProjectile(owner,origin,dir,shot,base){
@@ -2381,7 +2548,8 @@ function tryFirePlayer(dt){
     let pick=-1;
     for(let k=0;k<n;k++){
       const i=(cyc+k)%n, sh=lane.shots[i];
-      const needsAmmo=sh.kind==='bolt'&&!sh.pend.laser;
+      if(sh.pend.laser) continue;                      // continuous shots belong to the held-fire path
+      const needsAmmo=sh.kind==='bolt';
       const okCharge=activeTool.charge>=(sh.cost||0);
       const okAmmo=!needsAmmo||(mag&&mag.loaded>0);
       if(okCharge&&okAmmo){ pick=i; if(k>0) skippedAny=true; break; }
@@ -2390,12 +2558,11 @@ function tryFirePlayer(dt){
     const sh=lane.shots[pick];
     activeTool.charge-=(sh.cost||0);                     // price the shot, not the copies
     for(let b=0;b<res.burst;b++){
-      if(sh.kind==='bolt'&&!sh.pend.laser){
+      if(sh.kind==='bolt'){
         if(!mag||mag.loaded<=0) break;
         mag.loaded--;
       }
-      if(sh.pend.laser) fireHitscan('player',origin,fireDir,sh,res);
-      else emitProjectile('player',origin,fireDir,sh,res);
+      emitProjectile('player',origin,fireDir,sh,res);
       const silent=sh.pend.silent||res.silenced||lane.silenced;
       playSound(sh.pend.laser?'spark':sh.kind==='spark'?'spark':(silent?'silenced':'shoot'));
       loudest=Math.max(loudest,toolNoise(silent));
@@ -2412,9 +2579,66 @@ function tryFirePlayer(dt){
   updateToolReadout();
 }
 
-// LASER VARIANTS: instant rays. No travel, no drop, no ammo. Under ballistic
-// damage by design — energy is convenient, ballistics kill.
-function fireHitscan(owner,origin,dir,shot,res){
+// CONTINUOUS BEAMS — a BEAM-fed core doesn't fire, it FLOWS. Hold the trigger
+// and the core's payload becomes a gossamer thread: bolts stream damage, sparks
+// bloom at the tip, picks pour a carving stream, GRIP pins the world. Less hurt
+// per second than pulling the trigger would give — the price of never letting go.
+const _beamLanes=new Map();               // laneIdx -> {acc, engaged}
+function runContinuousBeams(dt){
+  const res=activeTool?activeTool._res:null;
+  if(!res||res.bare){ _endBeams(); return; }
+  const firing=down('fire')&&!heldWorld||down('fire')&&heldWorld&&heldWorld.mode==='beam';
+  if(!firing||uiOpen()){ _endBeams(); return; }
+  const o=camPos(), f=camForward();
+  let any=false;
+  for(let li=0;li<res.columns.length;li++){
+    const lane=res.columns[li];
+    const n=lane.shots.length; if(!n) continue;
+    const sh=lane.shots[lane.cycleRef.get()%n];
+    if(!sh.pend.laser) continue;
+    const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
+    if(activeTool.charge<rate*dt){ continue; }        // starved thread gutters out
+    spendCharge(activeTool,rate*dt);
+    any=true;
+    let st=_beamLanes.get(li); if(!st){ st={acc:0}; _beamLanes.set(li,st); }
+    st.engaged=true;
+    let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,50);
+    // enemies intercept the thread
+    let hitEn=null;
+    for(const en of enemies){
+      if(en.health<=0) continue;
+      const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
+      const tt=rx*f.x+ry*f.y+rz*f.z;
+      if(tt>0.3&&tt<t){
+        const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
+        if(d<0.55){ t=tt; hitEn=en; }
+      }
+    }
+    const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
+    st.acc=(st.acc||0)+dt;
+    if(sh.kind==='bolt'&&hitEn){ hitEn.hurt(((24+sh.pend.dmg)*0.55)*dt,'player'); }
+    if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player'}); }
+    if(sh.kind==='pick'&&st.acc>0.16){ st.acc=0; carveAt({pos:end,dmg:8,r:0.55}); }
+    if(sh.kind==='grip'){
+      if(!heldWorld){ const pick=itemUnderCrosshair(40); if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam'); }
+    }
+    const col=sh.kind==='grip'?[0.35,1.6,1.9]:sh.kind==='spark'?[1.9,0.7,1.6]:sh.kind==='pick'?[0.7,1.9,1.6]:[1.9,0.5,0.6];
+    beamSegs.push({a:muzzleWorld(),b:heldWorld&&sh.kind==='grip'?heldWorld.w.pos:end,col,ttl:0.05});
+    addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
+  }
+  if(!any) _endBeams();
+}
+function _endBeams(){
+  if(_beamLanes.size===0) return;
+  const res=activeTool?activeTool._res:null;
+  if(res&&!res.bare) for(const [li] of _beamLanes){
+    const lane=res.columns[li];
+    if(lane&&lane.shots.length) lane.cycleRef.set((lane.cycleRef.get()+1)%lane.shots.length);
+  }
+  if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false);
+  _beamLanes.clear();
+}
+function fireHitscan_DEAD(owner,origin,dir,shot,res){
   const p=shot.pend;
   const o=owner==='player'?camPos():origin, f=dir;
   const maxLen=60;
@@ -2465,13 +2689,8 @@ function runTacLaser(dt){
   const o=camPos(), f=camForward();
   const maxLen=40;
   let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
-  if(res.grip && !heldWorld){
-    const pick=itemUnderCrosshair(maxLen);
-    if(pick.idx>=0 && pressed('interact')) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam');
-  }
-  if(heldWorld&&heldWorld.mode==='beam') t=Math.min(t,heldWorld.holdDist);
   const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
-  beamSegs.push({a:muzzleWorld(),b:end,col:res.grip?[0.3,0.9,1.0]:[1.0,0.25,0.35],ttl:0.05});
+  beamSegs.push({a:muzzleWorld(),b:end,col:[1.9,0.45,0.6],ttl:0.05});   // gossamer-hot
   addDyn(end.x,end.y,end.z,[1,0.3,0.35],0.7,0.04);
   const lr=document.getElementById('laserRange');
   if(lr){ lr.textContent=t>=maxLen-0.1?'—— m':t.toFixed(1)+' m'; lr.style.opacity=1; }
@@ -2586,6 +2805,7 @@ function impactOrPierce(pr){
 function triggerPayload(pr){
   if(pr.kind==='pick') carveAt(pr);
   if(pr.kind==='spark') explode(pr);
+  if(pr.kind==='grip') addGlob(pr.pos);
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
 }
@@ -2684,6 +2904,7 @@ class Zealot{
     const t=ITEM_DEFS.tool(); t.name='Zealot Tool';
     const mag=ITEM_DEFS.magStd(); mag.loaded=8+Math.floor(runRng()*5);
     t.base.slots[0]=mag;
+    t.base.slots[3]=ITEM_DEFS.battS();
     const roll=runRng();
     // pour the base column bottom-up: charges first, core above — structurally
     // incapable of rolling an all-vented gun
@@ -2780,7 +3001,7 @@ class Zealot{
     if(this.state===2&&this.detection<0.35) this.state=1;
     if(this.state===1&&this.detection<=0.02){ this.state=0; this.investigate=null; }
 
-    let speed=P('enemySpeed'), moveTo=null, faceTo=null;
+    let speed=P('enemySpeed')*globSlow(this.position), moveTo=null, faceTo=null;   // glue is glue
     if(this.state===2){
       this.investigate=new Vec3(px,0,pz);
       faceTo=this.investigate;
@@ -2840,7 +3061,9 @@ class Zealot{
   tryShoot(dt,dist,seesLOS){
     if(this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
     const mag=toolMagazine(this.tool);
-    const shot=this.res.shots[Math.floor(runRng()*this.res.shots.length)];
+    const pool=this.res.shots.filter(sh=>!sh.pend.laser);   // continuous threads are a player verb
+    if(!pool.length) return;
+    const shot=pool[Math.floor(runRng()*pool.length)];
     if(shot.kind==='bolt'){
       if(!mag||mag.loaded<=0){
         if(this.reserve>0){ this.reloadT=2.2; playSound('reload'); return; }
@@ -2930,6 +3153,7 @@ function initLoadout(){
   const mag=ITEM_DEFS.magStd(); mag.loaded=8;
   t.base.slots[0]=mag;                                  // slots are agnostic — the mag just sits there
   t.base.slots[1]=ITEM_DEFS.barrelC();                  // starting barrel extends the main column
+  t.base.slots[2]=ITEM_DEFS.battS();                    // and a small battery to drink from
   activeTool=t;
   autoPlace(ITEM_DEFS.ammo9(),bagGrid,BAG_COLS,BAG_ROWS);
   autoPlace(ITEM_DEFS.watch(),bagGrid,BAG_COLS,BAG_ROWS);
@@ -3014,32 +3238,56 @@ function tipBrief(it){                                  // the info square's row
     rows:[it.length+' slots','+'+it.addedSpread.toFixed(2)+' spread','own muzzle slot']};
   if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
     rows:[it.slots.length+' side slots','each fires alone']};
+  if(it instanceof Battery) return {kind:'BATTERY · '+it.size.toUpperCase(),
+    rows:[it.charge.toFixed(0)+' / '+it.cap+' \u26a1', it.life>0?it.life.toFixed(0)+' regen left':'DEPLETED',
+          it.cap<it.capMax?'worn: '+it.cap+' of '+it.capMax:'unworn']};
   if(it instanceof Tool) return {kind:'THE TOOL', rows:['charge '+it.charge.toFixed(0)+'%']};
   if(it instanceof Gadget) return {kind:'GADGET', rows:[]};
   return {kind:it.constructor.name.toUpperCase(), rows:[]};
 }
+// the floating item card: content from cursor state, position from the focused cell
 function syncTip(){
   const open=uiMenusOpen();
-  tipPanelEl.classList.toggle('hidden',!open);
-  if(!open) return;
+  tipPanelEl.classList.toggle('hidden',!open||menuMode!==2);
+  if(!open){ tooltipEl.style.display='none'; return; }
   const f=focusGrid();
-  if(!f.grid&&!f.rack){ tipMainEl.innerHTML='<span class="tt-dim">—</span>'; tipDetailEl.textContent=''; return; }
-  // read-only: clamp a LOCAL view of the cursor — a view function must not steer it
-  const sx=cursorX, sy=cursorY;
+  if(menuMode===2) paintToolStats();
+  if(!f.grid&&!f.rack){ tooltipEl.style.display='none'; return; }
+  const sx=cursorX, sy=cursorY;                        // read-only view of the cursor
   clampCursor(f); const it=cellAt(f);
   const ref=f.rack?refAt(f):null;
   cursorX=sx; cursorY=sy;
-  if(!it){
-    tipMainEl.innerHTML='<span class="tt-name">'+(ref&&ref.muzzle?'◆ MUZZLE SLOT':'EMPTY SLOT')+'</span>'
-      +'<span class="tt-dim">'+(ref&&ref.muzzle?'muzzle parts only':'holds anything')+'</span>';
-    tipDetailEl.textContent='';
-    return;
-  }
+  if(!it){ tooltipEl.style.display='none'; tooltipEl.innerHTML=''; return; }
   const b=tipBrief(it);
-  tipMainEl.innerHTML='<span class="tt-name">'+it.name+'</span>'
-    +'<span class="tt-kind">'+b.kind+'</span>'
-    +b.rows.map(r=>'<span class="tt-row">'+r+'</span>').join('');
-  tipDetailEl.textContent=it.desc?it.desc():'';
+  tooltipEl.innerHTML='<div class="tt-name">'+it.name+'</div>'
+    +'<div class="tt-cat">'+b.kind+'</div>'
+    +b.rows.map(r=>'<div>'+r+'</div>').join('')
+    +'<div class="tt-cat" style="margin-top:4px;">'+(it.desc?it.desc():'')+'</div>';
+  tooltipEl.style.display='block';
+  // position beside the focused cell when we can find it; otherwise keep last spot
+  const host=document.querySelector?document.querySelector('.cellFocus'):null;
+  if(host&&host.getBoundingClientRect){
+    const rc=host.getBoundingClientRect();
+    tooltipEl.style.left=Math.min(window.innerWidth-260, rc.left+rc.width+10)+'px';
+    tooltipEl.style.top=Math.max(8, rc.top-6)+'px';
+  }
+}
+// the docked square: the whole Tool, resolved — dmg, rate, spread, zoom, charge, columns
+function paintToolStats(){
+  const t=activeTool;
+  if(!t){ tipMainEl.innerHTML='<span class="tt-dim">NO TOOL</span>'; tipDetailEl.innerHTML=''; return; }
+  const res=t._res||(t._res=resolveTool(t));
+  const rows=[
+    ['HURT', res.dmg],
+    ['CYCLE', res.fireRate.toFixed(2)+'s'+(res.auto?' · auto':'')+(res.burst>1?' · ×'+res.burst:'')],
+    ['SPREAD', res.spread.toFixed(3)],
+    ['AIM ZOOM', '×'+res.fovAim],
+    ['CHARGE', t.charge.toFixed(0)+' / '+toolChargeMax(t)],
+  ];
+  if(res.silenced) rows.push(['MUZZLE','silenced']);
+  tipMainEl.innerHTML='<span class="tt-name">'+t.name.toUpperCase()+'</span>'
+    +rows.map(r=>'<span class="tt-row"><span class="tt-dim">'+r[0]+'</span> '+r[1]+'</span>').join('');
+  tipDetailEl.innerHTML=describeSequence(res);
 }
 let mouseX=0,mouseY=0;
 document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;});
@@ -3187,7 +3435,7 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       if(item===inspectItem) div.style.borderColor='var(--gate)';
       if(item.x===c&&item.y===r) div.classList.add('origin');
     }
-    if(currentFocus===focusIdx&&cursorX===c&&cursorY===r) div.classList.add('cursor');
+    if(currentFocus===focusIdx&&cursorX===c&&cursorY===r) div.classList.add('cursor','cellFocus');
     if(heldWorld&&currentFocus===focusIdx&&cursorX===c&&cursorY===r){
       const f=focusGrid();
       div.style.outline='2px solid '+(gridFits(heldWorld.w.item,c,r,f.grid,f.cols,f.rows)?'#57e0a3':'#e0492e');
@@ -3339,7 +3587,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   const d=document.createElement('div');
   d.className='rcell'+(opts.muz?' muz':'')+(opts.structural?' seg0':'')
     +(opts.vent?' vent':'')+(opts.nextCore?' nextCore':'');
-  if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) d.classList.add('cursor');
+  if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) d.classList.add('cursor','cellFocus');
   if(item){
     const img=document.createElement('img'); img.src=makeIcon(item); img.draggable=false; d.appendChild(img);
     const extra=item instanceof Ammunition?'×'+item.count:(item instanceof Magazine?item.loaded+'/'+item.maxCapacity:'');
@@ -3386,7 +3634,8 @@ function updateToolReadout(){
       '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
       +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
   }).join(' <span style="opacity:.4">‖</span> ');
-  document.getElementById('chargeFill').style.width=activeTool.charge.toFixed(0)+'%';  // rounds are counted by hand now
+  const cm=toolChargeMax(activeTool);
+  document.getElementById('chargeFill').style.width=(cm>0?100*activeTool.charge/cm:0).toFixed(0)+'%';
 }
 
 let toastT=0;
@@ -3437,12 +3686,42 @@ function toggleDebug(){
   else requestLock();
 }
 let debugBuilt=false;
+let DBG_KEYS=[], dbgSel=0;
+function dbgSpawnToHand(key){
+  if(heldWorld){ toast('HANDS FULL'); playSound('empty'); return; }
+  handHold(ITEM_DEFS[key]());
+  toast(key.toUpperCase()+' \u2192 HAND'); playSound('pickup');
+}
+function renderDebugItems(){
+  const box=document.getElementById('dbgItems');
+  box.innerHTML='';
+  DBG_KEYS.forEach((k,i)=>{
+    const d=document.createElement('div');
+    d.className='rcell'+(i===dbgSel?' cursor':'');
+    d.style.width='36px'; d.style.height='36px';
+    const it=ITEM_DEFS[k]();
+    const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false; d.appendChild(img);
+    const lbl=document.createElement('div'); lbl.className='rlbl'; lbl.textContent=it.name; d.appendChild(lbl);
+    d.addEventListener('mouseenter',()=>{ dbgSel=i; renderDebugItems(); });
+    d.addEventListener('mousedown',()=>{ dbgSel=i; dbgSpawnToHand(k); });
+    box.appendChild(d);
+  });
+}
+function dbgNav(){
+  const cols=8;
+  let moved=false;
+  const step=d=>{ dbgSel=clamp(dbgSel+d,0,DBG_KEYS.length-1); moved=true; };
+  if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1);
+  if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1);
+  if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(-cols);
+  if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(cols);
+  if(INPUT.rawKey['KeyE']||INPUT.rawPad[0]) dbgSpawnToHand(DBG_KEYS[dbgSel]);
+  if(moved){ playSound('click'); renderDebugItems(); }
+}
 function buildDebugPanel(){
-  if(debugBuilt) return; debugBuilt=true;
-  const sel=document.getElementById('dbgItemSel');
-  Object.keys(ITEM_DEFS).forEach(k=>{ const o=document.createElement('option'); o.value=k; o.textContent=k; sel.appendChild(o); });
-  document.getElementById('dbgSpawnItem').onclick=()=>{ const f=camForward();
-    spawnWorldItem(ITEM_DEFS[sel.value](), playerPos.x+f.x*2, playerPos.y+1.4, playerPos.z+f.z*2); };
+  if(debugBuilt){ renderDebugItems(); return; } debugBuilt=true;
+  DBG_KEYS=Object.keys(ITEM_DEFS);
+  renderDebugItems();
   document.getElementById('dbgSpawnEnemy').onclick=()=>{ const f=camForward();
     enemies.push(new Zealot(playerPos.x+f.x*8, playerPos.z+f.z*8)); };
   document.getElementById('dbgKillAll').onclick=()=>enemies.forEach(e=>{ if(e.health>0) e.hurt(999,'debug'); });
@@ -3596,7 +3875,8 @@ function updatePlayer(dt){
     if(stepAcc>2.1){ stepAcc=0; playSound(playerPos.isSprinting?'stepRun':'step'); }
   }
   // lantern toggle
-  if(pressed('flash')&&!menus&&!isManualOpen){
+  if(pressed('flash')&&!menus&&!isManualOpen&&heldWorld){ heldUse(heldWorld.w.item); }
+  else if(pressed('flash')&&!menus&&!isManualOpen){
     if(res.flashlight){ playerPos.flashlightOn=!playerPos.flashlightOn; playSound('click'); }
     else { toast('NO LANTERN RACKED IN TOOL'); playSound('empty'); }
   }
@@ -3704,6 +3984,7 @@ function frame(){
     }
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
+    if(isDebugOpen) dbgNav();
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
       else if(uiMenusOpen())closeAllInv();
@@ -3717,13 +3998,19 @@ function frame(){
     if(!uiMenusOpen()){
       updateInteract(dt);
       tryFirePlayer(dt);
+      runContinuousBeams(dt);
       runTacLaser(dt);
+      if(heldWorld && heldWorld.w.item && heldWorld.w.item.pointing){
+        const hp=heldWorld.w.pos, f=camForward();
+        const t=marchWorldJS(hp.x,hp.y,hp.z,f.x,f.y,f.z,40);
+        beamSegs.push({a:new Vec3(hp.x,hp.y,hp.z),b:new Vec3(hp.x+f.x*t,hp.y+f.y*t,hp.z+f.z*t),col:[1.9,0.5,0.6],ttl:0.05});
+      }
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
     }else if(beamActive) endBeam();
     updateHeldPhysics(dt);
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
     if(fireCooldown>0) fireCooldown-=dt;
-    if(activeTool&&!beamActive) activeTool.charge=Math.min(100,activeTool.charge+16*dt);
+    if(activeTool&&!beamActive) regenBatteries(activeTool,dt);
 
     updateProjectiles(dt);
     updateWorldItems(dt);
@@ -3855,6 +4142,9 @@ function frame(){
   const dsorted=dynLights;
   const nd=Math.min(RLIM.DYN,dsorted.length);
   gl.uniform1i(U.uEditCount,SDF_EDITS.length);
+  gl.uniform1i(U.uGlobCount,GLOBS.length);
+  gl.uniform1i(U.uReticle,(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0);
+  for(let i=0;i<GLOBS.length;i++) gl.uniform4f(U.uGlobs[i],GLOBS[i].x,GLOBS[i].y,GLOBS[i].z,GLOBS[i].r);
   for(let i=0;i<SDF_EDITS.length;i++){
     const ed=SDF_EDITS[i];
     gl.uniform4f(U.edits[i],ed.x,ed.y,ed.z,ed.w);
@@ -3885,7 +4175,8 @@ function frame(){
     document.getElementById('healthFill').style.width=(playerPos.health/playerPos.maxHealth*100)+'%';
     document.getElementById('suspicionFill').style.width=(highestDetection*100)+'%';
     // gadget rows exist only while the gadget is in the rucksack
-    const hasW=hasGadget('watch'), hasO=hasGadget('optics');
+    const wg=findGadget('watch');
+    const hasW=!!wg&&wg.on!==false, hasO=hasGadget('optics');
     document.getElementById('clockRow').style.display=hasW?'':'none';
     document.getElementById('fpsRow').style.display=hasO?'':'none';
     if(hasO) document.getElementById('hudFps').textContent=fpsEma.toFixed(0);
