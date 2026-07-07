@@ -73,6 +73,14 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
 #backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
   text-align:center;pointer-events:none;}
+.zoneBlock{margin-bottom:10px;}
+.zoneLabel{font-size:9px;letter-spacing:.16em;color:var(--dust);margin:0 0 3px 2px;}
+.equipCell{position:relative;}
+.slotGhost{font-size:8px;letter-spacing:.1em;color:#4a4a42;}
+.lockedCell{background:rgba(60,70,60,.12);}
+.widg{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;}
+.widgLab{font-size:7px;letter-spacing:.06em;color:var(--dust);text-align:center;line-height:1.1;}
+.widgVal{font-size:9px;color:var(--bone);margin-top:2px;}
 #terminalUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:52;
   min-width:340px;padding:18px 22px;border:1px solid var(--line);background:rgba(5,9,7,.94);
   box-shadow:0 0 40px rgba(20,60,40,.25) inset;}
@@ -212,7 +220,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <!-- Rucksack -->
 <div id="backpackUI" class="hidden">
   <div class="stencil">RUCKSACK · THE WORLD DOES NOT PAUSE</div>
-  <div class="gridWrap" id="bagGrid" style="grid-template-columns:repeat(10,44px);"></div>
+  <div id="zoneStack"></div>
 </div>
 
 <!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
@@ -339,7 +347,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </div></div>
 
 <div id="errBanner"></div>
-<script>
+<script type="text/plain" id="gameSrc">
 'use strict';
 // ============================================================
 // SHADOW OF THE VALLEY (v20) — rebuilt on the Gemini raymarch engine
@@ -352,7 +360,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20v';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20x';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -634,6 +642,7 @@ uniform float uAmbient;
 uniform vec3  uSkyHi;
 uniform vec3  uSkyLo;
 uniform float uFog;
+uniform float uFar;
 uniform vec2  uSeed;        // integer cell offset per run/ring
 uniform vec2  uGateCell;
 uniform vec3  uGatePos;
@@ -1156,9 +1165,9 @@ vec2 raycast(vec3 o, vec3 dir){
     vec2 r=map(pp);
     if(r.x < (0.0007*t+0.0004)){ m=r.y; break; }
     t += r.x*0.93;                     // conservative step: smin terrain understates gradients
-    if(t > 180.0) break;
+    if(t > uFar) break;
   }
-  if(t > 180.0) m=-1.0;
+  if(t > uFar) m=-1.0;
   return vec2(t,m);
 }
 
@@ -1324,7 +1333,7 @@ void main(){
       }
       col = lit + matCol*emiss;
     }
-    float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.30 : 1.0);
+    float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
     col = mix(col, mix(skyColor(rayDir), uSkyLo, 0.4), fogAmt);
   }else{
     col = skyColor(rayDir);
@@ -1393,7 +1402,7 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
- 'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog',
+ 'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
@@ -1648,6 +1657,7 @@ LEVELS.area1={
   bounds:{x0:-200,z0:-200,x1:200,z1:200},
   insertion:{x:-182,y:0,z:-42,yaw:0.9},
   ground:{rim:16, rimW:22, noise:0.35},     // the valley bowl: treeline cliffs at the edge
+  atmos:{far:470, fog:0.0048},               // see clean across the camp
   ambient:1.0,
   regions:[
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
@@ -1697,7 +1707,8 @@ LEVELS.area1={
     lootN:24, minSpace:6,
     lootTable:['ammo9','ammo9','magStd','battS','battS','battM','dmgPlus','velPlus','twin',
                'silentMod','fuseMod','splinter','boltCore','sparkCore','pickCore','beamCore',
-               'gripField','barrelC','barrelU','platS','reflex','scope','scope2x','suppressor','cyanide'],
+               'gripField','barrelC','barrelU','platS','reflex','scope','scope2x','suppressor','cyanide',
+               'beltBasic','holster1','harnessL','platesL','helmetCap','goggles','headphones'],
     lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
   },
 };
@@ -1706,6 +1717,7 @@ LEVELS.hideout={
   bounds:{x0:-16,z0:-16,x1:16,z1:16},
   insertion:{x:-1.2,y:0,z:-2.2,yaw:-1.9},
   ground:{rim:0, rimW:22, noise:0.02},      // a floor, not a crater
+  atmos:{far:120, fog:0.014},
   ambient:0.55,
   lights:[{x:-3.6,y:1.3,z:-3.6,col:[1.0,0.72,0.42],intensity:2.6}],   // the lantern
   regions:[
@@ -2357,6 +2369,22 @@ const ITEM_DEFS={
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
+  // ---- armor (stats provisional) ----
+  rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6}),
+  beltBasic:  ()=>new Armor('Web Belt',2,1,'#4a4436','belt',{invCols:1,invRows:1,slotMode:true}),
+  holster1:   ()=>new Armor('Hip Holster',1,2,'#4e4030','holster',{invCols:1,invRows:1,slotMode:true}),
+  holster2:   ()=>new Armor('Twin Holster',1,2,'#54432c','holster',{invCols:2,invRows:1,slotMode:true}),
+  holster3:   ()=>new Armor('Chest Holster',2,2,'#5a4628','holster',{invCols:3,invRows:1,slotMode:true}),
+  harnessL:   ()=>new Armor('Light Harness',2,2,'#3f4a3a','harness',{invCols:3,invRows:2}),
+  harnessM:   ()=>new Armor('Field Harness',2,2,'#44503c','harness',{invCols:3,invRows:3}),
+  harnessH:   ()=>new Armor('Assault Harness',2,3,'#4a5640','harness',{invCols:4,invRows:4}),
+  platesL:    ()=>new Armor('Scrap Plates',2,2,'#5c5c60','plates',{damageMult:0.75}),
+  platesH:    ()=>new Armor('Ceramic Plates',2,2,'#6a6a70','plates',{damageMult:0.6}),
+  helmetCap:  ()=>new Armor('Padded Cap',2,1,'#6b5a3e','helmet',{reduce:0.94}),
+  helmetSteel:()=>new Armor('Steel Pot',2,1,'#61646a','helmet',{reduce:0.88}),
+  helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true}),
+  goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
+  headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, then blows 1.2s later · +4⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
@@ -2380,8 +2408,129 @@ const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoS
 // ============================================================
 // INVENTORY GRIDS (Tarkov-style, mouse + cursor driven)
 // ============================================================
-const BAG_COLS=10,BAG_ROWS=6,GUN_COLS=4,GUN_ROWS=4;
+// ---- ARMOR / EQUIPMENT ---------------------------------------------------------------
+// Containers OWN their grids (item.inv). The unified inventory screen is a composed list
+// of zones referencing equipped containers' inv — unequip removes the zone, never the
+// contents. Stats are provisional; tune freely.
+class Armor extends Item{
+  constructor(name,w,h,color,armorType,stats){
+    super(name,w,h,color);
+    this.armorType=armorType;
+    Object.assign(this,stats||{});
+    if(this.invCols){ this.inv=Array(this.invRows).fill(null).map(()=>Array(this.invCols).fill(null)); }
+  }
+  get renderType(){ return 9; }
+  desc(){
+    switch(this.armorType){
+      case 'plates': return 'incoming ×'+this.damageMult;
+      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port (dormant)':'');
+      case 'goggles': case 'headphones': return 'a settings device — dials live inside';
+      default: return this.invCols? this.invCols+'×'+this.invRows+' pockets':'';
+    }
+  }
+}
+// ---- SETTINGS DEVICES: goggles/headphones own a grid of SettingWidgets, built from
+// ---- this open registry. New setting = one entry here; nav/render/interact untouched.
+// ---- Widgets are BOLTED IN: the inventory cursor adjusts them, never lifts them.
+function mkWidget(def){
+  return {widget:true, w:1,h:1, id:def.id, label:def.label, kind:def.kind,
+          options:def.options, min:def.min, max:def.max, step:def.step,
+          get:def.get, set:def.set, functional:!!def.functional,
+          _stub:def.functional?undefined:(def.init!==undefined?def.init:0)};
+}
+const SETTINGS_REGISTRY=[
+  // goggles — the eyes
+  {container:'goggles', id:'opticsQ', label:'OPTICS', kind:'enum', functional:true,
+   options:['50%','70%','85%','100%'],
+   get:()=>['50%','70%','85%','100%'][Math.max(0,[0.5,0.7,0.85,1.0].findIndex(v=>Math.abs(v-P('renderScale'))<0.03))],
+   set:v=>{ PARAMS.renderScale.v=[0.5,0.7,0.85,1.0][['50%','70%','85%','100%'].indexOf(v)]; resize(); }},
+  {container:'goggles', id:'brightness', label:'BRIGHT', kind:'range', min:0.5,max:1.5,step:0.1, functional:false},
+  {container:'goggles', id:'resolution', label:'RES', kind:'enum', options:['LOW','MATCH'], functional:false, init:'LOW'},
+  // headphones — the ears (per-category buses are a later seam: route each to its own gain node)
+  {container:'headphones', id:'master', label:'MASTER', kind:'enum', functional:true,
+   options:['0%','35%','70%','100%'],
+   get:()=>['0%','35%','70%','100%'][Math.max(0,[0,0.35,0.7,1.0].findIndex(v=>Math.abs(v-volumeLevel)<0.03))],
+   set:v=>{ setVolume([0,0.35,0.7,1.0][['0%','35%','70%','100%'].indexOf(v)]); }},
+  {container:'headphones', id:'music',    label:'MUSIC',  kind:'range', min:0,max:1,step:0.1, functional:false, init:0.7},
+  {container:'headphones', id:'ambience', label:'AMBNC',  kind:'range', min:0,max:1,step:0.1, functional:false, init:0.7},
+  {container:'headphones', id:'weapon',   label:'WEAPON', kind:'range', min:0,max:1,step:0.1, functional:false, init:0.7},
+  {container:'headphones', id:'footstep', label:'STEPS',  kind:'range', min:0,max:1,step:0.1, functional:false, init:0.7},
+];
+function buildDeviceInv(item, container){
+  const defs=SETTINGS_REGISTRY.filter(d=>d.container===container);
+  item.invCols=Math.min(4,Math.max(1,defs.length>4?4:defs.length));
+  item.invRows=Math.ceil(defs.length/item.invCols);
+  item.inv=Array(item.invRows).fill(null).map(()=>Array(item.invCols).fill(null));
+  defs.forEach((d,i)=>{ item.inv[Math.floor(i/item.invCols)][i%item.invCols]=mkWidget(d); });
+}
+function widgetValue(wd){
+  if(wd.functional&&wd.get) return wd.get();
+  return wd._stub;
+}
+function widgetValueText(wd){
+  const v=widgetValue(wd);
+  return wd.kind==='range' ? (typeof v==='number'?v.toFixed(1):String(v)) : String(v);
+}
+function adjustWidget(wd,dir){
+  if(wd.kind==='enum'){
+    const opts=wd.options;
+    const cur=String(widgetValue(wd));
+    const i=(Math.max(0,opts.indexOf(cur))+dir+opts.length)%opts.length;
+    if(wd.functional) wd.set(opts[i]); else wd._stub=opts[i];
+  }else{
+    let v=Number(widgetValue(wd));
+    v=Math.min(wd.max, Math.max(wd.min, +(v+dir*wd.step).toFixed(3)));
+    if(wd.functional&&wd.set) wd.set(v); else wd._stub=v;
+  }
+  toast(wd.label+' · '+widgetValueText(wd)+(wd.functional?'':' (not wired yet)'));
+  playSound('click');
+}
+const EQUIP_SLOTS=['helmet','goggles','headphones','plates','harness','holster','belt','rucksack'];
+let equip={helmet:null,goggles:null,headphones:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
+let BAG_COLS=5,BAG_ROWS=6;
+const GUN_COLS=4,GUN_ROWS=4;
 let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
+// legacy surface: bagGrid aliases the EQUIPPED rucksack's own grid (live reference)
+function syncBagAlias(){
+  const r=equip.rucksack;
+  if(r&&r.inv){ bagGrid=r.inv; BAG_COLS=r.invCols; BAG_ROWS=r.invRows; }
+  else{ bagGrid=[[null]]; BAG_COLS=1; BAG_ROWS=1; }     // no rucksack -> almost no storage
+}
+// composed zones. Order = nav order = affinity fallback order.
+let zoneIdx=1;
+function invZones(){
+  const z=[{id:'equip',label:'RIG',equipCol:true,cols:1,rows:EQUIP_SLOTS.length}];
+  const push=slot=>{ const it=equip[slot];
+    if(it&&it.inv&&it.invCols>0)
+      z.push({id:slot,label:it.name.toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
+              locked:!!it.settingsDevice,storage:!it.settingsDevice,slotMode:!!it.slotMode}); };
+  ['rucksack','harness','holster','belt','goggles','headphones'].forEach(push);
+  return z;
+}
+function storageZones(){ return invZones().filter(z=>z.storage); }
+function clampZone(){
+  const z=invZones();
+  zoneIdx=clamp(zoneIdx,0,z.length-1);
+  return z[zoneIdx];
+}
+// try each equipped storage grid, affinity-first (ordering only, never a restriction)
+function autoPlaceAny(item){
+  const zs=storageZones();
+  const order=[...zs];
+  const pref=id=>{ const i=order.findIndex(z=>z.id===id); if(i>0) order.unshift(order.splice(i,1)[0]); };
+  if(item instanceof Tool) pref('holster');
+  if(item instanceof Ammunition||item instanceof Magazine) pref('belt');
+  for(const z of order){
+    if(z.slotMode){ if(slotPlace(item,z)) return true; }
+    else if(autoPlace(item,z.grid,z.cols,z.rows)) return true;
+  }
+  return false;
+}
+function slotPlace(item,z){
+  for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++)
+    if(!z.grid[r][c]){ z.grid[r][c]=item; item.x=c; item.y=r; return true; }
+  return false;
+}
 let activeTool=null;
 let isInventoryOpen=false,isToolMenuOpen=false,isManualOpen=false,isDebugOpen=false;
 let currentFocus=0, cursorX=0, cursorY=0;
@@ -2423,21 +2572,25 @@ function bagHasSpace(item){
 }
 function bagAmmoCount(type){
   let n=0; const seen=new Set();
-  for(let r=0;r<BAG_ROWS;r++) for(let c=0;c<BAG_COLS;c++){
-    const it=bagGrid[r][c];
-    if(it&&!seen.has(it.id)&&it instanceof Ammunition&&it.ammoType===type){ n+=it.count; seen.add(it.id); }
-  }
+  for(const z of storageZones())
+    for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++){
+      const it=z.grid[r][c];
+      if(it&&!seen.has(it.id)&&it instanceof Ammunition&&it.ammoType===type){ n+=it.count; seen.add(it.id); }
+    }
   return n;
 }
 function takeBagAmmo(type,want){
   let got=0;
-  for(let r=0;r<BAG_ROWS&&got<want;r++) for(let c=0;c<BAG_COLS&&got<want;c++){
-    const it=bagGrid[r][c];
-    if(it&&it instanceof Ammunition&&it.ammoType===type&&it.x===c&&it.y===r){
-      const take=Math.min(want-got,it.count);
-      it.count-=take; got+=take;
-      if(it.count<=0) removeFromGrid(it,bagGrid);
+  for(const z of storageZones()){
+    for(let r=0;r<z.rows&&got<want;r++) for(let c=0;c<z.cols&&got<want;c++){
+      const it=z.grid[r][c];
+      if(it&&it instanceof Ammunition&&it.ammoType===type&&it.x===c&&it.y===r){
+        const take=Math.min(want-got,it.count);
+        it.count-=take; got+=take;
+        if(it.count<=0) removeFromGrid(it,z.grid);
+      }
     }
+    if(got>=want) break;
   }
   return got;
 }
@@ -2491,7 +2644,11 @@ function rackZone(tool){
 }
 function focusGrid(){
   if(currentFocus===2 && inspectItem instanceof Tool) return rackZone(inspectItem);
-  if(currentFocus===0) return {grid:bagGrid,cols:BAG_COLS,rows:BAG_ROWS};
+  if(currentFocus===0){
+    const z=clampZone();
+    if(z.equipCol) return {...z, at:(x,y)=>equip[EQUIP_SLOTS[y]]};
+    return z;
+  }
   return activeTool?rackZone(activeTool):{grid:null,cols:1,rows:1};
 }
 
@@ -2509,6 +2666,7 @@ function clampCursor(f){
 }
 function refAt(f){ const c=f.at&&f.at(cursorX,cursorY); return c?c.ref:null; }
 function cellAt(f){
+  if(f.equipCol) return f.at(cursorX,cursorY);
   if(f.rack){ const r=refAt(f); return r?readRef(r):null; }
   if(!f.grid) return null;
   const row=f.grid[cursorY]; return (row&&row[cursorX])||null;
@@ -2535,9 +2693,39 @@ function consumeHeld(){
 }
 
 function interactInventory(){
-  const f=focusGrid(); if(!f.grid&&!f.rack) return;
+  const f=focusGrid(); if(!f.grid&&!f.rack&&!f.equipCol) return;
   clampCursor(f);
   const cell=cellAt(f);
+
+  // ---- the rig column: equip / unequip / swap, type-locked --------------------------
+  if(f.equipCol){
+    const slot=EQUIP_SLOTS[cursorY];
+    if(heldWorld){
+      const it=heldWorld.w.item;
+      if(!(it instanceof Armor) || it.armorType!==slot){
+        toast(slot.toUpperCase()+' SLOT — '+slot.toUpperCase()+'S ONLY'); playSound('empty'); return;
+      }
+      const old=equip[slot];
+      equip[slot]=it;
+      if(old) heldWorld.w.item=old; else consumeHeld();
+      syncBagAlias(); clampZone();
+      toast(it.name.toUpperCase()+' EQUIPPED'); playSound('place'); refreshInvUI(); return;
+    }
+    if(cell){                                              // hand empty: strip it off, contents ride
+      equip[slot]=null;
+      syncBagAlias(); clampZone();
+      handHold(cell);
+      playSound('pickup'); refreshInvUI(); return;
+    }
+    playSound('click'); return;
+  }
+
+  // ---- settings devices: dials are bolted in — interact ADJUSTS, never lifts --------
+  if(f.locked){
+    if(heldWorld){ toast('NO ROOM AMONG THE DIALS'); playSound('empty'); return; }
+    if(cell&&cell.widget){ adjustWidget(cell,1); refreshInvUI(); return; }
+    playSound('click'); return;
+  }
 
   if(heldWorld){
     const it=heldWorld.w.item;
@@ -2581,6 +2769,15 @@ function interactInventory(){
       playSound('place'); refreshInvUI(); return;
     }
 
+    // ---- slot racks (belt/holster): one item per cell, any footprint ----
+    if(f.slotMode){
+      if(!cell){ f.grid[cursorY][cursorX]=it; it.x=cursorX; it.y=cursorY;
+        consumeHeld(); playSound('place'); refreshInvUI(); return; }
+      if(cell===inspectItem) closeInspect();
+      f.grid[cursorY][cursorX]=it; it.x=cursorX; it.y=cursorY;
+      heldWorld.w.item=cell;
+      playSound('place'); refreshInvUI(); return;
+    }
     // ---- rucksack: unchanged grid semantics ----
     if(gridFits(it,cursorX,cursorY,f.grid,f.cols,f.rows)){
       placeInGrid(it,cursorX,cursorY,f.grid);
@@ -2683,7 +2880,7 @@ function wieldTool(tool){
   removeFromGrid(tool,bagGrid);
   const old=activeTool;
   activeTool=tool;
-  if(old){ if(!autoPlace(old,bagGrid,BAG_COLS,BAG_ROWS)) dropItemToWorld(old,1.0,1.5); }
+  if(old){ if(!autoPlaceAny(old)) dropItemToWorld(old,1.0,1.5); }
   playSound('pickup'); refreshInvUI();
 }
 function useGadget(g){
@@ -3058,7 +3255,7 @@ function heldUse(it){
     if(it.loaded>0){                                     // dump the rounds into the rucksack
       const rounds=new Ammunition(it.acceptedType+' rounds','#a07c2c',it.acceptedType,it.loaded);
       it.loaded=0;
-      if(!autoPlace(rounds,bagGrid,BAG_COLS,BAG_ROWS)) dropItemToWorld(rounds,0.8,1.2);
+      if(!autoPlaceAny(rounds)) dropItemToWorld(rounds,0.8,1.2);
       toast('DUMPED '+rounds.count+' ROUNDS'); playSound('reload');
     }else{                                               // refill from rucksack ammo
       let took=0;
@@ -3463,6 +3660,10 @@ function explode(pr){
   }
 }
 function damagePlayer(dmg){
+  // ---- armor seam: plates multiply, helmet shaves. Global for now; a later pass can
+  // ---- route head-hits through the helmet only, and wake the medPort field.
+  if(equip.plates) dmg*=equip.plates.damageMult;
+  if(equip.helmet) dmg*=equip.helmet.reduce;
   if(FLAGS.god||gameState!=='play') return;
   playerPos.health=Math.max(0,playerPos.health-dmg);
   playSound('hurt');
@@ -3761,7 +3962,9 @@ function resetLevel(){
   document.getElementById('hudDepth').textContent=roman(depth);
 }
 function initLoadout(){
-  bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
+  equip={helmet:null,goggles:null,headphones:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
+  equip.rucksack=ITEM_DEFS.rucksack();
+  syncBagAlias(); zoneIdx=1;
   const t=ITEM_DEFS.tool(); t.name='Foundling Tool';
   autoPlace(ITEM_DEFS.cyanide(),bagGrid,BAG_COLS,BAG_ROWS);
   const mag=ITEM_DEFS.magStd(); mag.loaded=8;
@@ -3975,7 +4178,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=1, SAVE_KEY=i=>'sotv_save_'+i;
+const SAVE_VER=2, SAVE_KEY=i=>'sotv_save_'+i;
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
   if(!it) return null;
@@ -3988,6 +4191,14 @@ function itemToJSON(it){
   if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
   if(it instanceof Tool){ j.slots=it.base.slots.map(itemToJSON); j.muzzle=itemToJSON(it.base.muzzle);
     j.cycle=it.baseCycle; j.wielded=(it===activeTool); }
+  if(it instanceof Armor && it.inv && !it.settingsDevice){
+    j.inv=[];
+    const seen=new Set();
+    for(let r=0;r<it.invRows;r++) for(let c=0;c<it.invCols;c++){
+      const ch=it.inv[r][c];
+      if(ch&&!seen.has(ch)&&ch.x===c&&ch.y===r){ seen.add(ch); j.inv.push(itemToJSON(ch)); }
+    }
+  }
   return j;
 }
 function itemFromJSON(j){
@@ -4002,18 +4213,21 @@ function itemFromJSON(j){
     if(j.cycles) it.cycles=j.cycles.slice(); }
   if(it instanceof Tool){ j.slots.forEach((c,i)=>it.base.slots[i]=itemFromJSON(c));
     it.base.muzzle=itemFromJSON(j.muzzle); it.baseCycle=j.cycle||0; it._wield=!!j.wielded; }
+  if(it instanceof Armor && j.inv && it.inv){
+    for(const cj of j.inv){
+      const ch=itemFromJSON(cj); if(!ch) continue;
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,it.inv,it.invCols,it.invRows)) placeInGrid(ch,cj.x,cj.y,it.inv);
+      else autoPlace(ch,it.inv,it.invCols,it.invRows);
+    }
+  }
   return it;
 }
 function saveGame(slot){
   const ls=_ls(); if(!ls){ toast('NO MEMORY BANKS HERE'); return; }
-  const items=[];
-  const seen=new Set();
-  for(let r=0;r<BAG_ROWS;r++) for(let c=0;c<BAG_COLS;c++){
-    const it=bagGrid[r][c];
-    if(it&&!seen.has(it)&&it.x===c&&it.y===r){ seen.add(it); items.push(itemToJSON(it)); }
-  }
-  if(activeTool) items.push(itemToJSON(activeTool));   // the wielded Tool lives outside the bag
-  const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '), items};
+  const eq={};
+  for(const k of EQUIP_SLOTS) if(equip[k]) eq[k]=itemToJSON(equip[k]);   // containers carry their contents
+  const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
+              equip:eq, wield:activeTool?itemToJSON(activeTool):null};
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); toast('MEMORY WRITTEN · SLOT '+(slot+1)); playSound('place'); }
   catch(e){ toast('THE TERMINAL REFUSES'); }
 }
@@ -4022,23 +4236,22 @@ function saveMeta(slot){
   try{
     const raw=ls.getItem(SAVE_KEY(slot)); if(!raw) return null;
     const b=JSON.parse(raw);
-    if(b.version!==SAVE_VER||!Array.isArray(b.items)) return null;
-    return {stamp:b.stamp, items:b.items.length};
+    if(b.version!==SAVE_VER||typeof b.equip!=='object') return null;
+    let n=0; const walk=j=>{ if(!j) return; n++; (j.inv||[]).forEach(walk); (j.slots||[]).forEach(walk); walk(j.muzzle); };
+    for(const k in b.equip) walk(b.equip[k]);
+    walk(b.wield);
+    return {stamp:b.stamp, items:n};
   }catch(e){ return null; }
 }
 function loadGame(slot){
   const ls=_ls(); const meta=saveMeta(slot);
   if(!ls||!meta){ toast('EMPTY SLOT'); return; }
   const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));
-  bagGrid.forEach(r=>r.fill(null));
+  for(const k of EQUIP_SLOTS) equip[k]=null;
   activeTool=null;
-  let wield=null;
-  for(const j of b.items){
-    const it=itemFromJSON(j); if(!it) continue;
-    if(!placeIfFits(it,j.x,j.y)) autoPlace(it,bagGrid,BAG_COLS,BAG_ROWS);
-    if(it._wield) wield=it;
-  }
-  if(wield) wieldTool(wield);
+  for(const k in b.equip){ const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }
+  syncBagAlias(); clampZone();
+  if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
   toast('MEMORY RESTORED · SLOT '+(slot+1)); playSound('pickup');
   refreshInvUI();
 }
@@ -4107,6 +4320,8 @@ function tipBrief(it){                                  // the info square's row
     rows:[it.length+' slots','+'+it.addedSpread.toFixed(2)+' spread','own muzzle slot']};
   if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
     rows:[it.slots.length+' side slots','each fires alone']};
+  if(it instanceof Armor) return {kind:'ARMOR · '+it.armorType.toUpperCase(), rows:[it.desc(), 'equip it in the rig column']};
+  if(it&&it.widget) return {kind:'SETTING', rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired yet — turns freely']};
   if(it.pill) return {kind:'LAST RESORT',
     rows:['every zealot carries one. now you do.','hold it · press [F] twice · the run ends']};
   if(it instanceof Battery) return {kind:'BATTERY · '+it.size.toUpperCase(),
@@ -4304,6 +4519,60 @@ function makeIcon(it){
 }
 
 const CELL_PITCH=47, GRID_PAD=6;      // 44px cell + 3px gap · 6px wrap padding
+// the whole left panel: rig column + one labeled grid per equipped container
+function renderZones(){
+  const host=document.getElementById('zoneStack');
+  host.innerHTML='';
+  const zl=invZones();
+  zl.forEach((z,zi)=>{
+    const blk=document.createElement('div'); blk.className='zoneBlock';
+    const lab=document.createElement('div'); lab.className='zoneLabel stencil';
+    lab.textContent=z.label; blk.appendChild(lab);
+    const g=document.createElement('div'); g.className='gridWrap';
+    g.style.gridTemplateColumns='repeat('+z.cols+',44px)';
+    if(z.equipCol){
+      EQUIP_SLOTS.forEach((slot,r)=>{
+        const div=document.createElement('div'); div.className='cell equipCell';
+        const it=equip[slot];
+        if(currentFocus===0&&zoneIdx===zi&&cursorY===r) div.classList.add('cursor','cellFocus');
+        div.innerHTML=it
+          ? '<img src="'+makeIcon(it)+'" style="width:38px;height:38px;">'
+          : '<span class="slotGhost">'+slot.slice(0,4).toUpperCase()+'</span>';
+        div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
+          if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+          currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
+        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); });
+        g.appendChild(div);
+      });
+    }else{
+      for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++){
+        const div=document.createElement('div'); div.className='cell';
+        if(z.locked) div.classList.add('lockedCell');
+        const item=z.grid[r][c];
+        if(item){
+          if(item===inspectItem) div.style.borderColor='var(--gate)';
+          if(item.widget||((item.x===c)&&(item.y===r))) div.classList.add('origin');
+        }
+        if(currentFocus===0&&zoneIdx===zi&&cursorX===c&&cursorY===r) div.classList.add('cursor','cellFocus');
+        if(heldWorld&&currentFocus===0&&zoneIdx===zi&&cursorX===c&&cursorY===r&&!z.locked){
+          const fits=z.slotMode ? !z.grid[r][c] : gridFits(heldWorld.w.item,c,r,z.grid,z.cols,z.rows);
+          div.style.outline='2px solid '+(fits?'#57e0a3':'#e0492e');
+        }
+        if(item&&(item.widget||(item.x===c&&item.y===r))){
+          div.innerHTML=item.widget
+            ? '<div class="widg"><div class="widgLab">'+item.label+'</div><div class="widgVal">'+widgetValueText(item)+'</div></div>'
+            : '<img src="'+makeIcon(item)+'" style="width:'+(z.slotMode?38:item.w*44+(item.w-1)*3)+'px;height:'+(z.slotMode?38:item.h*44+(item.h-1)*3)+'px;position:absolute;z-index:2;pointer-events:none;">';
+        }
+        div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
+          if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+          currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
+        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); });
+        g.appendChild(div);
+      }
+    }
+    blk.appendChild(g); host.appendChild(blk);
+  });
+}
 function renderGrid(containerId,grid,cols,rows,focusIdx){
   const container=document.getElementById(containerId);
   container.innerHTML='';
@@ -4368,7 +4637,7 @@ function rackSig(tool){
   return sig.join('|');
 }
 function refreshInvUI(){
-  if(isInventoryOpen) renderGrid('bagGrid',bagGrid,BAG_COLS,BAG_ROWS,0);
+  if(isInventoryOpen) renderZones();
   if(isToolMenuOpen){
     if(activeTool){
       activeTool._cols=null;                              // rack may have changed shape
@@ -4810,6 +5079,26 @@ function menuNav(){
         if(f.at(nx,ny)){ cursorX=nx; cursorY=ny; moved=true; return; }
         nx=cursorX+dx; ny=cursorY+(f.rack?-dy:dy);   // fall through to crossing/clamp
       }
+      // ---- zone stack crossings (focus 0): down past the floor / up past the ceiling
+      if(currentFocus===0 && !f.rack){
+        const zl=invZones();
+        if(dy>0 && ny>=f.rows && zoneIdx<zl.length-1){
+          zoneIdx++; const nz=zl[zoneIdx];
+          cursorX=clamp(cursorX,0,nz.cols-1); cursorY=0; moved=true; return;
+        }
+        if(dy<0 && ny<0 && zoneIdx>0){
+          zoneIdx--; const nz=zl[zoneIdx];
+          cursorX=clamp(cursorX,0,nz.cols-1); cursorY=nz.rows-1; moved=true; return;
+        }
+        if(dx>0 && f.equipCol){                                  // out of the rig column, into the pockets
+          if(zl.length>1){ zoneIdx=Math.max(1,zoneIdx); const nz=zl[Math.max(1,Math.min(zoneIdx,zl.length-1))];
+            zoneIdx=Math.max(1,Math.min(zoneIdx,zl.length-1));
+            cursorX=0; cursorY=clamp(cursorY,0,nz.rows-1); moved=true; return; }
+        }
+        if(dx<0 && nx<0 && !f.equipCol){                          // left edge of any pocket -> the rig
+          zoneIdx=0; cursorX=0; cursorY=clamp(cursorY,0,EQUIP_SLOTS.length-1); moved=true; return;
+        }
+      }
       const inspGrid=inspectItem instanceof Tool;         // the pockets panel sits to the RIGHT
       if(dx>0 && nx>=f.cols && inspGrid && currentFocus!==2){
         const tz=rackZone(inspectItem);
@@ -4819,8 +5108,8 @@ function menuNav(){
       }
       if(dx<0 && nx<0 && currentFocus===2){
         const back=isToolMenuOpen?1:0;
-        if(back===0){ const rows=f.rowsOf?f.rowsOf(cursorX):BAG_ROWS;
-                      setFocus(0, BAG_COLS-1, clamp(rows-1-cursorY,0,BAG_ROWS-1)); }   // invert back to top-origin
+        if(back===0){ const cz=clampZone(); const rows=f.rowsOf?f.rowsOf(cursorX):cz.rows;
+                      setFocus(0, cz.cols-1, clamp(rows-1-cursorY,0,cz.rows-1)); }   // invert back to top-origin
         else{ const tz=activeTool?rackZone(activeTool):null;
               const bc=tz?tz.cols:1;
               setFocus(1, bc-1, clamp(cursorY,0,tz?tz.rowsOf(bc-1)-1:0)); }            // rack -> rack: same origin
@@ -4967,7 +5256,8 @@ function frame(){
   gl.uniform1f(U.uAmbient,dayNight.ambient);
   gl.uniform3f(U.uSkyHi,dayNight.skyHi[0],dayNight.skyHi[1],dayNight.skyHi[2]);
   gl.uniform3f(U.uSkyLo,dayNight.skyLo[0],dayNight.skyLo[1],dayNight.skyLo[2]);
-  gl.uniform1f(U.uFog,P('fogDensity'));
+  gl.uniform1f(U.uFog, activeLevel&&activeLevel.atmos ? activeLevel.atmos.fog : P('fogDensity'));
+  gl.uniform1f(U.uFar, activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0);
   gl.uniform2f(U.uSeed,SEED.x,SEED.y);
   gl.uniform2f(U.uGateCell,GATE.cx,GATE.cz);
   gl.uniform3f(U.uGatePos,GATE.x,0,GATE.z);
@@ -5115,6 +5405,22 @@ updateDayNight();
 initLoadout();          // so the intro backdrop has a tool readout
 updateToolReadout();
 frame();
+</script>
+<script>
+// Paint-first boot: the title card renders in the very first frame; the heavy
+// script (shader compile included) is injected one frame later, so the freeze
+// happens BEHIND the art instead of in front of a blank page.
+(function(){
+  var done=false;
+  function go(){
+    if(done) return; done=true;
+    var s=document.createElement('script');
+    s.textContent=document.getElementById('gameSrc').textContent;
+    document.body.appendChild(s);
+  }
+  requestAnimationFrame(function(){ requestAnimationFrame(go); });
+  setTimeout(go, 400);      // background tabs get no rAF; boot anyway
+})();
 </script>
 </body>
 </html>
