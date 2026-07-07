@@ -194,7 +194,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="hud" class="panel">
   <div class="row stencil"><span>Vitality</span><div class="meter"><div id="healthFill"></div></div></div>
   <div class="row stencil"><span>Suspicion</span><div class="meter"><div id="suspicionFill"></div></div></div>
-  <div class="row stencil"><span>Ring</span><span id="hudDepth">I</span></div>
+  <div class="row stencil"><span id="hudDepthLabel">Ring</span><span id="hudDepth">I</span></div>
   <div class="row stencil" id="clockRow"><span>Watch</span><span id="hudClock">--:--</span></div>
   <div class="row stencil" id="fpsRow"><span>FPS</span><span id="hudFps">--</span></div>
   <div class="row stencil hidden" id="gpStatus"><span>Pad</span><span id="gpName">linked</span></div>
@@ -352,7 +352,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20t';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20u';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -809,15 +809,16 @@ vec2 cellSDF(vec3 q, float h, bool isGate){
 // ==================== AUTHORED LEVELS (twin of regionSdfJS — LEVEL-PRIM) ============
 uniform int   uLevelOn;
 uniform vec4  uLevelBounds;   // x0, z0, invTileW, invTileH
-uniform sampler2D uLevelTex;  // rows0-15 tilemap(r,g=ids), row16 headers x3, row17+ pool
+uniform vec4  uLevelGround;   // rimH, rimW, noiseAmp, (pad)
+uniform highp sampler2D uLevelTex;  // rows0-15 tilemap(r,g=ids), row16 headers x3, row17+ pool
 
 float lvGround(vec2 xz){
   float edge=min(min(xz.x-uLevelBounds.x, (uLevelBounds.x+16.0/uLevelBounds.z)-xz.x),
                  min(xz.y-uLevelBounds.y, (uLevelBounds.y+16.0/uLevelBounds.w)-xz.y));
-  float t=clamp((22.0-edge)/22.0,0.0,1.0);
-  return 0.35*sin(xz.x*0.07)*sin(xz.y*0.06) + t*t*16.0;
+  float t=clamp((uLevelGround.y-edge)/uLevelGround.y,0.0,1.0);
+  return uLevelGround.z*sin(xz.x*0.07)*sin(xz.y*0.06) + t*t*uLevelGround.x;
 }
-float lvHash(ivec2 v){ int h=(v.x*374761393+v.y*668265263); h=(h^(h>>13))*1274126177; return float((h^(h>>16))&0xFFFFFF)/16777216.0; }
+float lvHash(ivec2 v){ int h=(v.x*374761393+v.y*668265263); h=(h^(h>>13))*1274126177; return float(uint(h^(h>>16)))/4294967296.0; }
 float sdBoxL(vec3 p, vec3 c, vec3 h){ vec3 q=abs(p-c)-h; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
 float seg2L(vec2 p, vec2 a, vec2 b){ vec2 v=b-a,w=p-a; float t=clamp(dot(w,v)/dot(v,v),0.0,1.0); return length(p-(a+v*t)); }
 vec4 lvTexel(int x,int y){ return texelFetch(uLevelTex, ivec2(x,y), 0); }
@@ -848,13 +849,24 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     vec4 g=lvTexel(ls,17); d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),g,1.2,1.5));
     m=3.0;
     if(ln>1){                                                     // interior building
-      vec4 bb=lvTexel(ls+1,17); vec4 bd2=lvTexel(ls+2,17);        // bb=cx,cz,hx,hz  bd2=door
+      vec4 bb=lvTexel(ls+1,17); vec4 bd2=lvTexel(ls+2,17);        // bb=cx,cz,hx,hz  bd2=door(+boards in w)
       float bh=B.w;
       float o2=sdBoxL(p, vec3(bb.x,bh*0.5,bb.y), vec3(bb.z,bh*0.5,bb.w));
       float i2=sdBoxL(p, vec3(bb.x,bh*0.5-0.12,bb.y), vec3(bb.z-0.35,bh*0.5-0.12,bb.w-0.35));
       float bd=max(o2,-i2);
       bd=max(bd,-lvHole(p,vec3(bb.x,0.,bb.y),vec3(bb.z,0.,bb.w),bd2,0.6,1.05));
       if(bd<d) d=bd;
+      if(bd2.w>0.5){                                              // LEVEL-PRIM: three slats, kid-nailed
+        bool fE=bd2.x<1.5;
+        float face=fE ? ((bd2.x<0.5)?(bb.x+bb.z):(bb.x-bb.z)) : ((bd2.x<2.5)?(bb.y+bb.w):(bb.y-bb.w));
+        for(int si=0;si<3;si++){
+          float yk=0.45+float(si)*0.6;
+          float sd2=fE
+            ? sdBoxL(p, vec3(face,yk,bb.y+bd2.y), vec3(0.09,0.055,bd2.z+0.14))
+            : sdBoxL(p, vec3(bb.x+bd2.y,yk,face), vec3(bd2.z+0.14,0.055,0.09));
+          if(sd2<d){ d=sd2; m=16.0; }
+        }
+      }
     }
   }else if(kind==3){                                              // BUILDING
     float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
@@ -1380,7 +1392,7 @@ gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
-['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
@@ -1635,6 +1647,7 @@ LEVELS.area1={
   id:'area1', name:'AREA 1 · THE CAMP', kind:'authored',
   bounds:{x0:-200,z0:-200,x1:200,z1:200},
   insertion:{x:-182,y:0,z:-42,yaw:0.9},
+  ground:{rim:16, rimW:22, noise:0.35},     // the valley bowl: treeline cliffs at the edge
   ambient:1.0,
   regions:[
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
@@ -1691,15 +1704,20 @@ LEVELS.area1={
 LEVELS.hideout={
   id:'hideout', name:'THE HIDEY-HOLE', kind:'authored',
   bounds:{x0:-16,z0:-16,x1:16,z1:16},
-  insertion:{x:0,y:0,z:-2.5,yaw:0},
+  insertion:{x:-1.2,y:0,z:-2.2,yaw:-1.9},
+  ground:{rim:0, rimW:22, noise:0.02},      // a floor, not a crater
   ambient:0.55,
+  lights:[{x:-3.6,y:1.3,z:-3.6,col:[1.0,0.72,0.42],intensity:2.6}],   // the lantern
   regions:[
-    {id:'room',   kind:LVL.KIND.BUILDING, box:[-4.5,-4,4.5,4], h:2.7, door:['S',0,0]},  // doorway boarded: width 0 = sealed shell with recess
-    {id:'clutter',kind:LVL.KIND.PROPS, box:[-4,-3.5,4,3.5],
-     crates:[[-3.1,2.4,0.9],[-2.0,2.8,0.7],[3.0,-2.6,0.8],[2.2,3.0,0.6]]},
+    // a random house in the complex: roofless shelled walls with the front doorway gaping,
+    // and the one room a kid could seal — roofed, doorway boarded over with slats.
+    {id:'house', kind:LVL.KIND.WALLS, box:[-9,-7,9,7], h:3.1, gate:['N',5.5,0.9],
+     bldg:[-4.5,-4.5,1.5,0.5], bldgH:2.55, door:['E',0,0.9], boards:true},
+    {id:'clutter', kind:LVL.KIND.PROPS, box:[-8,-6,8,6],
+     crates:[[-3.2,-3.4,0.9],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7]]},
   ],
   exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[]},
-  terminal:{x:3.4,z:2.9},
+  terminal:{x:-3.4,z:-0.6},
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings' };   // the endless world
 
@@ -1774,6 +1792,15 @@ function regionSdfJS(r,px,py,pz){
         : _sdBox3(px,py,pz,b2cx+dr[1],1.05,(dr[0]==='N'?b2[3]:b2[1]),dw*0.5,1.05,0.6);
       bd=Math.max(bd,-dd);
       if(bd<d){ d=bd; }
+      if(r.boards){                                       // LEVEL-PRIM: three slats, kid-nailed
+        const fE=(dr[0]==='E'||dr[0]==='W'), face=fE?(dr[0]==='E'?b2[2]:b2[0]):(dr[0]==='N'?b2[3]:b2[1]);
+        for(const yk of [0.45,1.05,1.65]){
+          const sd2=fE
+            ? _sdBox3(px,py,pz,face,yk,b2cz+dr[1],0.09,0.055,dw*0.5+0.14)
+            : _sdBox3(px,py,pz,b2cx+dr[1],yk,face,dw*0.5+0.14,0.055,0.09);
+          if(sd2<d){ d=sd2; m=16.0; }
+        }
+      }
     }
   }else if(r.kind===K.BUILDING){
     const outer=_sdBox3(px,py,pz,cx,r.h/2,cz,hx,r.h/2,hz);
@@ -1884,7 +1911,7 @@ function buildLevelTexData(level,bake){
       const g=r.gate; items.push([axis[g[0]],g[1],g[2],0]);
       if(r.bldg){ const b2=r.bldg;
         items.push([(b2[0]+b2[2])/2,(b2[1]+b2[3])/2,(b2[2]-b2[0])/2,(b2[3]-b2[1])/2]);
-        const dr=r.door; items.push([axis[dr[0]],dr[1],dr[2]*0.5,0]); }
+        const dr=r.door; items.push([axis[dr[0]],dr[1],dr[2]*0.5,r.boards?1:0]); }
     }
     if(r.kind===K.BUILDING){ B=[r.kind,r.h,0,0];
       const dr=r.door; items.push([axis[dr[0]],dr[1],dr[2]*0.5,0]); }
@@ -1926,10 +1953,10 @@ function uploadLevelTex(){
   levelTexDirty=false;
 }
 function levelGroundJS(px,pz){
-  const b=activeLevel.bounds;
-  const edge=Math.min(px-b.x0, b.x1-px, pz-b.z0, b.z1-pz);   // rim: last 22m climb 16m
-  const rim=Math.pow(Math.min(1,Math.max(0,(22-edge)/22)),2.0)*16.0;
-  return 0.35*Math.sin(px*0.07)*Math.sin(pz*0.06) + rim;
+  const b=activeLevel.bounds, g=activeLevel.ground;
+  const edge=Math.min(px-b.x0, b.x1-px, pz-b.z0, b.z1-pz);
+  const t=Math.min(1,Math.max(0,(g.rimW-edge)/g.rimW));
+  return g.noise*Math.sin(px*0.07)*Math.sin(pz*0.06) + t*t*g.rim;
 }
 function levelSdfJS(px,py,pz){
   const b=activeLevel.bounds;
@@ -3786,6 +3813,8 @@ function deployTo(levelId){
     cameraYaw=L.insertion.yaw; cameraPitch=0;
     playerPos.velY=0;
     seedLevelSpawns(L);
+    if(L.lights) for(const li of L.lights)
+      dynLights.push({pos:{x:li.x,y:li.y,z:li.z},col:li.col,intensity:li.intensity,ttl:Infinity});
     gameState = levelId==='hideout' ? 'hideout' : 'play';
   }else{
     activeLevel=null; levelBake=null;
@@ -3794,6 +3823,9 @@ function deployTo(levelId){
     playerPos.x=0; playerPos.z=0; playerPos.y=0;
   }
   _exfilHold=0;
+  const hl=document.getElementById('hudDepthLabel'), hv=document.getElementById('hudDepth');
+  if(L.kind==='authored'){ hl.textContent='Site'; hv.textContent=L.id==='hideout'?'HOME':L.name.split('·')[0].trim(); }
+  else{ hl.textContent='Ring'; hv.textContent=roman(depth); }
   showBanner(L.name);
   refreshInvUI();
 }
@@ -4588,7 +4620,7 @@ function updateDebugWatch(dt){
   const rows=[
     ['pos', playerPos.x.toFixed(1)+', '+playerPos.y.toFixed(1)+', '+playerPos.z.toFixed(1)],
     ['cell', Math.floor((playerPos.x+10)/20)+', '+Math.floor((playerPos.z+10)/20)],
-    ['gate cell', GATE.cx+', '+GATE.cz+' ('+Math.round(Math.hypot(GATE.x-playerPos.x,GATE.z-playerPos.z))+'m)'],
+    ['gate cell', activeLevel?'—':(GATE.cx+', '+GATE.cz+' ('+Math.round(Math.hypot(GATE.x-playerPos.x,GATE.z-playerPos.z))+'m)')],
     ['seed', SEED.x+', '+SEED.y+' · ring '+depth],
     ['exposure', playerPos.exposure.toFixed(2)],
     ['noise', playerPos.noiseLevel.toFixed(2)],
@@ -4982,7 +5014,11 @@ function frame(){
   if(lvOn){
     const b=activeLevel.bounds;
     gl.uniform4f(U.uLevelBounds,b.x0,b.z0,16/(b.x1-b.x0),16/(b.z1-b.z0));
+    const lg=activeLevel.ground;
+    gl.uniform4f(U.uLevelGround,lg.rim,lg.rimW,lg.noise,0);
     if(levelTexDirty) uploadLevelTex();
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,_levelTexGL);   // belt & braces
+    gl.uniform1i(U.uLevelTex,2);
   }
   gl.uniform1i(U.uEditCount,SDF_EDITS.length);
   gl.uniform1i(U.uGlobCount,GLOBS.length);
