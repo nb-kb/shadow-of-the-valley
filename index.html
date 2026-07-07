@@ -73,6 +73,15 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
 #backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
   text-align:center;pointer-events:none;}
+#terminalUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:52;
+  min-width:340px;padding:18px 22px;border:1px solid var(--line);background:rgba(5,9,7,.94);
+  box-shadow:0 0 40px rgba(20,60,40,.25) inset;}
+#termRows{margin-top:12px;}
+.termRow{padding:8px 10px;margin:3px 0;border:1px solid transparent;font-size:11px;
+  letter-spacing:.14em;color:var(--bone);cursor:pointer;display:flex;justify-content:space-between;}
+.termRow.sel{border-color:var(--exposed);color:var(--exposed);background:rgba(80,200,120,.06);}
+.termRow .trMeta{color:var(--dust);font-size:10px;}
+.termHint{margin-top:12px;font-size:9px;letter-spacing:.12em;color:var(--dust);}
 #tipPanel{position:absolute;left:calc(50% + 205px);top:50%;transform:translateY(-50%);z-index:44;
   width:225px;pointer-events:none;}
 #tipMain{min-height:225px;padding:14px;border:1px solid var(--line);background:rgba(8,10,13,.72);
@@ -213,6 +222,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <div class="seqReadout hidden"><div id="modSequence">—</div></div>
 </div>
 
+<!-- The stolen terminal: one data-driven screen for destinations, saves, and later, doors -->
+<div id="terminalUI" class="hidden">
+  <div class="stencil" id="termTitle">TERMINAL</div>
+  <div id="termRows"></div>
+  <div class="termHint">[E] select · [Esc / ○] back</div>
+</div>
+
 <!-- Docked tip panel: one info square + one dashed detail square (any menu) -->
 <div id="tipPanel" class="hidden">
   <div id="tipMain"></div>
@@ -250,6 +266,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <h3>Spawn</h3>
   <div class="drow" style="display:block;"><div id="dbgItems" style="display:grid;grid-template-columns:repeat(8,36px);gap:3px;max-height:190px;overflow:auto;"></div></div>
   <div class="drow"><button id="dbgSpawnEnemy">spawn zealot</button><button id="dbgKillAll">drop all zealots</button></div>
+  <div class="drow"><button id="dbgDeployA1">deploy: area 1</button><button id="dbgDeployHide">deploy: hideout</button></div>
+  <div class="drow"><button id="dbgDeployValley">deploy: valley</button><button id="dbgResetSaves">RESET SAVE DATA</button></div>
   <div class="drow"><button id="dbgTpGate">teleport to beacon</button><button id="dbgNextRing">force next ring</button></div>
   <h3>Watch</h3>
   <div id="dbgWatch"></div>
@@ -289,7 +307,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20r';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20s';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -742,7 +760,145 @@ vec2 cellSDF(vec3 q, float h, bool isGate){
   return res;
 }
 
+
+// ==================== AUTHORED LEVELS (twin of regionSdfJS — LEVEL-PRIM) ============
+uniform int   uLevelOn;
+uniform vec4  uLevelBounds;   // x0, z0, invTileW, invTileH
+uniform sampler2D uLevelTex;  // rows0-15 tilemap(r,g=ids), row16 headers x3, row17+ pool
+
+float lvGround(vec2 xz){
+  float edge=min(min(xz.x-uLevelBounds.x, (uLevelBounds.x+16.0/uLevelBounds.z)-xz.x),
+                 min(xz.y-uLevelBounds.y, (uLevelBounds.y+16.0/uLevelBounds.w)-xz.y));
+  float t=clamp((22.0-edge)/22.0,0.0,1.0);
+  return 0.35*sin(xz.x*0.07)*sin(xz.y*0.06) + t*t*16.0;
+}
+float lvHash(ivec2 v){ int h=(v.x*374761393+v.y*668265263); h=(h^(h>>13))*1274126177; return float((h^(h>>16))&0xFFFFFF)/16777216.0; }
+float sdBoxL(vec3 p, vec3 c, vec3 h){ vec3 q=abs(p-c)-h; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
+float seg2L(vec2 p, vec2 a, vec2 b){ vec2 v=b-a,w=p-a; float t=clamp(dot(w,v)/dot(v,v),0.0,1.0); return length(p-(a+v*t)); }
+vec4 lvTexel(int x,int y){ return texelFetch(uLevelTex, ivec2(x,y), 0); }
+// door/gate carve helper: axis 0=E 1=W 2=N 3=S at box bx (xz-min/max via c,h)
+float lvHole(vec3 p, vec3 c, vec3 h, vec4 g, float depth, float hh){
+  float ax=g.x;
+  if(ax<1.5){ float fx=(ax<0.5)?(c.x+h.x):(c.x-h.x);
+    return sdBoxL(p, vec3(fx, hh, c.z+g.y), vec3(depth, hh, g.z)); }
+  float fz=(ax<2.5)?(c.z+h.z):(c.z-h.z);
+  return sdBoxL(p, vec3(c.x+g.y, hh, fz), vec3(g.z, hh, depth));
+}
+// returns add-dist, writes mat + ground-cut
+vec2 lvRegion(int ri, vec3 p, inout float cut){
+  vec4 A=lvTexel(ri*3,16), B=lvTexel(ri*3+1,16), C=lvTexel(ri*3+2,16);
+  vec3 c=vec3(A.x,0.0,A.y); vec3 hb=vec3(A.z,0.0,A.w);
+  int kind=int(B.x); float h=B.y;
+  int ls=int(C.x), ln=int(C.y);
+  float d=1e5, m=1.0;
+  if(kind==1){                                                    // ROAD: min over segs
+    float sd=1e5;
+    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 g=lvTexel(ls+i,17);
+      sd=min(sd, seg2L(p.xz, g.xy, g.zw)); }
+    d=max(sd-B.z, p.y-0.06); m=12.0;
+  }else if(kind==2){                                              // WALLS compound
+    float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
+    float inner=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x-0.5,h*0.5+0.2,hb.z-0.5));
+    d=max(outer,-inner);
+    vec4 g=lvTexel(ls,17); d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),g,1.2,1.5));
+    m=3.0;
+    if(ln>1){                                                     // interior building
+      vec4 bb=lvTexel(ls+1,17); vec4 bd2=lvTexel(ls+2,17);        // bb=cx,cz,hx,hz  bd2=door
+      float bh=B.w;
+      float o2=sdBoxL(p, vec3(bb.x,bh*0.5,bb.y), vec3(bb.z,bh*0.5,bb.w));
+      float i2=sdBoxL(p, vec3(bb.x,bh*0.5-0.12,bb.y), vec3(bb.z-0.35,bh*0.5-0.12,bb.w-0.35));
+      float bd=max(o2,-i2);
+      bd=max(bd,-lvHole(p,vec3(bb.x,0.,bb.y),vec3(bb.z,0.,bb.w),bd2,0.6,1.05));
+      if(bd<d) d=bd;
+    }
+  }else if(kind==3){                                              // BUILDING
+    float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
+    float inner=sdBoxL(p, vec3(c.x,h*0.5-0.12,c.z), vec3(hb.x-0.35,h*0.5-0.12,hb.z-0.35));
+    d=max(outer,-inner); m=3.0;
+    vec4 dr=lvTexel(ls,17);
+    if(dr.z>0.0) d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),dr,0.6,1.05));
+    else{ float sd2=lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),vec4(3.0,0.0,0.7,0.0),0.28,1.0);
+          d=max(d,-max(sd2,0.02)); }
+  }else if(kind==4){                                              // TENTS
+    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 t=lvTexel(ls+i,17);
+      vec2 l=p.xz-t.xy; float ca=cos(t.z), sa=sin(t.z);
+      vec2 r2=vec2(ca*l.x+sa*l.y, -sa*l.x+ca*l.y);
+      float td=max(max(abs(r2.x)-1.6, abs(r2.y)-2.1), p.y-1.5+abs(r2.x)*0.82);
+      if(td<d){ d=td; m=4.0; } }
+  }else if(kind==5){                                              // FACADE — shell only
+    d=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z)); m=13.0;
+    vec4 w=lvTexel(ls,17);                                        // wing cx,cz,hx,hz
+    float wd=sdBoxL(p, vec3(w.x,B.w*0.5,w.y), vec3(w.z,B.w*0.5,w.w));
+    if(wd<d) d=wd;
+    for(int i=1;i<5;i++){ if(i>=ln) break; vec4 dr=lvTexel(ls+i,17);
+      d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),dr,0.32,1.25)); }
+  }else if(kind==6){                                              // FENCE + blocks
+    float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
+    float inner=sdBoxL(p, vec3(c.x,h*0.5+0.2,c.z), vec3(hb.x-0.22,h*0.5+0.4,hb.z-0.22));
+    d=max(outer,-inner); m=14.0;
+    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 it=lvTexel(ls+i,17);
+      if(it.w>0.5){ d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),it,0.8,1.3)); }
+      else{ float bd=sdBoxL(p, vec3(it.x,0.9,it.y), vec3(1.1,0.9,0.5));
+            if(bd<d){ d=bd; m=3.0; } } }
+  }else if(kind==7){                                              // PITS + trench cut
+    for(int i=0;i<4;i++){ if(i>=ln) break; vec4 rg=lvTexel(ls+i,17);
+      float rr=length(p.xz-rg.xy);
+      float rd=max(abs(rr-3.2)-0.55, p.y-0.85);
+      if(rd<d){ d=rd; m=15.0; } }
+    vec4 t=lvTexel(ls+ln,17);                                     // trench box after rings
+    cut=min(cut, sdBoxL(p, vec3((t.x+t.z)*0.5, 0.4-B.z, (t.y+t.w)*0.5),
+                        vec3((t.z-t.x)*0.5, B.z, (t.w-t.y)*0.5)));
+  }else if(kind==9){                                              // TREES (+cutX stumps)
+    float cell=B.z;
+    ivec2 g=ivec2(floor((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell));
+    float hh=lvHash(g+ivec2(13,0));
+    vec2 o=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.25)+vec2(hh,fract(hh*13.0))*0.5)*cell;
+    if(o.x>c.x-hb.x&&o.x<c.x+hb.x&&o.y>c.z-hb.z&&o.y<c.z+hb.z){
+      float rr=length(p.xz-o);
+      if(B.w>0.5 && o.x>C.z){                                     // logged half
+        float sd2=max(rr-0.42, p.y-(0.35+hh*0.3));
+        if(sd2<d){ d=sd2; m=16.0; }
+      }else{
+        float th=C.w+ (B.y-C.w)*hh;                               // hMin..hMax
+        float trunk=max(rr-0.28, p.y-th*0.42);
+        float cone=max(rr-(th-p.y)*0.34, max(p.y-th, th*0.28-p.y));
+        float td=min(trunk,cone);
+        if(td<d){ d=td; m=(td==trunk)?16.0:17.0; }
+      }
+    }
+  }else if(kind==8){                                              // STUMPS field
+    float cell=B.z;
+    ivec2 g=ivec2(floor((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell));
+    float hh=lvHash(g+ivec2(0,57));
+    vec2 o=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.3)+vec2(hh,fract(hh*7.0))*0.4)*cell;
+    float rr=length(p.xz-o);
+    d=max(rr-0.42, p.y-(0.35+hh*0.3)); m=16.0;
+  }else if(kind==10){                                             // PROPS crates
+    for(int i=0;i<5;i++){ if(i>=ln) break; vec4 cr=lvTexel(ls+i,17);
+      float cd=sdBoxL(p, vec3(cr.x,cr.z*0.5,cr.y), vec3(cr.z*0.55,cr.z*0.5,cr.z*0.55));
+      if(cd<d){ d=cd; m=4.0; } }
+  }
+  return vec2(d,m);
+}
+vec2 levelSDF(vec3 p){
+  float tH=lvGround(p.xz);
+  vec2 res=vec2((p.y-tH)*0.62, tH>4.0?2.0:1.0);
+  ivec2 t=ivec2(floor((p.xz-uLevelBounds.xy)*vec2(uLevelBounds.z,uLevelBounds.w)));
+  if(all(greaterThanEqual(t,ivec2(0))) && all(lessThanEqual(t,ivec2(15)))){
+    vec4 ids=lvTexel(t.x,t.y)*255.0;
+    float cut=1e5;
+    for(int k=0;k<2;k++){
+      int ri=int((k==0?ids.x:ids.y)+0.5); if(ri>200) continue;
+      vec2 rr=lvRegion(ri,p,cut);
+      if(rr.x<res.x) res=rr;
+    }
+    if(cut<1e4) res.x=max(res.x,-cut);
+  }
+  return res;
+}
+
 vec2 mapStatic(vec3 p){
+  if(uLevelOn==1) return levelSDF(p);
   float tH=terrainH(p.xz);
   vec2 res=vec2((p.y-tH)*0.62, tH>1.5?2.0:1.0);   // ground: dirt floor, rock slopes
   float cellSize=20.0;
@@ -1008,6 +1164,12 @@ void main(){
     else if(m<2.5){   matCol=vec3(0.33,0.31,0.29)*(0.7+0.6*vnoise(p.xz*0.5+vec2(p.y*0.3)));
                       matCol*=1.0-0.10*step(0.5,fract(p.y*0.35)); }                // strata rock
     else if(m>59.5&&m<60.5){ matCol=vec3(0.30,0.62,0.55); }   // glue glob: wet teal
+    else if(m>11.5&&m<12.5){ matCol=vec3(0.30,0.28,0.26)*(0.85+0.3*vnoise(p.xz*2.2)); }  // road gravel
+    else if(m>12.5&&m<13.5){ matCol=vec3(0.52,0.53,0.50)*(0.8+0.25*vnoise(vec2(p.x+p.z,p.y)*0.9)); } // facility concrete
+    else if(m>13.5&&m<14.5){ matCol=vec3(0.35,0.33,0.30); }                              // fence steel
+    else if(m>14.5&&m<15.5){ matCol=vec3(0.45,0.40,0.28)*(0.8+0.4*vnoise(p.xz*3.0)); }   // sandbags
+    else if(m>15.5&&m<16.5){ matCol=vec3(0.36,0.26,0.16)*(0.8+0.4*vnoise(vec2(p.y*2.0,p.x+p.z))); } // timber
+    else if(m>16.5&&m<17.5){ matCol=vec3(0.16,0.30,0.17)*(0.75+0.5*vnoise(p.xz*1.4)); }  // foliage
     else if(m<3.5){   matCol=vec3(0.60,0.55,0.45)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*1.4));
                       matCol*=mix(0.55,1.0,smoothstep(0.0,1.3,p.y)); }             // stucco, grimy hem
     else if(m<4.5){   matCol=vec3(0.38,0.28,0.17)*(0.8+0.4*vnoise(vec2((p.x+p.z)*6.0,p.y*0.7))); } // timber
@@ -1069,7 +1231,7 @@ void main(){
       lit += matCol * uAmbient * (0.55+0.45*n.y) * (0.45+0.55*ao);
 
       vec2 cellId=floor((p.xz+10.0)/20.0);
-      if(abs(cellId.y)<=2.0){
+      if(uLevelOn==0 && abs(cellId.y)<=2.0){
         float hL=hashi(ivec2(cellId)+ivec2(uSeed));
         if(hL > 0.45 && cellId != uGateCell){
           float type=floor(hL*5.0);
@@ -1173,7 +1335,7 @@ gl.enableVertexAttribArray(posLoc);
 gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
-['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uAim','uBob','uHasTool','uToolCfg',
+['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
@@ -1235,6 +1397,7 @@ function terrainHJS(x,z){
 }
 
 function mapWorldBase(px,py,pz){
+  if(activeLevel&&activeLevel.kind==='authored') return levelSdfJS(px,py,pz);
   let res=(py-terrainHJS(px,pz))*0.62;
   { // gate beacon column (shader draws it solid; capsule y:0..70 r:0.30)
     const bdy=Math.max(0,Math.abs(py-35)-35);
@@ -1405,7 +1568,341 @@ const playerPos={
 let cameraYaw=0.6, cameraPitch=0;
 let gameTime=0, timeScale=1, runClock=0, kills=0, depth=1;
 let highestDetection=0;
-let gameState='intro';                        // intro | play | dead
+
+// ======================================================================================
+// LEVEL MODULE — authored levels as self-contained data. A level is: bounds + region
+// list + insertion + exfils + spawn budget. The loop deploys to one; nothing outside
+// this block knows Area-1-specific facts. The endless valley remains a pseudo-level.
+//
+// CULLING CONTRACT (the whole point):
+//   * broad-phase = 16x16 baked tile map over the bounds; each tile lists <=2 regions.
+//   * per-point cost = 1 texel fetch + at most 2 bounded region SDFs. Region COUNT
+//     never touches per-pixel cost. Bake asserts the <=2 invariant and names offenders.
+//   * the facility is a SHELL: solid mass + door recesses. No interior is ever marched.
+//   * JS levelSdfJS() and GLSL levelSDF() are written from the same primitive spec —
+//     any edit to one edits the other (grep: LEVEL-PRIM).
+// ======================================================================================
+const LVL={ TILES:16, KIND:{NONE:0,ROAD:1,WALLS:2,BUILDING:3,TENT:4,FACADE:5,FENCE:6,
+            PITS:7,STUMPS:8,TREES:9,PROPS:10} };
+
+const LEVELS={};
+LEVELS.area1={
+  id:'area1', name:'AREA 1 · THE CAMP', kind:'authored',
+  bounds:{x0:-200,z0:-200,x1:200,z1:200},
+  insertion:{x:-182,y:0,z:-42,yaw:0.9},
+  ambient:1.0,
+  regions:[
+    // THE ROAD is one region: every strip in the camp, min over a handful of segments.
+    {id:'road', kind:LVL.KIND.ROAD, w:4.2,
+     segs:[[-196,-52,-12,6],[-12,6,96,132],[-6,2,112,58],[-58,-14,-78,-118],[-78,-118,-6,-96]]},
+    // West: Weapon Design Lab — one composite region: wall ring + one-room building
+    {id:'lab', kind:LVL.KIND.WALLS, box:[-170,-12,-124,42], h:3.2, gate:['E',14,6],
+     bldg:[-158,4,-136,26], bldgH:3.6, door:['E',0,2.2]},
+    // North-west: weapon pits — sandbag rings + a trench cut
+    {id:'pits', kind:LVL.KIND.PITS, box:[-98,92,-48,152], rings:[[-84,112],[-60,138],[-56,104]],
+     trench:[-92,124,-52,136], trenchD:1.7},
+    // North-center: Armory north of the forest
+    {id:'armory', kind:LVL.KIND.BUILDING, box:[2,102,20,116], h:3.4, door:['S',0,2.0]},
+    // Center: ONE forest — standing trees west, logged stumps east of the cut line
+    {id:'forest', kind:LVL.KIND.TREES, box:[-44,34,88,96], cell:7.0, hMin:5.0,hMax:8.5, cutX:26},
+    // East: the brainwashing facility — SHELL ONLY. Footprint 64x68; the interior it
+    // will one day contain is larger than this box. Doors are recesses, nothing more.
+    {id:'facility', kind:LVL.KIND.FACADE, box:[120,58,184,126], h:9.0,
+     wing:[150,20,184,58], wingH:6.5,
+     doors:[['W',96],['S',136],['E',84],['N',150]]},
+    // South-east: weapons testing — fence ring, target blocks inside
+    {id:'testing', kind:LVL.KIND.FENCE, box:[96,-96,184,-12], h:2.4,
+     gates:[['W',-52],['N',132]], blocks:[[130,-40],[152,-62],[128,-78]]},
+    // South: housing — tents scattered on the footpaths
+    {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
+    {id:'tentsB', kind:LVL.KIND.TENT, box:[-22,-132,34,-64],  tents:[[-8,-92,0.2],[14,-108,2.9],[26,-84,1.6],[-2,-120,5.1]]},
+    // Rim treeline strips (the cliff itself is in the ground formula)
+    {id:'rimN', kind:LVL.KIND.TREES, box:[-186,168,186,196], cell:8.0, hMin:6.0,hMax:9.5},
+    {id:'rimS', kind:LVL.KIND.TREES, box:[-186,-196,186,-168], cell:8.0, hMin:6.0,hMax:9.5},
+    {id:'rimW', kind:LVL.KIND.TREES, box:[-196,-160,-176,160], cell:8.0, hMin:6.0,hMax:9.5},
+  ],
+  exfils:[
+    {id:'exHousing', x:-96, z:-122, r:4.5, label:'HOUSING DITCH'},
+    {id:'exTesting', x:166, z:-84,  r:4.5, label:'TESTING FENCE GAP'},
+    {id:'exLab',     x:-178,z:36,   r:4.5, label:'LAB CULVERT'},
+  ],
+  doors:[   // the facility's stubbed seams: each knows where it is and where it will lead
+    {id:'facW', x:118.6, z:96,  face:'W', target:null, returnAt:null},
+    {id:'facS', x:136,  z:56.6, face:'S', target:null, returnAt:null},
+    {id:'facE', x:185.4,z:84,   face:'E', target:null, returnAt:null},
+    {id:'facN', x:150,  z:127.4,face:'N', target:null, returnAt:null},
+  ],
+  spawn:{
+    zealots:[ {region:'pits',n:2},{region:'armory',n:1},{region:'forest',n:2},
+              {region:'testing',n:3},{region:'tentsA',n:2},{region:'tentsB',n:2},
+              {region:'facility',n:2,outside:true} ],
+    lootN:24, minSpace:6,
+    lootTable:['ammo9','ammo9','magStd','battS','battS','battM','dmgPlus','velPlus','twin',
+               'silentMod','fuseMod','splinter','boltCore','sparkCore','pickCore','beamCore',
+               'gripField','barrelC','barrelU','platS','reflex','scope','scope2x','suppressor'],
+    lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
+  },
+};
+LEVELS.hideout={
+  id:'hideout', name:'THE HIDEY-HOLE', kind:'authored',
+  bounds:{x0:-16,z0:-16,x1:16,z1:16},
+  insertion:{x:0,y:0,z:-2.5,yaw:0},
+  ambient:0.55,
+  regions:[
+    {id:'room',   kind:LVL.KIND.BUILDING, box:[-4.5,-4,4.5,4], h:2.7, door:['S',0,0]},  // doorway boarded: width 0 = sealed shell with recess
+    {id:'clutter',kind:LVL.KIND.PROPS, box:[-4,-3.5,4,3.5],
+     crates:[[-3.1,2.4,0.9],[-2.0,2.8,0.7],[3.0,-2.6,0.8],[2.2,3.0,0.6]]},
+  ],
+  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[]},
+  terminal:{x:3.4,z:2.9},
+};
+LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings' };   // the endless world
+
+// ---- bake: tile -> (<=2) region ids. Throws loudly if authoring breaks the budget. ----
+function bakeLevel(level){
+  if(level.kind!=='authored') return null;
+  const T=LVL.TILES, b=level.bounds, tw=(b.x1-b.x0)/T, th=(b.z1-b.z0)/T;
+  const tiles=new Array(T*T); const over=[];
+  const segBoxes=r=>r.segs.map(g=>{ const w=(r.w||2)+1;
+    return [Math.min(g[0],g[2])-w, Math.min(g[1],g[3])-w, Math.max(g[0],g[2])+w, Math.max(g[1],g[3])+w]; });
+  for(let tz=0;tz<T;tz++) for(let tx=0;tx<T;tx++){
+    const x0=b.x0+tx*tw, z0=b.z0+tz*th, x1=x0+tw, z1=z0+th;
+    const hit=[];
+    const touches=rb=>rb[0]<x1+1 && rb[2]>x0-1 && rb[1]<z1+1 && rb[3]>z0-1;
+    level.regions.forEach((r,i)=>{
+      if(r.segs){ if(segBoxes(r).some(touches)) hit.push(i); }
+      else if(touches(r.box)) hit.push(i);
+    });
+    if(hit.length>2) over.push({tx,tz,ids:hit.map(i=>level.regions[i].id)});
+    tiles[tz*T+tx]=[hit[0]??255, hit[1]??255];
+  }
+  if(over.length){
+    console.error('LEVEL BAKE OVERFLOW (tiles with >2 regions):',over);
+    throw new Error('level '+level.id+' breaks the 2-regions-per-tile budget: '+JSON.stringify(over[0]));
+  }
+  return {tiles, tw, th};
+}
+
+// ---- LEVEL-PRIM: shared primitive formulas. GLSL twin lives in levelSDF(). ----------
+function _sdBox2(px,pz,cx,cz,hx,hz){ const dx=Math.abs(px-cx)-hx, dz=Math.abs(pz-cz)-hz;
+  const ax=Math.max(dx,0),az=Math.max(dz,0);
+  return Math.hypot(ax,az)+Math.min(Math.max(dx,dz),0); }
+function _sdBox3(px,py,pz,cx,cy,cz,hx,hy,hz){
+  const dx=Math.abs(px-cx)-hx, dy=Math.abs(py-cy)-hy, dz=Math.abs(pz-cz)-hz;
+  const ax=Math.max(dx,0),ay=Math.max(dy,0),az=Math.max(dz,0);
+  return Math.sqrt(ax*ax+ay*ay+az*az)+Math.min(Math.max(dx,Math.max(dy,dz)),0); }
+function _seg2(px,pz,ax,az,bx,bz){ const vx=bx-ax,vz=bz-az, wx=px-ax,wz=pz-az;
+  const t=Math.min(1,Math.max(0,(wx*vx+wz*vz)/(vx*vx+vz*vz)));
+  return Math.hypot(px-(ax+vx*t), pz-(az+vz*t)); }
+function _hash2i(x,z){ let h=(x*374761393+z*668265263)|0; h=(h^(h>>13))*1274126177|0; return ((h^(h>>16))>>>0)/4294967296; }
+
+// region SDF -> [dist, mat, cut] ; cut carves the ground (trench)
+function regionSdfJS(r,px,py,pz){
+  const K=LVL.KIND;
+  let d=1e5, m=1.0, cut=1e5;
+  const bx=r.box, cx=bx?(bx[0]+bx[2])/2:0, cz=bx?(bx[1]+bx[3])/2:0,
+        hx=bx?(bx[2]-bx[0])/2:0, hz=bx?(bx[3]-bx[1])/2:0;
+  if(r.kind===K.ROAD){
+    let sd=1e5;
+    for(const g of r.segs) sd=Math.min(sd,_seg2(px,pz,g[0],g[1],g[2],g[3]));
+    d=Math.max(sd-r.w, py-0.06); m=12.0;                   // a 6cm gravel slab
+  }else if(r.kind===K.WALLS){
+    const outer=_sdBox3(px,py,pz,cx,r.h/2,cz,hx,r.h/2,hz);
+    const inner=_sdBox3(px,py,pz,cx,r.h/2,cz,hx-0.5,r.h/2+0.2,hz-0.5);
+    d=Math.max(outer,-inner);
+    const g=r.gate;                                          // gate gap on one face
+    if(g){ const gw=g[2];
+      const gd=(g[0]==='E'||g[0]==='W')
+        ? _sdBox3(px,py,pz,(g[0]==='E'?bx[2]:bx[0]),1.4,cz+g[1],1.2,1.5,gw)
+        : _sdBox3(px,py,pz,cx+g[1],1.4,(g[0]==='N'?bx[3]:bx[1]),gw,1.5,1.2);
+      d=Math.max(d,-gd); }
+    m=3.0;
+    if(r.bldg){                                              // the compound's building
+      const b2=r.bldg, b2cx=(b2[0]+b2[2])/2, b2cz=(b2[1]+b2[3])/2;
+      const b2hx=(b2[2]-b2[0])/2, b2hz=(b2[3]-b2[1])/2, bh=r.bldgH;
+      const outer2=_sdBox3(px,py,pz,b2cx,bh/2,b2cz,b2hx,bh/2,b2hz);
+      const inner2=_sdBox3(px,py,pz,b2cx,bh/2-0.12,b2cz,b2hx-0.35,bh/2-0.12,b2hz-0.35);
+      let bd=Math.max(outer2,-inner2);
+      const dr=r.door, dw=dr[2];
+      const dd=(dr[0]==='E'||dr[0]==='W')
+        ? _sdBox3(px,py,pz,(dr[0]==='E'?b2[2]:b2[0]),1.05,b2cz+dr[1],0.6,1.05,dw*0.5)
+        : _sdBox3(px,py,pz,b2cx+dr[1],1.05,(dr[0]==='N'?b2[3]:b2[1]),dw*0.5,1.05,0.6);
+      bd=Math.max(bd,-dd);
+      if(bd<d){ d=bd; }
+    }
+  }else if(r.kind===K.BUILDING){
+    const outer=_sdBox3(px,py,pz,cx,r.h/2,cz,hx,r.h/2,hz);
+    const inner=_sdBox3(px,py,pz,cx,r.h/2-0.12,cz,hx-0.35,r.h/2-0.12,hz-0.35);
+    d=Math.max(outer,-inner);
+    const dr=r.door, dw=dr[2];
+    if(dw>0){ const off=dr[1];
+      const dd=(dr[0]==='E'||dr[0]==='W')
+        ? _sdBox3(px,py,pz,(dr[0]==='E'?bx[2]:bx[0]),1.05,cz+off,0.6,1.05,dw*0.5)
+        : _sdBox3(px,py,pz,cx+off,1.05,(dr[0]==='N'?bx[3]:bx[1]),dw*0.5,1.05,0.6);
+      d=Math.max(d,-dd); }
+    else{ const dd=_sdBox3(px,py,pz,cx,1.0,bx[1],0.7,1.0,0.28); d=Math.max(d,-Math.max(dd,0.02)); }
+    m=3.0;
+  }else if(r.kind===K.TENT){
+    for(const t of r.tents){
+      const lx=px-t[0], lz=pz-t[1], ca=Math.cos(t[2]), sa=Math.sin(t[2]);
+      const rx=ca*lx+sa*lz, rz=-sa*lx+ca*lz;
+      const td=Math.max(Math.max(Math.abs(rx)-1.6, Math.abs(rz)-2.1),
+                        py-1.5+Math.abs(rx)*0.82);           // LEVEL-PRIM tent wedge
+      if(td<d){ d=td; m=4.0; }
+    }
+  }else if(r.kind===K.FACADE){
+    d=_sdBox3(px,py,pz,cx,r.h/2,cz,hx,r.h/2,hz); m=13.0;     // SOLID. no inside.
+    const w=r.wing;
+    if(w){ const wcx=(w[0]+w[2])/2,wcz=(w[1]+w[3])/2;
+      const wd=_sdBox3(px,py,pz,wcx,r.wingH/2,wcz,(w[2]-w[0])/2,r.wingH/2,(w[3]-w[1])/2);
+      if(wd<d) d=wd; }
+    for(const dr of r.doors){                                 // recesses, 30cm deep
+      const rd=(dr[0]==='E'||dr[0]==='W')
+        ? _sdBox3(px,py,pz,(dr[0]==='E'?bx[2]:bx[0]),1.2,dr[1],0.32,1.25,0.95)
+        : _sdBox3(px,py,pz,dr[1],1.2,(dr[0]==='N'?bx[3]:bx[1]),0.95,1.25,0.32);
+      d=Math.max(d,-rd);
+    }
+  }else if(r.kind===K.FENCE){
+    const outer=_sdBox3(px,py,pz,cx,r.h/2,cz,hx,r.h/2,hz);
+    const inner=_sdBox3(px,py,pz,cx,r.h/2+0.2,cz,hx-0.22,r.h/2+0.4,hz-0.22);
+    d=Math.max(outer,-inner); m=14.0;
+    for(const g of r.gates){
+      const gd=(g[0]==='E'||g[0]==='W')
+        ? _sdBox3(px,py,pz,(g[0]==='E'?bx[2]:bx[0]),1.2,g[1],0.8,1.3,2.2)
+        : _sdBox3(px,py,pz,g[1],1.2,(g[0]==='N'?bx[3]:bx[1]),2.2,1.3,0.8);
+      d=Math.max(d,-gd); }
+    if(r.blocks) for(const bl of r.blocks){
+      const bd=_sdBox3(px,py,pz,bl[0],0.9,bl[1],1.1,0.9,0.5);
+      if(bd<d){ d=bd; m=3.0; } }
+  }else if(r.kind===K.PITS){
+    for(const ring of r.rings){                               // sandbag rings: squat tube
+      const rr=Math.hypot(px-ring[0],pz-ring[1]);
+      const rd=Math.max(Math.abs(rr-3.2)-0.55, py-0.85);
+      if(rd<d){ d=rd; m=15.0; }
+    }
+    const t=r.trench;                                          // trench: a ground CUT
+    cut=_sdBox3(px,py,pz,(t[0]+t[2])/2,0.4-r.trenchD,(t[1]+t[3])/2,(t[2]-t[0])/2,r.trenchD,(t[3]-t[1])/2+0.0);
+  }else if(r.kind===K.STUMPS){
+    const cell=r.cell;
+    const gx=Math.floor((px-bx[0])/cell), gz=Math.floor((pz-bx[1])/cell);
+    const h=_hash2i(gx,gz+57);
+    const ox=bx[0]+(gx+0.3+h*0.4)*cell, oz=bx[1]+(gz+0.3+((h*7)%1)*0.4)*cell;
+    const rr=Math.hypot(px-ox,pz-oz);
+    d=Math.max(rr-0.42, py-(0.35+h*0.3)); m=16.0;
+  }else if(r.kind===K.TREES){
+    const cell=r.cell;
+    const gx=Math.floor((px-bx[0])/cell), gz=Math.floor((pz-bx[1])/cell);
+    const h=_hash2i(gx+13,gz);
+    const ox=bx[0]+(gx+0.25+h*0.5)*cell, oz=bx[1]+(gz+0.25+((h*13)%1)*0.5)*cell;
+    if(ox>bx[0]&&ox<bx[2]&&oz>bx[1]&&oz<bx[3]){
+      const rr=Math.hypot(px-ox,pz-oz);
+      if(r.cutX!==undefined && ox>r.cutX){                 // logged: a stump remains
+        const sd2=Math.max(rr-0.42, py-(0.35+h*0.3));
+        if(sd2<d){ d=sd2; m=16.0; }
+      }else{
+        const th=r.hMin+(r.hMax-r.hMin)*h;
+        const trunk=Math.max(rr-0.28, py-th*0.42);
+        const cone=Math.max(rr-(th-py)*0.34, Math.max(py-th, th*0.28-py));
+        const td=Math.min(trunk,cone);
+        if(td<d){ d=td; m=(td===trunk)?16.0:17.0; }
+      }
+    }
+  }else if(r.kind===K.PROPS){
+    for(const c of r.crates){
+      const cd=_sdBox3(px,py,pz,c[0],c[2]/2,c[1],c[2]*0.55,c[2]/2,c[2]*0.55);
+      if(cd<d){ d=cd; m=4.0; }
+    }
+  }
+  return [d,m,cut];
+}
+
+// ---- the level's whole static world, JS truth (collision, AI, probes) --------------
+let activeLevel=null, levelBake=null, levelTexDirty=false;
+// pack tilemap + region headers + param pool into one RGBA32F texture (64 x 18)
+function buildLevelTexData(level,bake){
+  const W=64,H=18, d=new Float32Array(W*H*4);
+  const put=(x,y,a,b,c2,e)=>{ const i=(y*W+x)*4; d[i]=a; d[i+1]=b; d[i+2]=c2; d[i+3]=e; };
+  for(let tz=0;tz<16;tz++) for(let tx=0;tx<16;tx++){
+    const t=bake.tiles[tz*16+tx];
+    put(tx,tz, t[0]/255, t[1]/255, 0,0);
+  }
+  let pool=0;
+  const K=LVL.KIND, axis={'E':0,'W':1,'N':2,'S':3};
+  level.regions.forEach((r,i)=>{
+    const bx=r.box||[0,0,0,0];
+    const cx=(bx[0]+bx[2])/2, cz=(bx[1]+bx[3])/2, hx=(bx[2]-bx[0])/2, hz=(bx[3]-bx[1])/2;
+    let B=[r.kind,0,0,0], C=[17*0+pool,0,0,0];   // C.x = pool index (row 17 flat)
+    const items=[];
+    if(r.kind===K.ROAD){ B=[r.kind,0,r.w,0]; r.segs.forEach(g=>items.push(g)); }
+    if(r.kind===K.WALLS){
+      B=[r.kind,r.h,0,r.bldgH||0];
+      const g=r.gate; items.push([axis[g[0]],g[1],g[2],0]);
+      if(r.bldg){ const b2=r.bldg;
+        items.push([(b2[0]+b2[2])/2,(b2[1]+b2[3])/2,(b2[2]-b2[0])/2,(b2[3]-b2[1])/2]);
+        const dr=r.door; items.push([axis[dr[0]],dr[1],dr[2]*0.5,0]); }
+    }
+    if(r.kind===K.BUILDING){ B=[r.kind,r.h,0,0];
+      const dr=r.door; items.push([axis[dr[0]],dr[1],dr[2]*0.5,0]); }
+    if(r.kind===K.TENT){ B=[r.kind,0,0,0]; r.tents.forEach(t=>items.push([t[0],t[1],t[2],0])); }
+    if(r.kind===K.FACADE){ B=[r.kind,r.h,0,r.wingH];
+      const w=r.wing; items.push([(w[0]+w[2])/2,(w[1]+w[3])/2,(w[2]-w[0])/2,(w[3]-w[1])/2]);
+      r.doors.forEach(dr=>items.push([axis[dr[0]],dr[1],0.95,0])); }
+    if(r.kind===K.FENCE){ B=[r.kind,r.h,0,0];
+      r.gates.forEach(g=>items.push([axis[g[0]],g[1],2.2,1]));
+      r.blocks.forEach(b2=>items.push([b2[0],b2[1],0,0])); }
+    if(r.kind===K.PITS){ B=[r.kind,0,r.trenchD,0];
+      r.rings.forEach(rg=>items.push([rg[0],rg[1],0,0]));
+      const t=r.trench; items.push([t[0],t[1],t[2],t[3]]);
+      C[1]=r.rings.length;   // ln = rings only; trench read at ls+ln
+    }
+    if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,0,r.cutX??0,r.hMin]; }
+    if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
+    if(r.kind===K.PROPS){ B=[r.kind,0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0])); }
+    if(r.kind!==K.PITS) C[1]=items.length;
+    C[0]=pool;
+    put(i*3,16, cx,cz,hx,hz);
+    put(i*3+1,16, B[0],B[1],B[2],B[3]);
+    put(i*3+2,16, C[0],C[1],C[2],C[3]);
+    items.forEach(it=>{ put(pool%W, 17+Math.floor(pool/W), it[0],it[1],it[2],it[3]); pool++; });
+  });
+  return {data:d,W,H};
+}
+let _levelTexGL=null;
+function uploadLevelTex(){
+  if(!activeLevel||activeLevel.kind!=='authored'){ return; }
+  const td=buildLevelTexData(activeLevel,levelBake);
+  if(!_levelTexGL) _levelTexGL=gl.createTexture();
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D,_levelTexGL);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,td.W,td.H,0,gl.RGBA,gl.FLOAT,td.data);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+  gl.uniform1i(U.uLevelTex,2);
+  levelTexDirty=false;
+}
+function levelGroundJS(px,pz){
+  const b=activeLevel.bounds;
+  const edge=Math.min(px-b.x0, b.x1-px, pz-b.z0, b.z1-pz);   // rim: last 22m climb 16m
+  const rim=Math.pow(Math.min(1,Math.max(0,(22-edge)/22)),2.0)*16.0;
+  return 0.35*Math.sin(px*0.07)*Math.sin(pz*0.06) + rim;
+}
+function levelSdfJS(px,py,pz){
+  const b=activeLevel.bounds;
+  let res=(py-levelGroundJS(px,pz))*0.62, mat=1.0;
+  const tx=Math.floor((px-b.x0)/levelBake.tw), tz=Math.floor((pz-b.z0)/levelBake.th);
+  if(tx>=0&&tx<LVL.TILES&&tz>=0&&tz<LVL.TILES){
+    const ids=levelBake.tiles[tz*LVL.TILES+tx];
+    for(let k=0;k<2;k++){
+      const ri=ids[k]; if(ri===255) continue;
+      const [d,m,cut]=regionSdfJS(activeLevel.regions[ri],px,py,pz);
+      if(cut<1e4) res=Math.max(res,-cut);
+      if(d<res){ res=d; mat=m; }
+    }
+  }
+  return res;
+}
+
+let gameState='intro';                        // intro | play | dead | hideout
 const worldItems=[];                          // {item,pos,vel,ry,rotVel,held}
 const projectiles=[];                         // live shots
 const tracersR=[];                            // render segments {a,b,col,life}
@@ -1800,6 +2297,8 @@ const ITEM_DEFS={
   volumeKnob: ()=>new Gadget('Volume Knob','#b08f7f','volume','Right-click: cycle sound level.'),
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
 };
+for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
+  ITEM_DEFS[k]=()=>{ const it=f(); it.defKey=k; return it; }; }
 const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
                 'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter',
                 'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
@@ -1824,8 +2323,9 @@ function setFocus(n,ex,ey){
 }
 let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
 
-function uiOpen(){ return isInventoryOpen||isToolMenuOpen||isManualOpen||isDebugOpen||gameState!=='play'; }
-function pausedUI(){ return isManualOpen||isDebugOpen||gameState!=='play'; }   // bag/tool do NOT pause the world
+function isPlayable(){ return gameState==='play'||gameState==='hideout'; }
+function uiOpen(){ return isInventoryOpen||isToolMenuOpen||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
+function pausedUI(){ return isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }   // bag/tool do NOT pause the world
 
 function gridFits(item,sx,sy,grid,cols,rows){
   if(sx<0||sy<0||sx+item.w>cols||sy+item.h>rows) return false;
@@ -2220,6 +2720,23 @@ function setPrompt(prompt,html,show){
   else prompt.classList.remove('show');
 }
 function updateInteract(dt){
+  if(activeLevel){
+    const _pr=document.getElementById('interactPrompt');
+    const ex=updateExfil(dt);
+    if(ex){ setPrompt(_pr, _exfilHold>0
+        ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
+        : ex.label+' — hold <b>E</b> to extract', true); return; }
+    const dr=nearStubDoor();
+    if(dr){ if(pressed('interact')){ toast('SEALED. IT DOES NOT OPEN. YET.'); playSound('empty'); }
+      setPrompt(_pr,'A DOOR INTO THE FACILITY — SEALED',true); return; }
+    if(activeLevel.terminal){
+      const t=activeLevel.terminal;
+      if(Math.hypot(playerPos.x-t.x,playerPos.z-t.z)<2.2){
+        if(pressed('interact')&&!isTerminalOpen){ openTerminal(); }
+        setPrompt(_pr,'THE STOLEN TERMINAL — <b>E</b>',true); return;
+      }
+    }
+  }
   // the crosshair probe is a full world march — 12Hz is plenty for a prompt;
   // real interactions re-probe fresh below
   _hoverT-=dt;
@@ -3176,11 +3693,17 @@ function startRun(){
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
   initLoadout();
-  resetLevel();
-  gameState='play'; timeScale=1;
+  deployTo('hideout'); timeScale=1;
   refreshInvUI();
 }
 function onDeath(){
+  if(activeLevel&&activeLevel.id!=='hideout'){       // a lost raid, not a lost life
+    playSound('death');
+    playerPos.health=playerPos.maxHealth;
+    showBanner('DRAGGED YOURSELF HOME');
+    deployTo('hideout');
+    return;
+  }
   gameState='dead'; timeScale=0;
   playSound('death');
   endBeam();
@@ -3195,6 +3718,246 @@ function onBreach(){
   showBanner('RING '+roman(depth-1)+' BREACHED');
   resetLevel();
 }
+// ---- RAID LOOP: level-agnostic deploy/teardown. Nothing here knows Area 1. --------
+let isTerminalOpen=false;
+function teardownWorld(){
+  worldItems.length=0; enemies.length=0; projectiles.length=0;
+  beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
+  SDF_EDITS.length=0; dynLights.length=0;
+  _beamLanes.clear();
+  if(heldWorld){ heldWorld=null; document.getElementById('crosshair').classList.remove('carrying'); }
+  fireCooldown=0; playerPos.noiseLevel=0.2; playerPos.exposure=0.5;
+  _hoverCache.idx=-1; _hoverCache.w=null;
+}
+function deployTo(levelId){
+  const L=LEVELS[levelId];
+  teardownWorld();
+  if(L.kind==='authored'){
+    activeLevel=L;
+    levelBake=bakeLevel(L);
+    levelTexDirty=true;
+    playerPos.x=L.insertion.x; playerPos.z=L.insertion.z;
+    playerPos.y=Math.max(0,levelGroundJS(L.insertion.x,L.insertion.z));
+    cameraYaw=L.insertion.yaw; cameraPitch=0;
+    playerPos.velY=0;
+    seedLevelSpawns(L);
+    gameState = levelId==='hideout' ? 'hideout' : 'play';
+  }else{
+    activeLevel=null; levelBake=null;
+    gameState='play';
+    resetLevel();                       // the endless valley keeps its ring machinery
+    playerPos.x=0; playerPos.z=0; playerPos.y=0;
+  }
+  _exfilHold=0;
+  showBanner(L.name);
+  refreshInvUI();
+}
+// per-raid seeded placement: zealots per region + loot scatter with min spacing
+function seedLevelSpawns(L){
+  const seed=(Math.random()*1e9)|0;
+  let sr=seed>>>0;
+  const rng=()=>{ sr^=sr<<13; sr>>>=0; sr^=sr>>17; sr^=sr<<5; sr>>>=0; return sr/4294967296; };
+  const regionById=id=>L.regions.find(r=>r.id===id);
+  const inBox=(r)=>{ const b=r.box; return [b[0]+2+rng()*(b[2]-b[0]-4), b[1]+2+rng()*(b[3]-b[1]-4)]; };
+  const placed=[];
+  const clear=(x,z,sp)=>placed.every(p=>Math.hypot(p[0]-x,p[1]-z)>=sp);
+  for(const spec of L.spawn.zealots){
+    const r=regionById(spec.region); if(!r) continue;
+    for(let n=0;n<spec.n;n++){
+      for(let tries=0;tries<12;tries++){
+        let [x,z]=inBox(r);
+        if(spec.outside){ x=r.box[0]-4-rng()*6; }          // patrol the facility apron
+        if(!clear(x,z,L.spawn.minSpace)) continue;
+        if(levelSdfJS(x,1.0,z)<0.4) continue;               // not inside a wall
+        enemies.push(new Zealot(x,z)); placed.push([x,z]); break;
+      }
+    }
+  }
+  for(let n=0;n<L.spawn.lootN;n++){
+    const r=regionById(L.spawn.lootRegions[Math.floor(rng()*L.spawn.lootRegions.length)]);
+    for(let tries=0;tries<12;tries++){
+      const [x,z]=inBox(r.bldg?{box:r.bldg}:r);
+      if(!clear(x,z,3)) continue;
+      if(levelSdfJS(x,0.9,z)<0.3) continue;
+      const key=L.spawn.lootTable[Math.floor(rng()*L.spawn.lootTable.length)];
+      const it=ITEM_DEFS[key]();
+      if(it instanceof Magazine) it.loaded=Math.floor(rng()*it.maxCapacity);
+      spawnWorldItem(it, x, levelGroundJS(x,z)+0.35, z);
+      placed.push([x,z]); break;
+    }
+  }
+}
+// exfiltration: stand in the circle, hold the verb, go home with the bag
+let _exfilHold=0;
+function updateExfil(dt){
+  if(!activeLevel||gameState!=='play'||!activeLevel.exfils.length) return null;
+  for(const ex of activeLevel.exfils){
+    if(Math.hypot(playerPos.x-ex.x,playerPos.z-ex.z)<ex.r){
+      if(down('interact')&&!heldWorld){
+        _exfilHold+=dt;
+        if(_exfilHold>=3){ playSound('breach'); deployTo('hideout'); return null; }
+      }else _exfilHold=Math.max(0,_exfilHold-dt*2);
+      return ex;
+    }
+  }
+  _exfilHold=0;
+  return null;
+}
+// the facility's sealed seams: prompts today, destinations later
+function nearStubDoor(){
+  if(!activeLevel||!activeLevel.doors.length) return null;
+  for(const d of activeLevel.doors){
+    if(Math.hypot(playerPos.x-d.x,playerPos.z-d.z)<2.2) return d;
+  }
+  return null;
+}
+// ---- THE TERMINAL: one data-driven screen system. Rows come from configs; a row is
+// ---- {label, meta?, action()} or {label, screen}. Doors will reuse this as
+// ---- `transition` rows later — the terminal doesn't know what a hideout is.
+let termScreen='home', termSel=0;
+const TERM_SCREENS={
+  home:()=>({title:'THE STOLEN TERMINAL', rows:[
+    {label:'DEPLOY', screen:'deploy'},
+    {label:'MEMORY (SAVE / LOAD)', screen:'saves'},
+    {label:'CLOSE', action:closeTerminal},
+  ]}),
+  deploy:()=>({title:'DESTINATIONS', rows:[
+    ...Object.values(LEVELS).filter(L=>L.id!=='hideout').map(L=>({
+      label:L.name, meta:L.kind==='rings'?'endless':'raid',
+      action:()=>{ closeTerminal(); deployTo(L.id); }})),
+    {label:'BACK', screen:'home'},
+  ]}),
+  saves:()=>({title:'MEMORY', rows:[
+    ...[0,1,2].map(i=>{ const m=saveMeta(i);
+      return {label:'SLOT '+(i+1)+(m?' · '+m.stamp:' · EMPTY'),
+              meta:m?(m.items+' items'):'—',
+              action:()=>{ termScreen='slot'; termSel=0; _termSlot=i; renderTerminal(); }};}),
+    {label:'BACK', screen:'home'},
+  ]}),
+  slot:()=>({title:'SLOT '+(_termSlot+1), rows:[
+    {label:'SAVE HERE', action:()=>{ saveGame(_termSlot); termScreen='saves'; termSel=0; renderTerminal(); }},
+    ...(saveMeta(_termSlot)?[{label:'LOAD', action:()=>{ loadGame(_termSlot); closeTerminal(); }}]:[]),
+    {label:'BACK', screen:'saves'},
+  ]}),
+};
+let _termSlot=0;
+function openTerminal(){ isTerminalOpen=true; termScreen='home'; termSel=0;
+  document.getElementById('terminalUI').classList.remove('hidden');
+  document.exitPointerLock&&document.exitPointerLock();
+  playSound('click'); renderTerminal(); }
+function closeTerminal(){ isTerminalOpen=false;
+  document.getElementById('terminalUI').classList.add('hidden');
+  if(isPlayable()) requestLock(); playSound('click'); }
+function renderTerminal(){
+  const sc=TERM_SCREENS[termScreen]();
+  document.getElementById('termTitle').textContent=sc.title;
+  const box=document.getElementById('termRows'); box.innerHTML='';
+  sc.rows.forEach((r,i)=>{
+    const d=document.createElement('div');
+    d.className='termRow'+(i===termSel?' sel':'');
+    d.innerHTML='<span>'+r.label+'</span>'+(r.meta?'<span class="trMeta">'+r.meta+'</span>':'');
+    d.addEventListener('mouseenter',()=>{ termSel=i; renderTerminal(); });
+    d.addEventListener('mousedown',()=>{ termSel=i; termActivate(); });
+    box.appendChild(d);
+  });
+}
+function termActivate(){
+  const sc=TERM_SCREENS[termScreen]();
+  const r=sc.rows[termSel]; if(!r) return;
+  if(r.screen){ termScreen=r.screen; termSel=0; playSound('click'); renderTerminal(); return; }
+  if(r.action) r.action();
+}
+function termNav(){
+  const sc=TERM_SCREENS[termScreen]();
+  if(INPUT.rawKey['ArrowUp']||INPUT.rawPad[12]){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
+  if(INPUT.rawKey['ArrowDown']||INPUT.rawPad[13]){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
+  if(INPUT.rawKey['KeyE']||INPUT.rawPad[0]) termActivate();
+  if(INPUT.rawKey['Escape']||INPUT.rawPad[1]){
+    if(termScreen!=='home'){ termScreen='home'; termSel=0; playSound('click'); renderTerminal(); }
+    else closeTerminal();
+  }
+}
+
+// ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
+// ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
+const SAVE_VER=1, SAVE_KEY=i=>'sotv_save_'+i;
+function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
+function itemToJSON(it){
+  if(!it) return null;
+  const j={k:it.defKey, x:it.x, y:it.y};
+  if(it instanceof Magazine) j.loaded=it.loaded;
+  if(it instanceof Ammunition) j.count=it.count;
+  if(it instanceof Battery){ j.cap=it.cap; j.charge=it.charge; }
+  if(it instanceof Gadget && it.on!==undefined) j.on=it.on;
+  if(it instanceof Barrel){ j.slots=it.slots.map(itemToJSON); j.muzzle=itemToJSON(it.muzzle); }
+  if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
+  if(it instanceof Tool){ j.slots=it.base.slots.map(itemToJSON); j.muzzle=itemToJSON(it.base.muzzle);
+    j.cycle=it.baseCycle; j.wielded=(it===activeTool); }
+  return j;
+}
+function itemFromJSON(j){
+  if(!j||!ITEM_DEFS[j.k]) return null;
+  const it=ITEM_DEFS[j.k]();
+  if(j.loaded!==undefined) it.loaded=j.loaded;
+  if(j.count!==undefined) it.count=j.count;
+  if(j.cap!==undefined){ it.cap=j.cap; it.charge=Math.min(j.charge,j.cap); }
+  if(j.on!==undefined) it.on=j.on;
+  if(it instanceof Barrel){ j.slots.forEach((c,i)=>it.slots[i]=itemFromJSON(c)); it.muzzle=itemFromJSON(j.muzzle); }
+  if(it instanceof Platform){ j.slots.forEach((c,i)=>it.slots[i]=itemFromJSON(c));
+    if(j.cycles) it.cycles=j.cycles.slice(); }
+  if(it instanceof Tool){ j.slots.forEach((c,i)=>it.base.slots[i]=itemFromJSON(c));
+    it.base.muzzle=itemFromJSON(j.muzzle); it.baseCycle=j.cycle||0; it._wield=!!j.wielded; }
+  return it;
+}
+function saveGame(slot){
+  const ls=_ls(); if(!ls){ toast('NO MEMORY BANKS HERE'); return; }
+  const items=[];
+  const seen=new Set();
+  for(let r=0;r<BAG_ROWS;r++) for(let c=0;c<BAG_COLS;c++){
+    const it=bagGrid[r][c];
+    if(it&&!seen.has(it)&&it.x===c&&it.y===r){ seen.add(it); items.push(itemToJSON(it)); }
+  }
+  if(activeTool) items.push(itemToJSON(activeTool));   // the wielded Tool lives outside the bag
+  const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '), items};
+  try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); toast('MEMORY WRITTEN · SLOT '+(slot+1)); playSound('place'); }
+  catch(e){ toast('THE TERMINAL REFUSES'); }
+}
+function saveMeta(slot){
+  const ls=_ls(); if(!ls) return null;
+  try{
+    const raw=ls.getItem(SAVE_KEY(slot)); if(!raw) return null;
+    const b=JSON.parse(raw);
+    if(b.version!==SAVE_VER||!Array.isArray(b.items)) return null;
+    return {stamp:b.stamp, items:b.items.length};
+  }catch(e){ return null; }
+}
+function loadGame(slot){
+  const ls=_ls(); const meta=saveMeta(slot);
+  if(!ls||!meta){ toast('EMPTY SLOT'); return; }
+  const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));
+  bagGrid.forEach(r=>r.fill(null));
+  activeTool=null;
+  let wield=null;
+  for(const j of b.items){
+    const it=itemFromJSON(j); if(!it) continue;
+    if(!placeIfFits(it,j.x,j.y)) autoPlace(it,bagGrid,BAG_COLS,BAG_ROWS);
+    if(it._wield) wield=it;
+  }
+  if(wield) wieldTool(wield);
+  toast('MEMORY RESTORED · SLOT '+(slot+1)); playSound('pickup');
+  refreshInvUI();
+}
+function placeIfFits(it,x,y){
+  if(x===undefined||y===undefined) return false;
+  if(!gridFits(it,x,y,bagGrid,BAG_COLS,BAG_ROWS)) return false;
+  placeInGrid(it,x,y,bagGrid); return true;
+}
+function resetSaveData(){
+  const ls=_ls(); if(!ls) return;
+  for(let i=0;i<3;i++) ls.removeItem(SAVE_KEY(i));
+  toast('ALL MEMORY BURNED');
+}
+
 let introArmed=false;
 function anyKeyGate(){
   audioInit();
@@ -3746,7 +4509,11 @@ function buildDebugPanel(){
     enemies.push(new Zealot(playerPos.x+f.x*8, playerPos.z+f.z*8)); };
   document.getElementById('dbgKillAll').onclick=()=>enemies.forEach(e=>{ if(e.health>0) e.hurt(999,'debug'); });
   document.getElementById('dbgTpGate').onclick=()=>{ playerPos.x=GATE.x-3; playerPos.z=GATE.z; playerPos.y=0; };
-  document.getElementById('dbgNextRing').onclick=()=>onBreach();
+  document.getElementById('dbgNextRing').onclick=()=>{ if(!activeLevel) onBreach(); else toast('NO RINGS HERE'); };
+  document.getElementById('dbgDeployA1').onclick=()=>deployTo('area1');
+  document.getElementById('dbgDeployHide').onclick=()=>deployTo('hideout');
+  document.getElementById('dbgDeployValley').onclick=()=>deployTo('valley');
+  document.getElementById('dbgResetSaves').onclick=()=>resetSaveData();
   document.getElementById('dbgGod').onchange=e=>FLAGS.god=e.target.checked;
   document.getElementById('dbgNoclip').onchange=e=>FLAGS.noclip=e.target.checked;
   document.getElementById('dbgSeeAll').onchange=e=>FLAGS.seeAll=e.target.checked;
@@ -3993,7 +4760,7 @@ function frame(){
   pollGamepad();
 
   // menu toggles — ○/Tab open the tool rack outside, back out of any menu inside
-  if(gameState==='play'&&!listeningBind){
+  if(isPlayable()&&!listeningBind){
     if(pressed('bag')&&!isManualOpen&&!isDebugOpen) toggleInventory();
     if(pressed('tool')&&!isDebugOpen){
       if(isManualOpen) closeManual();                    // circle closes the manual
@@ -4005,13 +4772,14 @@ function frame(){
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(isDebugOpen) dbgNav();
+    if(isTerminalOpen) termNav();
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
       else if(uiMenusOpen())closeAllInv();
     }
   }
 
-  const live = gameState==='play' && !pausedUI();
+  const live = isPlayable() && !pausedUI();
   if(live){
     runClock+=dt; gameTime+=dt;
     updatePlayer(dt);
@@ -4048,7 +4816,7 @@ function frame(){
     updateExposure(dt);
     const ccx=Math.floor((playerPos.x+10)/20), ccz=Math.floor((playerPos.z+10)/20);
     maybeSpawnCellLoot(ccx,ccz);
-    if(Math.hypot(playerPos.x-GATE.x,playerPos.z-GATE.z)<2.4) onBreach();
+    if(!activeLevel && Math.hypot(playerPos.x-GATE.x,playerPos.z-GATE.z)<2.4) onBreach();
   }
   if(uiMenusOpen() && !isDebugOpen) menuNav();      // debug owns the pad while open
   updateDayNight();
@@ -4161,6 +4929,13 @@ function frame(){
   dynLights.sort((a,b)=>b.intensity-a.intensity);     // in place — order carries no other meaning
   const dsorted=dynLights;
   const nd=Math.min(RLIM.DYN,dsorted.length);
+  const lvOn=activeLevel&&activeLevel.kind==='authored';
+  gl.uniform1i(U.uLevelOn,lvOn?1:0);
+  if(lvOn){
+    const b=activeLevel.bounds;
+    gl.uniform4f(U.uLevelBounds,b.x0,b.z0,16/(b.x1-b.x0),16/(b.z1-b.z0));
+    if(levelTexDirty) uploadLevelTex();
+  }
   gl.uniform1i(U.uEditCount,SDF_EDITS.length);
   gl.uniform1i(U.uGlobCount,GLOBS.length);
   gl.uniform1i(U.uReticle,(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0);
@@ -4180,7 +4955,7 @@ function frame(){
 
   // ---- auto resolution: if the GPU can't keep pace, shrink the ray count ----
   dynResT-=dt;
-  if(dynResT<=0 && gameState==='play'){
+  if(dynResT<=0 && isPlayable()){
     dynResT=0.5;
     const before=Math.round(dynScale*20)/20;
     if(fpsEma<50) dynScale=Math.max(0.55,dynScale*0.92);       // losing pace: shed pixels
@@ -4206,7 +4981,7 @@ function frame(){
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
     eye.style.filter='brightness('+(0.3+e*1.6).toFixed(2)+')';
     const comp=document.getElementById('compassStrip');
-    if(hasGadget('compass')&&gameState==='play'){
+    if(hasGadget('compass')&&gameState==='play'&&!activeLevel){
       comp.classList.remove('hidden');
       const ddx=GATE.x-playerPos.x, ddz=GATE.z-playerPos.z;
       const ang=(Math.atan2(ddx,ddz)-cameraYaw)*180/Math.PI;
