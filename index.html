@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21d';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21e';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -969,6 +969,15 @@ vec2 levelSDF(vec3 p){
       if(rr.x<res.x) res=rr;
     }
     if(!gNoGround && cut<1e4) res.x=max(res.x,-cut);
+    if(gNoGround){
+      vec2 fr=fract((p.xz-uLevelBounds.xy)*vec2(uLevelBounds.z,uLevelBounds.w));
+      vec2 edge=min(fr,1.0-fr)/vec2(uLevelBounds.z,uLevelBounds.w);
+      res.x=min(res.x, min(edge.x,edge.y)+1.0);
+    }
+  }else if(gNoGround){
+    vec2 lo=uLevelBounds.xy, hi=uLevelBounds.xy+16.0/vec2(uLevelBounds.z,uLevelBounds.w);
+    vec2 dxz=max(max(lo-p.xz, p.xz-hi), vec2(0.0));
+    res.x=min(res.x, length(dxz)+1.0);
   }
   return res;
 }
@@ -992,10 +1001,15 @@ float groundField(vec3 p){
 vec2 traceGround(vec3 o, vec3 dir, float maxT){
   float t=0.05;
   if(groundField(o+dir*t)<0.0) return vec2(t,1.0);
-  for(int i=0;i<170;i++){
-    float tn=t+clamp(t*0.045,0.35,14.0);
-    if(groundField(o+dir*tn)<0.0){
-      float lo=t,hi=tn;
+  for(int i=0;i<240;i++){
+    // near: fine enough to catch ridge crests (midpoint halves the spacing).
+    // far: coarse is honest — fog owns everything out there anyway.
+    float st = (t<600.0) ? clamp(t*0.045,0.35,8.0) : clamp(t*0.03,8.0,30.0);
+    float tm=t+st*0.5, tn=t+st;
+    float lo=-1.0, hi=0.0;
+    if(groundField(o+dir*tm)<0.0){ lo=t; hi=tm; }
+    else if(groundField(o+dir*tn)<0.0){ lo=tm; hi=tn; }
+    if(lo>=0.0){
       for(int k=0;k<9;k++){ float mid=0.5*(lo+hi);
         if(groundField(o+dir*mid)<0.0) hi=mid; else lo=mid; }
       return vec2(hi,1.0);
@@ -1013,6 +1027,11 @@ vec2 mapStatic(vec3 p){
   float cellSize=20.0;
   vec2 cellId=floor((p.xz+cellSize*0.5)/cellSize);
   vec2 camCell=floor((ro.xz+cellSize*0.5)/cellSize);
+  if(gNoGround){
+    vec2 cfr=fract((p.xz+cellSize*0.5)/cellSize);
+    vec2 cedge=min(cfr,1.0-cfr)*cellSize;
+    res.x=min(res.x, min(cedge.x,cedge.y)+0.8);
+  }
   if(abs(cellId.y)<=2.0 && max(abs(cellId.x-camCell.x),abs(cellId.y-camCell.y))<=10.0){
     vec3 q=p;
     q.xz=mod(q.xz+cellSize*0.5,cellSize)-cellSize*0.5;
