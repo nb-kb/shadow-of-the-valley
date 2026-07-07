@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20z';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21a';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -827,7 +827,14 @@ float lvGround(vec2 xz){
   float edge=min(min(xz.x-uLevelBounds.x, (uLevelBounds.x+16.0/uLevelBounds.z)-xz.x),
                  min(xz.y-uLevelBounds.y, (uLevelBounds.y+16.0/uLevelBounds.w)-xz.y));
   float t=clamp((uLevelGround.y-edge)/uLevelGround.y,0.0,1.0);
-  return uLevelGround.z*sin(xz.x*0.07)*sin(xz.y*0.06) + t*t*uLevelGround.x;
+  float h=uLevelGround.z*sin(xz.x*0.07)*sin(xz.y*0.06) + t*t*uLevelGround.x;
+  float outD=max(0.0,-edge);                         // LEVEL-PRIM: hills beyond the rim
+  if(outD>0.0){
+    float roll=sin(xz.x*0.011+1.7)*sin(xz.y*0.013+0.4)
+             + 0.5*sin(xz.x*0.027-0.8)*sin(xz.y*0.023+2.1);
+    h += (roll*0.5+0.62)*22.0*min(1.0,outD/70.0) + outD*0.015;
+  }
+  return h;
 }
 float lvHash(ivec2 v){ int h=(v.x*374761393+v.y*668265263); h=(h^(h>>13))*1274126177; return float(uint(h^(h>>16)))/4294967296.0; }
 float sdBoxL(vec3 p, vec3 c, vec3 h){ vec3 q=abs(p-c)-h; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
@@ -1194,14 +1201,8 @@ vec3 calcNormal(vec3 p){
                   + k.xxx*map(p+k.xxx*e).x );
 }
 
-// what does "infinitely far" look like along this ray? Above the horizon: sky.
-// Below it: hazed earth. Fogged geometry and missed rays must both converge here,
-// or the horizon tears into a sky-colored band (it did).
-vec3 farTint(vec3 dir, vec3 skyRef){
-  float belowH = 1.0 - smoothstep(0.0, 0.018, dir.y);       // fully earth AT the line (edges legal)
-  vec3 earthHaze = vec3(0.40,0.36,0.29)*(0.45+0.55*uAmbient);
-  return mix(skyRef, earthHaze, belowH*0.95);
-}
+// the ground-only heightfield, valid at any distance — regions ignored out here
+float groundHF(vec2 xz){ return (uLevelOn==1) ? lvGround(xz) : terrainH(xz); }
 vec3 skyColor(vec3 dir){
   vec3 sky = mix(uSkyLo, uSkyHi, clamp(dir.y*0.7+0.35, 0.0, 1.0));
   float sd = clamp(dot(dir, uLightDir), 0.0, 1.0);
@@ -1344,10 +1345,49 @@ void main(){
       col = lit + matCol*emiss;
     }
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
-    col = mix(col, farTint(rayDir, mix(skyColor(rayDir), uSkyLo, 0.4)), fogAmt);
+    col = mix(col, skyColor(rayDir), fogAmt);            // aerial perspective, one truth
   }else{
-    col = farTint(rayDir, skyColor(rayDir));   // misses share the exact same far truth
-    // (the old 'valley haze' uSkyLo wash lived here — it was the thing erasing the horizon)
+    col = skyColor(rayDir);
+    // ---- FAR FIELD: the world does not end at the march budget. Rays that outran
+    // ---- it march on against the bare heightfield in a dozen giant strides, so the
+    // ---- horizon is real terrain fading into real fog — never a painted band.
+    if(rayDir.y < 0.08){
+      float t=uFar;
+      float hPrev = ro.y + rayDir.y*t - groundHF(ro.xz + rayDir.xz*t);
+      float tHit=-1.0;
+      if(hPrev < 0.0){
+        // already under the surface at the first sample: the crossing happened
+        // inside the main march's range on a grazing path it exhausted itself on.
+        // Recover it by bisection — this cohort WAS the sky-stripe.
+        float lo=uFar*0.40, hi=uFar;
+        for(int i=0;i<10;i++){
+          float mid=0.5*(lo+hi);
+          vec3 mp=ro+rayDir*mid;
+          if(mp.y-groundHF(mp.xz) < 0.0) hi=mid; else lo=mid;
+        }
+        tHit=hi;
+      }else{
+        for(int i=0;i<12;i++){
+          float tn = t*1.30 + 10.0;
+          vec3 fp = ro + rayDir*tn;
+          float h = fp.y - groundHF(fp.xz);
+          if(h < 0.0){ tHit = mix(t, tn, hPrev/max(1e-3, hPrev-h)); break; }
+          t=tn; hPrev=h;
+          if(t>2800.0) break;
+        }
+      }
+      if(tHit>0.0){
+        vec3 fp=ro+rayDir*tHit;
+        float e=tHit*0.012+1.5;
+        vec3 n=normalize(vec3(groundHF(fp.xz-vec2(e,0.0))-groundHF(fp.xz+vec2(e,0.0)), 2.0*e,
+                              groundHF(fp.xz-vec2(0.0,e))-groundHF(fp.xz+vec2(0.0,e))));
+        float dif=clamp(dot(n,uLightDir),0.0,1.0);
+        vec3 gcol=vec3(0.42,0.38,0.30);
+        vec3 lit = gcol*uLightCol*dif + gcol*uAmbient*(0.55+0.45*n.y);
+        float fg = 1.0-exp(-uFog*tHit);
+        col = mix(lit, col, fg);
+      }
+    }
   }
   col = pow(col, vec3(0.4545));
   // ---- optic reticle: the player looks THROUGH the glass while aiming ----
@@ -1666,7 +1706,7 @@ LEVELS.area1={
   id:'area1', name:'AREA 1 · THE CAMP', kind:'authored',
   bounds:{x0:-200,z0:-200,x1:200,z1:200},
   insertion:{x:-182,y:0,z:-42,yaw:0.9},
-  ground:{rim:16, rimW:22, noise:0.35},     // the valley bowl: treeline cliffs at the edge
+  ground:{rim:8, rimW:26, noise:0.35},      // a treed embankment; the hills carry the horizon
   atmos:{far:470, fog:0.0048},               // see clean across the camp
   ambient:1.0,
   regions:[
@@ -1978,7 +2018,14 @@ function levelGroundJS(px,pz){
   const b=activeLevel.bounds, g=activeLevel.ground;
   const edge=Math.min(px-b.x0, b.x1-px, pz-b.z0, b.z1-pz);
   const t=Math.min(1,Math.max(0,(g.rimW-edge)/g.rimW));
-  return g.noise*Math.sin(px*0.07)*Math.sin(pz*0.06) + t*t*g.rim;
+  let h=g.noise*Math.sin(px*0.07)*Math.sin(pz*0.06) + t*t*g.rim;
+  const out=Math.max(0,-edge);                       // LEVEL-PRIM: hills beyond the rim
+  if(out>0){
+    const roll=Math.sin(px*0.011+1.7)*Math.sin(pz*0.013+0.4)
+             + 0.5*Math.sin(px*0.027-0.8)*Math.sin(pz*0.023+2.1);
+    h += (roll*0.5+0.62)*22.0*Math.min(1,out/70) + out*0.015;
+  }
+  return h;
 }
 function levelSdfJS(px,py,pz){
   const b=activeLevel.bounds;
@@ -2608,7 +2655,13 @@ function takeBagAmmo(type,want){
 
 // ---- MENU STATE: single authority. Everything below is derived. -------------------
 const Menus={view:'closed', inspect:null};
+// the worn tool has no business behind the rucksack: hidden while the bag is open,
+// and while a bag-originated close is still easing out. Tool-view exits raise it live.
+function wornHidden(){
+  return (menuMode===1) || (menuMode===0 && Menus.prev==='bag' && menuAnim>0.06);
+}
 function menuSet(view){
+  Menus.prev=Menus.view;                                  // provenance: who are we leaving?
   Menus.view=view;
   if(view!=='closed' && Menus.inspect && !(view==='bag'||view==='tool')) Menus.inspect=null;
   if(view==='closed') Menus.inspect=null;
@@ -2638,7 +2691,7 @@ function closeAllInv(){ menuSet('closed'); }
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
   else if(inspectItem) closeInspect();                    // then any open sub-inventory
-  else if(isInventoryOpen) closeAllInv();                 // backing out of the rucksack is an EXIT
+  else if(isInventoryOpen) openToolMenu();                // circle: rucksack -> tool rack (by design)
   else if(isToolMenuOpen) closeAllInv();                  // tool rack -> back to the valley
   else openToolMenu();
 }
@@ -4555,9 +4608,7 @@ function renderZones(){
         const div=document.createElement('div'); div.className='cell equipCell';
         const it=equip[slot];
         if(currentFocus===0&&zoneIdx===zi&&cursorY===r) div.classList.add('cursor','cellFocus');
-        div.innerHTML=it
-          ? '<img src="'+makeIcon(it)+'" style="width:38px;height:38px;">'
-          : '<span class="slotGhost">'+slot.slice(0,4).toUpperCase()+'</span>';
+        if(!it) div.innerHTML='<span class="slotGhost">'+slot.slice(0,4).toUpperCase()+'</span>';
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
@@ -4578,10 +4629,8 @@ function renderZones(){
           const fits=z.slotMode ? !z.grid[r][c] : gridFits(heldWorld.w.item,c,r,z.grid,z.cols,z.rows);
           div.style.outline='2px solid '+(fits?'#57e0a3':'#e0492e');
         }
-        if(item&&(item.widget||(item.x===c&&item.y===r))){
-          div.innerHTML=item.widget
-            ? '<div class="widg"><div class="widgLab">'+item.label+'</div><div class="widgVal">'+widgetValueText(item)+'</div></div>'
-            : '<img src="'+makeIcon(item)+'" style="width:'+(z.slotMode?38:item.w*44+(item.w-1)*3)+'px;height:'+(z.slotMode?38:item.h*44+(item.h-1)*3)+'px;position:absolute;z-index:2;pointer-events:none;">';
+        if(item&&item.widget){
+          div.innerHTML='<div class="widg"><div class="widgLab">'+item.label+'</div><div class="widgVal">'+widgetValueText(item)+'</div></div>';
         }
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
@@ -4589,6 +4638,42 @@ function renderZones(){
         div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); });
         g.appendChild(div);
       }
+    }
+    // thumbnails span their whole footprint, floating over the slots — the
+    // original technique, anchored to THIS zone's wrap (position:relative)
+    if(!z.equipCol && !z.locked && z.grid){
+      const seen=new Set();
+      for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++){
+        const item=z.grid[r][c];
+        if(!item||seen.has(item)) continue;
+        if(!z.slotMode && (item.x!==c||item.y!==r)) continue;
+        seen.add(item);
+        const span=document.createElement('div');
+        span.className='itemSpan';
+        const sw=z.slotMode?1:item.w, sh=z.slotMode?1:item.h;
+        span.style.left=(GRID_PAD+c*CELL_PITCH)+'px';
+        span.style.top =(GRID_PAD+r*CELL_PITCH)+'px';
+        span.style.width =(sw*CELL_PITCH-3)+'px';
+        span.style.height=(sh*CELL_PITCH-3)+'px';
+        const img=document.createElement('img');
+        img.src=makeIcon(item); img.alt=item.name; img.draggable=false;
+        span.appendChild(img);
+        const extra=item instanceof Ammunition?'×'+item.count:(item instanceof Magazine?item.loaded+'/'+item.maxCapacity:'');
+        const lbl=document.createElement('div'); lbl.className='lbl2';
+        lbl.textContent=item.name+(extra?' '+extra:'');
+        span.appendChild(lbl);
+        g.appendChild(span);
+      }
+    }
+    if(z.equipCol){
+      EQUIP_SLOTS.forEach((slot,r)=>{
+        const it=equip[slot]; if(!it) return;
+        const span=document.createElement('div'); span.className='itemSpan';
+        span.style.left=GRID_PAD+'px'; span.style.top=(GRID_PAD+r*CELL_PITCH)+'px';
+        span.style.width=(CELL_PITCH-3)+'px'; span.style.height=(CELL_PITCH-3)+'px';
+        const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false;
+        span.appendChild(img); g.appendChild(span);
+      });
     }
     blk.appendChild(g); (z.equipCol?left:right).appendChild(blk);
   });
@@ -5226,7 +5311,7 @@ function frame(){
 
   // ---- camera & menu presentation ----
   menuAnim+=((uiMenusOpen()?1:0)-menuAnim)*Math.min(1,9*dt);
-  if(isInventoryOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2;
+  if(isInventoryOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2; else menuMode=0;
   const tYawOff=0, tPitchOff=uiMenusOpen()?-0.40:0;    // the camera dips to the raised prop
   playerPos.camYawOffset+=(tYawOff-playerPos.camYawOffset)*10*dt;
   playerPos.camPitchOffset+=(tPitchOff-playerPos.camPitchOffset)*8*dt;
@@ -5277,7 +5362,7 @@ function frame(){
   gl.uniform3f(U.uGatePos,GATE.x,0,GATE.z);
   const resT=activeTool?(activeTool._res||resolveTool(activeTool)):null;
   gl.uniform1i(U.flashlightOn,(playerPos.flashlightOn&&resT&&resT.flashlight)?1:0);
-  gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld)?1:0);
+  gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, 0);
 
