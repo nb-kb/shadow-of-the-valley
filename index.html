@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21f';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21g';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1559,14 +1559,14 @@ function terrainHJS(x,z){
 }
 
 function restOnSurface(x,yStart,z){
-  let y=yStart, dPrev=mapWorldJS(x,y,z);
-  for(let i=0;i<10;i++){
-    if(dPrev<0.012) return y;
+  let y=Math.ceil(yStart*8)/8, dPrev=mapWorldJS(x,y,z);   // quantized seed: same answer every frame
+  for(let i=0;i<12;i++){
+    if(dPrev<0.0025) return y;
     const step=Math.min(dPrev*1.5, dPrev+0.5);
     const yn=y-step, d=mapWorldJS(x,yn,z);
     if(d<0){                                   // overshot into the surface: bisect back
       let lo=yn, hi=y;
-      for(let k=0;k<6;k++){ const m=0.5*(lo+hi); (mapWorldJS(x,m,z)<0)?(lo=m):(hi=m); }
+      for(let k=0;k<9;k++){ const m=0.5*(lo+hi); (mapWorldJS(x,m,z)<0)?(lo=m):(hi=m); }
       return hi;
     }
     y=yn; dPrev=d;
@@ -3117,8 +3117,10 @@ function camForward(){                                 // scratch — never hold
   return _camFwd;
 }
 const _camPosV=new Vec3(0,0,0);
-function camPos(){ return _camPosV.set(playerPos.x+Math.cos(cameraYaw)*playerPos.currentLean,
-  playerPos.y+playerPos.baseHeight, playerPos.z-Math.sin(cameraYaw)*playerPos.currentLean); }
+function camPos(){
+  const ySm=(playerPos.ySm===undefined)?playerPos.y:playerPos.ySm;
+  return _camPosV.set(playerPos.x+Math.cos(cameraYaw)*playerPos.currentLean,
+  ySm+playerPos.baseHeight, playerPos.z-Math.sin(cameraYaw)*playerPos.currentLean); }
 function camBasis(){
   const cy=Math.cos(cameraYaw),sy=Math.sin(cameraYaw);
   const cp=Math.cos(cameraPitch),sp=Math.sin(cameraPitch);
@@ -5257,12 +5259,14 @@ function updatePlayer(dt){
     if(playerPos.velY<=0.001&&gd<0.30){
       const sy=restOnSurface(playerPos.x,playerPos.y+0.45,playerPos.z);
       if(sy>playerPos.y-0.38){                 // a step down, not a cliff
-        const dy=sy-playerPos.y;
-        playerPos.y += (Math.abs(dy)>0.20) ? dy : dy*Math.min(1,26*dt);   // ease, don't teleport
+        playerPos.y=sy;                        // exact: the ground is the ground
         playerPos.onGround=true; playerPos.velY=0;
       }else playerPos.onGround=false;
     }
     else playerPos.onGround=false;
+    // the camera trails the body: terrain noise reads as gait, not vibration
+    if(playerPos.ySm===undefined || Math.abs(playerPos.y-playerPos.ySm)>0.6) playerPos.ySm=playerPos.y;
+    else playerPos.ySm += (playerPos.y-playerPos.ySm)*Math.min(1,14*dt);
     // coyote: you may still jump a beat after leaving the edge
     playerPos.coyoteT = playerPos.onGround ? 0.09 : Math.max(0,playerPos.coyoteT-dt);
     // buffer: a press just before landing still lands the jump
@@ -5309,6 +5313,11 @@ function updatePlayer(dt){
 
 function updateWorldItems(dt){
   for(const w of worldItems){
+    if(w.settled && !w.held){
+      if(Math.abs(w.vel.x)+Math.abs(w.vel.y)+Math.abs(w.vel.z)>0.05) w.settled=false;  // something shoved it
+      else continue;                                                 // asleep: zero cost, zero jitter
+    }
+    if(w.held) w.settled=false;
     // gravity always tugs the centre — a held item hangs and swings on its pin
     w.vel.y-=P('gravity')*(w.held?0.45:0.9)*dt;
     w.pos.addScaledVector(w.vel,dt);
@@ -5321,9 +5330,11 @@ function updateWorldItems(dt){
       else if(w.vel.y<0){ w.vel.y=0;
         const sy=restOnSurface(w.pos.x,w.pos.y+0.3,w.pos.z);
         if(sy>w.pos.y-0.6){
-          const dy=(sy+0.12)-w.pos.y;
-          w.pos.y += Math.abs(dy)<0.01 ? dy : dy*Math.min(1,14*dt);
-          if(Math.abs(dy)<0.05){ w.vel.x*=Math.max(0,1-14*dt); w.vel.z*=Math.max(0,1-14*dt); }  // grounded: real friction
+          w.pos.y=sy+0.12;                                          // exact: it lands, it stays
+          w.vel.x*=Math.max(0,1-14*dt); w.vel.z*=Math.max(0,1-14*dt);
+          if(Math.abs(w.vel.x)+Math.abs(w.vel.z)<0.03 && Math.abs(w.rotVel||0)<0.2){
+            w.vel.x=0; w.vel.z=0; w.rotVel=0; w.settled=true;       // asleep until touched
+          }
         }
       }
       w.vel.x*=Math.max(0,1-6*dt); w.vel.z*=Math.max(0,1-6*dt);
