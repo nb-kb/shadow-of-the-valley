@@ -289,7 +289,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20p';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20q';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -2051,7 +2051,7 @@ function activateAtCursor(){
     if(mag && mag.acceptedType===cell.ammoType && mag.loaded<mag.maxCapacity){
       const t=Math.min(mag.maxCapacity-mag.loaded, cell.count);
       mag.loaded+=t; cell.count-=t;
-      if(cell.count<=0) removeFromGrid(cell,f.grid);
+      if(cell.count<=0){ if(f.rack) writeRef(refAt(f),null); else removeFromGrid(cell,f.grid); }
       playSound('reload'); refreshInvUI(); return;
     }
   }
@@ -2092,7 +2092,7 @@ function quickUse(){
     if(mag && mag.acceptedType===cell.ammoType && mag.loaded<mag.maxCapacity){
       const t=Math.min(mag.maxCapacity-mag.loaded, cell.count);
       mag.loaded+=t; cell.count-=t;
-      if(cell.count<=0) removeFromGrid(cell,f.grid);
+      if(cell.count<=0){ if(f.rack) writeRef(refAt(f),null); else removeFromGrid(cell,f.grid); }
       playSound('reload'); refreshInvUI(); return;
     }
   }
@@ -3443,6 +3443,7 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
     div.addEventListener('mouseenter',()=>{
       if(currentFocus===focusIdx && cursorX===c && cursorY===r) return;
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+      if(isDebugOpen) return;
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       refreshInvUI();
     });
@@ -3600,6 +3601,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   d.addEventListener('mouseenter',()=>{
     if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) return;
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+    if(isDebugOpen) return;
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
     refreshInvUI();
   });
@@ -3683,7 +3685,7 @@ function toggleDebug(){
   isDebugOpen=!isDebugOpen;
   document.getElementById('debugUI').classList.toggle('hidden',!isDebugOpen);
   if(isDebugOpen){ document.exitPointerLock&&document.exitPointerLock(); buildDebugPanel(); }
-  else requestLock();
+  else if(!uiMenusOpen()) requestLock();      // a menu underneath keeps the mouse free
 }
 let debugBuilt=false;
 let DBG_KEYS=[], dbgSel=0;
@@ -3715,7 +3717,8 @@ function dbgNav(){
   if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1);
   if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(-cols);
   if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(cols);
-  if(INPUT.rawKey['KeyE']||INPUT.rawPad[0]) dbgSpawnToHand(DBG_KEYS[dbgSel]);
+  if(INPUT.rawPad[1]){ toggleDebug(); return; }                       // ○ backs out
+  if(INPUT.rawKey['KeyE']||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
   if(moved){ playSound('click'); renderDebugItems(); }
 }
 function buildDebugPanel(){
@@ -4030,7 +4033,7 @@ function frame(){
     maybeSpawnCellLoot(ccx,ccz);
     if(Math.hypot(playerPos.x-GATE.x,playerPos.z-GATE.z)<2.4) onBreach();
   }
-  if(uiMenusOpen()) menuNav();
+  if(uiMenusOpen() && !isDebugOpen) menuNav();      // debug owns the pad while open
   updateDayNight();
 
   // ---- camera & menu presentation ----
