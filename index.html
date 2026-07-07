@@ -279,12 +279,57 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- Intro / death screens -->
 <div id="introScreen" class="screen"><div class="inner panel">
-  <h1 style="font-size:23px;letter-spacing:.3em;">SHADOW OF THE VALLEY</h1>
+<svg id="titleCard" viewBox="0 0 960 540" role="img" aria-label="SHADOW OF THE VALLEY" style="width:100%;max-width:680px;display:block;margin:0 auto 6px;"><g stroke="#8f887a" fill="none" stroke-linejoin="miter" stroke-linecap="square">
+<polyline points="30,214 252,152 198,240 472,150 406,254 702,144 642,260 935,152" stroke-width="13" opacity="0.55"/>
+<polyline points="150,98 362,62 332,122 602,60 562,130 862,72" stroke-width="8" opacity="0.4"/>
+<polyline points="330,306 432,274 402,334 562,286" stroke-width="6" opacity="0.35"/>
+<polyline points="884,120 922,104 902,138 944,124" stroke-width="5" opacity="0.4"/>
+<polyline points="70,300 108,286" stroke-width="5" opacity="0.35"/>
+</g>
+<g stroke="#ddd6c6" fill="none" stroke-linejoin="miter" stroke-linecap="square">
+<polyline points="135.8,88.2 98.9,100.6 97.3,119.0 139.2,124.0 138.8,151.6 99.8,150.9" stroke-width="7.5"/>
+<polyline points="160.5,87.5 162.6,155.4" stroke-width="7.5"/>
+<polyline points="197.4,84.5 203.6,158.0" stroke-width="7.5"/>
+<polyline points="164.4,124.0 200.4,120.0" stroke-width="7.5"/>
+<polyline points="224.8,159.1 241.5,85.9 272.0,153.3" stroke-width="7.5"/>
+<polyline points="236.1,134.1 257.1,134.0" stroke-width="7.5"/>
+<polyline points="283.0,87.9 290.6,157.9" stroke-width="7.5"/>
+<polyline points="285.5,91.0 313.3,91.1 333.5,117.4 318.1,149.8 288.3,154.6" stroke-width="7.5"/>
+<polyline points="369.2,84.2 349.8,106.3 355.1,140.4 373.5,155.8 396.1,133.1 387.7,97.8 369.0,87.5" stroke-width="7.5"/>
+<polyline points="408.2,85.9 424.1,157.1 434.4,112.0 448.3,154.2 456.9,84.3" stroke-width="7.5"/>
+<polyline points="410.5,220.0 402.6,228.9 404.2,244.4 414.5,251.3 422.1,243.0 421.4,224.4 411.7,219.6" stroke-width="5.0"/>
+<polyline points="450.4,218.4 430.8,221.4 433.0,253.4" stroke-width="5.0"/>
+<polyline points="431.7,236.3 445.6,233.8" stroke-width="5.0"/>
+<polyline points="475.6,219.2 498.5,217.1" stroke-width="5.0"/>
+<polyline points="485.3,218.7 488.8,250.8" stroke-width="5.0"/>
+<polyline points="505.9,219.3 508.8,250.9" stroke-width="5.0"/>
+<polyline points="525.0,218.6 527.0,251.5" stroke-width="5.0"/>
+<polyline points="507.0,236.7 526.2,234.6" stroke-width="5.0"/>
+<polyline points="554.5,218.9 535.1,219.8 536.3,251.5 555.2,251.9" stroke-width="5.0"/>
+<polyline points="537.7,235.6 550.8,235.0" stroke-width="5.0"/>
+<polyline points="217.0,376.5 260.5,464.5 281.6,374.4" stroke-width="9.5"/>
+<polyline points="313.9,472.0 328.5,376.9 374.7,465.2" stroke-width="9.5"/>
+<polyline points="320.0,434.8 352.9,430.2" stroke-width="9.5"/>
+<polyline points="389.9,380.3 400.2,468.2 453.2,460.1" stroke-width="9.5"/>
+<polyline points="474.1,381.3 480.3,472.6 538.5,460.1" stroke-width="9.5"/>
+<polyline points="605.0,371.2 556.2,378.3 563.5,467.4 621.7,459.9" stroke-width="9.5"/>
+<polyline points="560.0,422.5 596.1,419.2" stroke-width="9.5"/>
+<polyline points="629.6,378.7 665.5,413.4 698.4,369.0" stroke-width="9.5"/>
+<polyline points="670.5,413.8 673.1,468.0" stroke-width="9.5"/>
+</g>
+<g stroke="#ddd6c6" fill="none" stroke-width="7" stroke-linejoin="round">
+<path d="M 822 342 C 782 344 758 372 760 404 C 761 424 772 438 788 444 L 788 462 C 788 472 796 478 806 478 L 842 478 C 852 478 860 472 860 462 L 860 442 C 876 434 886 418 886 398 C 886 366 862 340 822 342 Z"/>
+<line x1="806" y1="478" x2="806" y2="452" stroke-width="5"/>
+<line x1="824" y1="480" x2="824" y2="452" stroke-width="5"/>
+<line x1="842" y1="478" x2="842" y2="452" stroke-width="5"/>
+<ellipse cx="798" cy="398" rx="14" ry="16" fill="#ddd6c6" stroke="none"/>
+<ellipse cx="846" cy="396" rx="15" ry="16" fill="#ddd6c6" stroke="none"/>
+</g></svg>
   <p>The Ashen Covenant strings its camps along the valley floor.<br>Tonight the generator stuttered, and your cell door forgot its faith.</p>
   <p><b>Follow the valley to the beacon.</b> Every zealot carries the same Tool you do — take theirs apart and make yours stranger.</p>
   <p>Shadow hides you. Light betrays you. Noise carries.</p>
   <p style="font-size:10px;">WASD move · <b>E</b> grab / reload / place · <b>LMB</b> fire or hurl · Shift sprint toggles · <b>B</b> rucksack · <b>Tab</b> tool · <b>X</b> inspect in menus · F light · M manual</p>
-  <div class="go">— press any key or pad button —</div>
+  <div class="go" id="bootStatus">COMPILING THE VALLEY…</div>
 </div></div>
 <div id="deathScreen" class="screen hidden"><div class="inner panel">
   <h1 style="color:var(--alert);">RECLAIMED</h1>
@@ -307,7 +352,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20s';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20t';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -3969,7 +4014,10 @@ function anyKeyGate(){
     startRun(); requestLock();
   }
 }
-setTimeout(()=>{introArmed=true;},600);
+setTimeout(()=>{introArmed=true;
+  const bs=document.getElementById('bootStatus');
+  if(bs) bs.textContent='— press any key or pad button —';
+},600);
 
 // ============================================================
 // UI RENDERERS — grids, tooltip, toast, manual, debug
