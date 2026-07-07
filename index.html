@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20y';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20z';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1194,6 +1194,14 @@ vec3 calcNormal(vec3 p){
                   + k.xxx*map(p+k.xxx*e).x );
 }
 
+// what does "infinitely far" look like along this ray? Above the horizon: sky.
+// Below it: hazed earth. Fogged geometry and missed rays must both converge here,
+// or the horizon tears into a sky-colored band (it did).
+vec3 farTint(vec3 dir, vec3 skyRef){
+  float belowH = 1.0 - smoothstep(0.0, 0.018, dir.y);       // fully earth AT the line (edges legal)
+  vec3 earthHaze = vec3(0.40,0.36,0.29)*(0.45+0.55*uAmbient);
+  return mix(skyRef, earthHaze, belowH*0.95);
+}
 vec3 skyColor(vec3 dir){
   vec3 sky = mix(uSkyLo, uSkyHi, clamp(dir.y*0.7+0.35, 0.0, 1.0));
   float sd = clamp(dot(dir, uLightDir), 0.0, 1.0);
@@ -1336,15 +1344,10 @@ void main(){
       col = lit + matCol*emiss;
     }
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
-    col = mix(col, mix(skyColor(rayDir), uSkyLo, 0.4), fogAmt);
+    col = mix(col, farTint(rayDir, mix(skyColor(rayDir), uSkyLo, 0.4)), fogAmt);
   }else{
-    col = skyColor(rayDir);
-    // rays that outrun uFar below the horizon are far ground, not heaven —
-    // paint the earth-haze back in so the horizon line exists again
-    float belowH = smoothstep(0.02, -0.035, rayDir.y);
-    vec3 earthHaze = mix(vec3(0.44,0.40,0.34)*(0.35+0.75*uAmbient), uSkyLo, 0.45);
-    col = mix(col, earthHaze, belowH*0.85);
-    col = mix(col, uSkyLo, smoothstep(0.10,-0.02,rayDir.y));   // valley haze — never a raw hole
+    col = farTint(rayDir, skyColor(rayDir));   // misses share the exact same far truth
+    // (the old 'valley haze' uSkyLo wash lived here — it was the thing erasing the horizon)
   }
   col = pow(col, vec3(0.4545));
   // ---- optic reticle: the player looks THROUGH the glass while aiming ----
