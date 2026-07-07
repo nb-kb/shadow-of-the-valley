@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21j';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21k';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -667,6 +667,8 @@ uniform vec3  worldItemPos[${RLIM.ITEMS}];
 uniform vec4  worldItemData[${RLIM.ITEMS}];  // x:type y:yaw z:held w:pitch
 
 uniform float uWorldTop;                    // nothing exists above this; upward rays stop at the slab exit
+uniform vec4  uVCrates[6];                  // valley gate cache: x,z,size,unused
+uniform int   uVCrateCount;
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
 uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state z:muzzle w:hurt
@@ -1068,6 +1070,9 @@ vec2 mapStatic(vec3 p){
   }
   float beacon=sdCapsule(p, vec3(uGatePos.x,0.0,uGatePos.z), vec3(uGatePos.x,70.0,uGatePos.z), 0.30);
   if(beacon<res.x) res=vec2(beacon,7.0);
+  for(int i=0;i<6;i++){ if(i>=uVCrateCount) break; vec4 vc=uVCrates[i];   // VALLEY-CRATE twin
+    float vcd=sdBoxL(p, vec3(vc.x,vc.z*0.5,vc.y), vec3(vc.z*0.55,vc.z*0.5,vc.z*0.55));
+    if(vcd<res.x) res=vec2(vcd,4.0); }
   for(int i=0;i<16;i++){                          // world edits — keep in lockstep with applySdfEditsJS
     if(i>=uEditCount) break;
     vec4 ed=uEdits[i];
@@ -1505,7 +1510,7 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
- 'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uWorldTop',
+ 'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uWorldTop','uVCrateCount',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
@@ -1514,6 +1519,7 @@ U.uGlobs   = locArray('uGlobs', 10);
 U.itemPos  = locArray('worldItemPos', RLIM.ITEMS);
 U.itemData = locArray('worldItemData',RLIM.ITEMS);
 U.enemyPos = locArray('enemyPos',     RLIM.ENEMIES);
+U.uVCrates = locArray('uVCrates',     6);
 U.enemyData= locArray('enemyData',    RLIM.ENEMIES);
 U.trA      = locArray('tracerA',      RLIM.TRACERS);
 U.trB      = locArray('tracerB',      RLIM.TRACERS);
@@ -1587,6 +1593,13 @@ function mapWorldBase(px,py,pz){
     const bdy=Math.max(0,Math.abs(py-35)-35);
     const bxz=Math.hypot(px-GATE.x,pz-GATE.z);
     res=Math.min(res, Math.sqrt(bxz*bxz+bdy*bdy)-0.30);
+  }
+  for(const vc of LEVELS.valley.crates){                 // VALLEY-CRATE twin
+    const hx=vc[2]*0.55, hy=vc[2]*0.5;
+    const dx=Math.max(Math.abs(px-vc[0])-hx,0), dy=Math.max(Math.abs(py-hy)-hy,0), dz=Math.max(Math.abs(pz-vc[1])-hx,0);
+    const inner=Math.min(Math.max(Math.abs(px-vc[0])-hx, Math.max(Math.abs(py-hy)-hy, Math.abs(pz-vc[1])-hx)),0);
+    const vcd=Math.hypot(dx,dy,dz)+inner;
+    if(vcd<res) res=vcd;
   }
   const cs=20.0;
   const cx=Math.floor((px+cs*0.5)/cs), cz=Math.floor((pz+cs*0.5)/cs);
@@ -1784,27 +1797,27 @@ LEVELS.area1={
   ambient:1.0,
   regions:[
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
-    {id:'crateA', kind:LVL.KIND.PROPS, box:[-114,-92,-102,-78],
+    {id:'crateA', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-114,-92,-102,-78],
      crates:[[-110,-86,0.85],[-108.7,-85.1,0.7],[-104,-80,0.75],[-112,-79,0.9]]},
-    {id:'crateB', kind:LVL.KIND.PROPS, box:[104,-70,120,-50],
+    {id:'crateB', loot:['mods','common'], kind:LVL.KIND.PROPS, box:[104,-70,120,-50],
      crates:[[108,-64,0.9],[109.3,-63,0.7],[116,-56,0.8],[106,-54,0.7]]},
-    {id:'crateC', kind:LVL.KIND.PROPS, box:[128,-80,140,-68],
+    {id:'crateC', loot:['mods','rare'], kind:LVL.KIND.PROPS, box:[128,-80,140,-68],
      crates:[[132,-76,0.85],[133.4,-75.1,0.7],[137,-71,0.75]]},
-    {id:'crateD', kind:LVL.KIND.PROPS, box:[-142,-142,-134,-134],
+    {id:'crateD', loot:['common'], kind:LVL.KIND.PROPS, box:[-142,-142,-134,-134],
      crates:[[-140,-140,0.8],[-138.6,-139.2,0.65],[-136,-136,0.75]]},
-    {id:'crateE', kind:LVL.KIND.PROPS, box:[-67,-142,-59,-134],
+    {id:'crateE', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-67,-142,-59,-134],
      crates:[[-65,-140,0.85],[-63.6,-139.1,0.7],[-61,-136,0.8]]},
-    {id:'crateF', kind:LVL.KIND.PROPS, box:[84,-142,92,-134],
+    {id:'crateF', loot:['gear'], kind:LVL.KIND.PROPS, box:[84,-142,92,-134],
      crates:[[86,-140,0.75],[87.3,-139.2,0.7],[90,-136,0.85]]},
-    {id:'crateG', kind:LVL.KIND.PROPS, box:[-167,-117,-159,-109],
+    {id:'crateG', loot:['common'], kind:LVL.KIND.PROPS, box:[-167,-117,-159,-109],
      crates:[[-165,-115,0.8],[-163.7,-114.1,0.65],[-161,-111,0.75]]},
-    {id:'crateH', kind:LVL.KIND.PROPS, box:[59,-92,67,-84],
+    {id:'crateH', loot:['mods'], kind:LVL.KIND.PROPS, box:[59,-92,67,-84],
      crates:[[61,-90,0.85],[62.4,-89.1,0.7],[65,-86,0.8]]},
-    {id:'crateI', kind:LVL.KIND.PROPS, box:[159,-117,167,-109],
+    {id:'crateI', loot:['rare','gear'], kind:LVL.KIND.PROPS, box:[159,-117,167,-109],
      crates:[[161,-115,0.75],[162.3,-114.2,0.7],[165,-111,0.8]]},
-    {id:'crateJ', kind:LVL.KIND.PROPS, box:[9,-142,17,-134],
+    {id:'crateJ', loot:['common'], kind:LVL.KIND.PROPS, box:[9,-142,17,-134],
      crates:[[11,-140,0.8],[12.4,-139.1,0.65],[15,-136,0.75]]},
-    {id:'crateK', kind:LVL.KIND.PROPS, box:[59,-67,67,-59],
+    {id:'crateK', loot:['gear','mods'], kind:LVL.KIND.PROPS, box:[59,-67,67,-59],
      crates:[[61,-65,0.85],[62.3,-64.2,0.7],[65,-61,0.8]]},
     {id:'road', kind:LVL.KIND.ROAD, w:4.6,
      cars:[[-24,-6,0.7],[6,32,2.3],[38,72,1.1]],
@@ -1881,14 +1894,17 @@ LEVELS.hideout={
     // and the one room a kid could seal — roofed, doorway boarded over with slats.
     {id:'house', kind:LVL.KIND.WALLS, box:[-9,-7,9,7], h:3.1, gate:['N',5.5,0.9],
      bldg:[-4.5,-4.5,1.5,0.5], bldgH:2.55, door:['E',0,0.9], boards:true},
-    {id:'clutter', kind:LVL.KIND.PROPS, box:[-8,-6,8,6],
+    {id:'clutter', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-8,-6,8,6],
      crates:[[-3.2,-3.4,0.9],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
              [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]]},
   ],
-  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[]},
+  exfils:[], doors:[], spawn:{zealots:[],lootN:4,minSpace:4,lootTable:[],lootRegions:[]},
   terminal:{x:-3.4,z:-0.6},
 };
-LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings' };   // the endless world
+LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
+  crates:[[92,-6,0.85],[93.3,-5.2,0.7],[108,8,0.8],[88,14,0.7],[112,-12,0.85],[106,16,0.75]],
+  crateTiers:['common','gear','mods'],
+  spawn:{lootN:10} };   // the endless world — supplies huddle by the gate
 
 // ---- bake: tile -> (<=2) region ids. Throws loudly if authoring breaks the budget. ----
 function bakeLevel(level){
@@ -2650,6 +2666,7 @@ const SETTINGS_REGISTRY=[
   {container:'headphones', id:'footstep', label:'STEPS',  kind:'range', min:0,max:1,step:0.1, functional:false, init:0.7},
 ];
 function buildDeviceInv(item, container){
+  item.deviceLocked=true;
   const defs=SETTINGS_REGISTRY.filter(d=>d.container===container);
   item.invCols=Math.min(4,Math.max(1,defs.length>4?4:defs.length));
   item.invRows=Math.ceil(defs.length/item.invCols);
@@ -2692,18 +2709,21 @@ function syncBagAlias(){
 // composed zones. Order = nav order = affinity fallback order.
 let zoneIdx=1;
 function invZones(){
+  if(Menus.view==='crate'&&lootCrate)
+    return [{id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
+             external:true}];
+  return playerZones();
+}
+function playerZones(){
   const z=[{id:'equip',label:'RIG',equipCol:true,cols:1,rows:EQUIP_SLOTS.length}];
   const push=slot=>{ const it=equip[slot];
     if(it&&it.inv&&it.invCols>0)
       z.push({id:slot,label:it.name.toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
               locked:!!it.settingsDevice,storage:!it.settingsDevice,slotMode:!!it.slotMode}); };
   ['rucksack','harness','holster','belt','goggles','headphones'].forEach(push);
-  if(lootCrate && isInventoryOpen)
-    z.push({id:'crate',label:'CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
-            storage:true,external:true});
   return z;
 }
-function storageZones(){ return invZones().filter(z=>z.storage); }
+function storageZones(){ return playerZones().filter(z=>z.storage); }
 function clampZone(){
   const z=invZones();
   zoneIdx=clamp(zoneIdx,0,z.length-1);
@@ -2809,27 +2829,29 @@ function menuSet(view){
   isToolMenuOpen  = view==='tool';
   inspectItem     = Menus.inspect;
   menuMode        = view==='bag'?1:view==='tool'?2:0;
-  document.getElementById('backpackUI').classList.toggle('hidden',view!=='bag');
+  if(view!=='crate') lootCrate=null;                      // leaving the crate ends the crate
+  document.getElementById('backpackUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));
   document.getElementById('toolUI').classList.toggle('hidden',view!=='tool');
   if(view==='closed'){
     document.getElementById('inspectUI').classList.add('hidden');
     requestLock();
   }else{
     document.exitPointerLock&&document.exitPointerLock();
-    setFocus(view==='bag'?0:1);
+    setFocus((view==='bag'||view==='crate')?0:1);
   }
   refreshInvUI();
 }
 function menuInspect(item){
   Menus.inspect=item; inspectItem=item;
-  if(item instanceof Tool) setFocus(2);                 // only tool inspects carry a grid
+  if(item instanceof Tool || (item && item.inv)) setFocus(2);   // pockets are pockets
   else if(!item && currentFocus===2) setFocus(Menus.view==='tool'?1:0);
   refreshInvUI();
 }
 function closeAllInv(){ menuSet('closed'); lootCrate=null; }
-function openCrate(cr){ lootCrate=cr; menuSet('bag'); zoneIdx=Math.max(1,invZones().length-1); toast('CRATE'); }
+function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=0; cursorX=0; cursorY=0; toast('SUPPLY CRATE'); }
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
+  else if(Menus.view==='crate') closeAllInv();            // a crate is a room you simply leave
   else if(inspectItem) closeInspect();                    // then any open sub-inventory
   else if(isInventoryOpen) openToolMenu();                // circle: rucksack -> tool rack (by design)
   else if(isToolMenuOpen) closeAllInv();                  // tool rack -> back to the valley
@@ -2837,7 +2859,7 @@ function toolMenuVerb(){                                  // ○/Tab — one but
 }
 function openBag(){ menuSet('bag'); }
 function openToolMenu(){ menuSet('tool'); }
-function toggleInventory(){ isInventoryOpen?menuSet('closed'):menuSet('bag'); }
+function toggleInventory(){ (isInventoryOpen||Menus.view==='crate')?menuSet('closed'):menuSet('bag'); }
 function toggleToolMenu(){ isToolMenuOpen?menuSet('closed'):menuSet('tool'); }
 
 function rackZone(tool){
@@ -2853,6 +2875,9 @@ function rackZone(tool){
           rowsOf:cx=>{ let m=0; for(const c of cells) if(c.x-minX===cx) m=Math.max(m,c.y-minY+1); return Math.max(1,m); }};
 }
 function focusGrid(){
+  if(currentFocus===2 && inspectItem && inspectItem.inv && !(inspectItem instanceof Tool))
+    return {grid:inspectItem.inv, cols:inspectItem.invCols, rows:inspectItem.invRows,
+            locked:!!inspectItem.deviceLocked, inspectGrid:true};
   if(currentFocus===2 && inspectItem instanceof Tool) return rackZone(inspectItem);
   if(currentFocus===0){
     const z=clampZone();
@@ -2930,6 +2955,17 @@ function interactInventory(){
     playSound('click'); return;
   }
 
+  // ---- someone else's box: take, never stash ----------------------------------------
+  if(f.external){
+    if(heldWorld){ toast('TAKE ONLY'); playSound('empty'); return; }
+    if(cell){
+      if(autoPlaceAny(cell)){ removeFromGrid(cell,f.grid);
+        toast(cell.name.toUpperCase()+' TAKEN'); playSound('pickup'); }
+      else { toast('NO ROOM IN YOUR KIT'); playSound('empty'); }
+      refreshInvUI(); return;
+    }
+    playSound('click'); return;
+  }
   // ---- settings devices: dials are bolted in — interact ADJUSTS, never lifts --------
   if(f.locked){
     if(heldWorld){ toast('NO ROOM AMONG THE DIALS'); playSound('empty'); return; }
@@ -3023,13 +3059,17 @@ function activateAtCursor(){
   clampCursor(f);
   const cell=cellAt(f);
   if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
-    if(!cell){ closeInspect(); return; }
-    playSound('click'); return;
+    if(!cell && !heldWorld){ closeInspect(); return; }
+    if(f.locked){ if(cell&&cell.widget){ adjustWidget(cell,1); refreshInvUI(); } else playSound('click'); return; }
+    if(!f.inspectGrid){ playSound('click'); return; }   // tool pockets keep their old manners
   }
   if(!cell){ if(inspectItem) closeInspect(); return; }
   if(cell===inspectItem){ closeInspect(); return; }
   if(cell instanceof Magazine){ menuInspect(cell); playSound('click'); return; }
   if(cell instanceof Tool){
+    menuInspect(cell); playSound('click'); return;
+  }
+  if(cell && cell.inv && currentFocus!==2){               // pocketed gear opens its pockets
     menuInspect(cell); playSound('click'); return;
   }
   if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
@@ -3057,6 +3097,10 @@ function renderInspect(){
   }else if(inspectItem instanceof Tool){
     body.innerHTML='<div id="inspectRack"></div>';
     renderRack('inspectRack',inspectItem,2);
+  }else if(inspectItem.inv){
+    body.innerHTML='<div id="inspectPockets" class="gridWrap" style="position:relative;'
+      +'grid-template-columns:repeat('+inspectItem.invCols+',44px);"></div>';
+    renderGrid('inspectPockets', inspectItem.inv, inspectItem.invCols, inspectItem.invRows, 2);
   }else body.innerHTML='';
 }
 
@@ -4271,6 +4315,8 @@ function deployTo(levelId){
     activeLevel=null; levelBake=null;
     gameState='play';
     resetLevel();                       // the endless valley keeps its ring machinery
+    buildCrateRegistry(L);
+    seedLevelSpawns(L);
     playerPos.x=0; playerPos.z=0; playerPos.y=0;
   }
   _exfilHold=0;
@@ -4284,13 +4330,15 @@ function deployTo(levelId){
 let crateRegistry=[], lootCrate=null;
 function buildCrateRegistry(L){
   crateRegistry=[]; lootCrate=null;
-  for(const r of L.regions){
+  const add=(c,tiers)=>{
+    const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
+    crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3, tiers});
+  };
+  for(const r of (L.regions||[])){
     if(r.kind!==LVL.KIND.PROPS||!r.crates) continue;
-    for(const c of r.crates){
-      const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
-      crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3});
-    }
+    for(const c of r.crates) add(c, r.loot||['common']);
   }
+  if(L.crates) for(const c of L.crates) add(c, L.crateTiers||['common']);
 }
 function nearestCrateTo(x,z,skipFull){
   const order=crateRegistry.map(c=>[(c.x-x)**2+(c.z-z)**2,c]).sort((a,b)=>a[0]-b[0]);
@@ -4316,7 +4364,7 @@ function seedLevelSpawns(L){
   const inBox=(r)=>{ const b=r.box; return [b[0]+2+rng()*(b[2]-b[0]-4), b[1]+2+rng()*(b[3]-b[1]-4)]; };
   const placed=[];
   const clear=(x,z,sp)=>placed.every(p=>Math.hypot(p[0]-x,p[1]-z)>=sp);
-  for(const spec of L.spawn.zealots){
+  for(const spec of (L.spawn.zealots||[])){
     const r=regionById(spec.region); if(!r) continue;
     for(let n=0;n<spec.n;n++){
       for(let tries=0;tries<12;tries++){
@@ -4328,30 +4376,18 @@ function seedLevelSpawns(L){
       }
     }
   }
-  for(let n=0;n<L.spawn.lootN;n++){
-    const r=regionById(L.spawn.lootRegions[Math.floor(rng()*L.spawn.lootRegions.length)]);
-    for(let tries=0;tries<12;tries++){
-      const [x,z]=inBox(r.bldg?{box:r.bldg}:r);
-      if(!clear(x,z,3)) continue;
-      if(levelSdfJS(x,0.9,z)<0.3) continue;
-      if(!L.spawn.lootTiers) continue;
-      const tiers=(L.spawn.regionLoot&&L.spawn.regionLoot[r.id])||['common'];
-      const tier=L.spawn.lootTiers[tiers[Math.floor(rng()*tiers.length)]];
-      const key=tier[Math.floor(rng()*tier.length)];
-      if(crateRegistry.length){                              // the camp is boxed up. all of it.
-        const it2=ITEM_DEFS[key]();
-        let ok=false;
-        const near=nearestCrateTo(x,z,true);                   // regional flavor: nearest cluster
-        if(near && autoPlace(it2,near.inv,near.invCols,near.invRows)) ok=true;
-        if(!ok){ for(let a=0;a<crateRegistry.length;a++){      // overflow: any box with room
-          const cr=crateRegistry[(a+Math.floor(rng()*crateRegistry.length))%crateRegistry.length];
-          if(autoPlace(it2,cr.inv,cr.invCols,cr.invRows)){ ok=true; break; } } }
-        if(ok){ placed.push([x,z]); break; }                   // boxed: this item is DONE
+  // loot v3: no floor. every box rolls from its own tier character.
+  const TIERS=L.spawn.lootTiers||LEVELS.area1.spawn.lootTiers;
+  if(TIERS && crateRegistry.length){
+    for(let n=0;n<(L.spawn.lootN||0);n++){
+      for(let a=0;a<10;a++){
+        const cr=crateRegistry[Math.floor(rng()*crateRegistry.length)];
+        const tn=cr.tiers[Math.floor(rng()*cr.tiers.length)];
+        const list=TIERS[tn]||TIERS.common;
+        const it=ITEM_DEFS[list[Math.floor(rng()*list.length)]]();
+        if(it instanceof Magazine) it.loaded=Math.floor(rng()*it.maxCapacity);
+        if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break;
       }
-      const it=ITEM_DEFS[key]();
-      if(it instanceof Magazine) it.loaded=Math.floor(rng()*it.maxCapacity);
-      spawnWorldItem(it, x, levelGroundJS(x,z)+0.14, z);
-      placed.push([x,z]); break;
     }
   }
 }
@@ -4888,12 +4924,14 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
     const item=grid?grid[r][c]:null;
     if(item){
       if(item===inspectItem) div.style.borderColor='var(--gate)';
-      if(item.x===c&&item.y===r) div.classList.add('origin');
+      if(item.widget||(item.x===c&&item.y===r)) div.classList.add('origin');
+      if(item.widget){ div.classList.add('lockedCell');
+        div.innerHTML='<div class="widg"><div class="widgLab">'+item.label+'</div><div class="widgVal">'+widgetValueText(item)+'</div></div>'; }
     }
     if(currentFocus===focusIdx&&cursorX===c&&cursorY===r) div.classList.add('cursor','cellFocus');
     if(heldWorld&&currentFocus===focusIdx&&cursorX===c&&cursorY===r){
       const f=focusGrid();
-      div.style.outline='2px solid '+(gridFits(heldWorld.w.item,c,r,f.grid,f.cols,f.rows)?'#57e0a3':'#e0492e');
+      if(!f.locked) div.style.outline='2px solid '+(gridFits(heldWorld.w.item,c,r,f.grid,f.cols,f.rows)?'#57e0a3':'#e0492e');
     }
     div.addEventListener('mouseenter',()=>{
       if(currentFocus===focusIdx && cursorX===c && cursorY===r) return;
@@ -5592,6 +5630,11 @@ function frame(){
     for(const pr of projectiles) _top=Math.max(_top, pr.pos.y);
     for(const w of worldItems) if(!w.settled) _top=Math.max(_top, w.pos.y);
     gl.uniform1f(U.uWorldTop, _top+0.6);
+  }
+  { // valley gate cache — static per mode
+    const vc=(!activeLevel)?LEVELS.valley.crates:[];
+    gl.uniform1i(U.uVCrateCount, vc.length);
+    for(let i=0;i<vc.length&&i<6;i++) gl.uniform4f(U.uVCrates[i], vc[i][0], vc[i][1], vc[i][2], 0);
   }
   gl.uniform1f(U.uFar, activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0);
   gl.uniform2f(U.uSeed,SEED.x,SEED.y);
