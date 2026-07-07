@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21a';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21b';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -384,7 +384,7 @@ const PARAMS = {
   enemyDamage: {v:11,  min:0,   max:40,   step:1,   label:'zealot bolt dmg'},
   maxEnemies:  {v:3,   min:0,   max:6,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
-  fogDensity:  {v:0.028,min:0,  max:0.1,  step:0.002,label:'fog density'},
+  fogDensity:  {v:0.014,min:0,  max:0.1,  step:0.002,label:'fog density'},
 };
 const P = k => PARAMS[k].v;
 
@@ -979,7 +979,7 @@ vec2 mapStatic(vec3 p){
   float cellSize=20.0;
   vec2 cellId=floor((p.xz+cellSize*0.5)/cellSize);
   vec2 camCell=floor((ro.xz+cellSize*0.5)/cellSize);
-  if(abs(cellId.y)<=2.0 && max(abs(cellId.x-camCell.x),abs(cellId.y-camCell.y))<=4.0){
+  if(abs(cellId.y)<=2.0 && max(abs(cellId.x-camCell.x),abs(cellId.y-camCell.y))<=10.0){
     vec3 q=p;
     q.xz=mod(q.xz+cellSize*0.5,cellSize)-cellSize*0.5;
     bool isGate=(cellId==uGateCell);
@@ -1512,6 +1512,21 @@ function terrainHJS(x,z){
   return h;
 }
 
+function restOnSurface(x,yStart,z){
+  let y=yStart, dPrev=mapWorldJS(x,y,z);
+  for(let i=0;i<10;i++){
+    if(dPrev<0.012) return y;
+    const step=Math.min(dPrev*1.5, dPrev+0.5);
+    const yn=y-step, d=mapWorldJS(x,yn,z);
+    if(d<0){                                   // overshot into the surface: bisect back
+      let lo=yn, hi=y;
+      for(let k=0;k<6;k++){ const m=0.5*(lo+hi); (mapWorldJS(x,m,z)<0)?(lo=m):(hi=m); }
+      return hi;
+    }
+    y=yn; dPrev=d;
+  }
+  return y;
+}
 function mapWorldBase(px,py,pz){
   if(activeLevel&&activeLevel.kind==='authored') return levelSdfJS(px,py,pz);
   let res=(py-terrainHJS(px,pz))*0.62;
@@ -1707,7 +1722,7 @@ LEVELS.area1={
   bounds:{x0:-200,z0:-200,x1:200,z1:200},
   insertion:{x:-182,y:0,z:-42,yaw:0.9},
   ground:{rim:8, rimW:26, noise:0.35},      // a treed embankment; the hills carry the horizon
-  atmos:{far:470, fog:0.0048},               // see clean across the camp
+  atmos:{far:470, fog:0.0015},               // a clear day: haze lives out on the hills
   ambient:1.0,
   regions:[
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
@@ -1767,7 +1782,7 @@ LEVELS.hideout={
   bounds:{x0:-16,z0:-16,x1:16,z1:16},
   insertion:{x:-1.2,y:0,z:-2.2,yaw:-1.9},
   ground:{rim:0, rimW:22, noise:0.02},      // a floor, not a crater
-  atmos:{far:120, fog:0.014},
+  atmos:{far:120, fog:0.010},
   ambient:0.55,
   lights:[{x:-3.6,y:1.3,z:-3.6,col:[1.0,0.72,0.42],intensity:2.6}],   // the lantern
   regions:[
@@ -3940,7 +3955,11 @@ class Zealot{
     resolveCollision(c,0.42);
     this.position.set(c.x,c.y-0.9,c.z);
     const g=mapWorldJS(this.position.x,this.position.y+0.05,this.position.z);
-    if(g>0.3) this.position.y=Math.max(0,this.position.y-6*dt);
+    if(g>0.55) this.position.y-=6*dt;          // falling
+    else{
+      const sy=restOnSurface(this.position.x,this.position.y+0.5,this.position.z);
+      if(sy>this.position.y-0.7) this.position.y+=(sy-this.position.y)*Math.min(1,12*dt);
+    }
   }
   tryShoot(dt,dist,seesLOS){
     if(this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
@@ -4150,7 +4169,7 @@ function seedLevelSpawns(L){
       const key=L.spawn.lootTable[Math.floor(rng()*L.spawn.lootTable.length)];
       const it=ITEM_DEFS[key]();
       if(it instanceof Magazine) it.loaded=Math.floor(rng()*it.maxCapacity);
-      spawnWorldItem(it, x, levelGroundJS(x,z)+0.35, z);
+      spawnWorldItem(it, x, levelGroundJS(x,z)+0.14, z);
       placed.push([x,z]); break;
     }
   }
@@ -5098,7 +5117,12 @@ function updatePlayer(dt){
     // grounded: resting equilibrium on scaled terrain reads ~0.15 at the feet,
     // on structure floors ~0.04 — 0.22 covers both without licking walls
     const gd=mapWorldJS(playerPos.x,playerPos.y+0.05,playerPos.z);
-    if(playerPos.velY<=0.001&&gd<0.22){ playerPos.onGround=true; playerPos.velY=0; }
+    if(playerPos.velY<=0.001&&gd<0.30){
+      const sy=restOnSurface(playerPos.x,playerPos.y+0.45,playerPos.z);
+      if(sy>playerPos.y-0.38){                 // a step down, not a cliff
+        playerPos.y=sy; playerPos.onGround=true; playerPos.velY=0;
+      }else playerPos.onGround=false;
+    }
     else playerPos.onGround=false;
     // coyote: you may still jump a beat after leaving the edge
     playerPos.coyoteT = playerPos.onGround ? 0.09 : Math.max(0,playerPos.coyoteT-dt);
@@ -5155,7 +5179,10 @@ function updateWorldItems(dt){
     const d=mapWorldJS(w.pos.x,w.pos.y,w.pos.z);
     if(d<0.22&&!w.held){
       if(w.vel.y<-1.2){ w.vel.y*=-0.35; w.rotVelP=(runRng()*2-1)*2.2; playSound('drop'); }
-      else if(w.vel.y<0) w.vel.y=0;
+      else if(w.vel.y<0){ w.vel.y=0;
+        const sy=restOnSurface(w.pos.x,w.pos.y+0.3,w.pos.z);
+        if(sy>w.pos.y-0.6) w.pos.y+=((sy+0.12)-w.pos.y)*Math.min(1,14*dt);
+      }
       w.vel.x*=Math.max(0,1-6*dt); w.vel.z*=Math.max(0,1-6*dt);
       w.rotVel*=Math.max(0,1-4*dt);
       w.pitch=(w.pitch||0)*Math.max(0,1-6*dt);          // settle flat
