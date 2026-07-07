@@ -73,6 +73,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
 #backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
   text-align:center;pointer-events:none;}
+#zoneStack{display:flex;gap:16px;align-items:flex-start;justify-content:center;}
+.zoneRight{display:flex;flex-direction:column;}
 .zoneBlock{margin-bottom:10px;}
 .zoneLabel{font-size:9px;letter-spacing:.16em;color:var(--dust);margin:0 0 3px 2px;}
 .equipCell{position:relative;}
@@ -360,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20x';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20y';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1337,6 +1339,11 @@ void main(){
     col = mix(col, mix(skyColor(rayDir), uSkyLo, 0.4), fogAmt);
   }else{
     col = skyColor(rayDir);
+    // rays that outrun uFar below the horizon are far ground, not heaven —
+    // paint the earth-haze back in so the horizon line exists again
+    float belowH = smoothstep(0.02, -0.035, rayDir.y);
+    vec3 earthHaze = mix(vec3(0.44,0.40,0.34)*(0.35+0.75*uAmbient), uSkyLo, 0.45);
+    col = mix(col, earthHaze, belowH*0.85);
     col = mix(col, uSkyLo, smoothstep(0.10,-0.02,rayDir.y));   // valley haze — never a raw hole
   }
   col = pow(col, vec3(0.4545));
@@ -2625,6 +2632,13 @@ function menuInspect(item){
   refreshInvUI();
 }
 function closeAllInv(){ menuSet('closed'); }
+function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
+  if(isManualOpen) closeManual();                         // circle closes the manual
+  else if(inspectItem) closeInspect();                    // then any open sub-inventory
+  else if(isInventoryOpen) closeAllInv();                 // backing out of the rucksack is an EXIT
+  else if(isToolMenuOpen) closeAllInv();                  // tool rack -> back to the valley
+  else openToolMenu();
+}
 function openBag(){ menuSet('bag'); }
 function openToolMenu(){ menuSet('tool'); }
 function toggleInventory(){ isInventoryOpen?menuSet('closed'):menuSet('bag'); }
@@ -4523,6 +4537,9 @@ const CELL_PITCH=47, GRID_PAD=6;      // 44px cell + 3px gap · 6px wrap padding
 function renderZones(){
   const host=document.getElementById('zoneStack');
   host.innerHTML='';
+  const left=document.createElement('div'); left.className='zoneLeft';
+  const right=document.createElement('div'); right.className='zoneRight';
+  host.appendChild(left); host.appendChild(right);
   const zl=invZones();
   zl.forEach((z,zi)=>{
     const blk=document.createElement('div'); blk.className='zoneBlock';
@@ -4570,7 +4587,7 @@ function renderZones(){
         g.appendChild(div);
       }
     }
-    blk.appendChild(g); host.appendChild(blk);
+    blk.appendChild(g); (z.equipCol?left:right).appendChild(blk);
   });
 }
 function renderGrid(containerId,grid,cols,rows,focusIdx){
@@ -5151,13 +5168,7 @@ function frame(){
   // menu toggles — ○/Tab open the tool rack outside, back out of any menu inside
   if(isPlayable()&&!listeningBind){
     if(pressed('bag')&&!isManualOpen&&!isDebugOpen) toggleInventory();
-    if(pressed('tool')&&!isDebugOpen){
-      if(isManualOpen) closeManual();                    // circle closes the manual
-      else if(inspectItem) closeInspect();               // then any open sub-inventory
-      else if(isInventoryOpen) openToolMenu();           // rucksack -> tool rack
-      else if(isToolMenuOpen) closeAllInv();             // tool rack -> back to the valley
-      else openToolMenu();
-    }
+    if(pressed('tool')&&!isDebugOpen) toolMenuVerb();
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(isDebugOpen) dbgNav();
