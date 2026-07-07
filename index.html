@@ -339,7 +339,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <p><b>Follow the valley to the beacon.</b> Every zealot carries the same Tool you do — take theirs apart and make yours stranger.</p>
   <p>Shadow hides you. Light betrays you. Noise carries.</p>
   <p style="font-size:10px;">WASD move · <b>E</b> grab / reload / place · <b>LMB</b> fire or hurl · Shift sprint toggles · <b>B</b> rucksack · <b>Tab</b> tool · <b>X</b> inspect in menus · F light · M manual</p>
-  <div class="go" id="bootStatus">COMPILING THE VALLEY…</div>
+  <div class="go" id="bootStatus" style="visibility:hidden;">&nbsp;</div>
 </div></div>
 <div id="deathScreen" class="screen hidden"><div class="inner panel">
   <h1 style="color:var(--alert);">RECLAIMED</h1>
@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21e';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21f';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -621,7 +621,7 @@ function beamAudio(on){
 // ============================================================
 // SHADERS
 // ============================================================
-const RLIM = { ITEMS:16, ENEMIES:6, TRACERS:12, DECALS:20, DYN:4 };
+const RLIM = { ITEMS:16, ENEMIES:8, TRACERS:12, DECALS:20, DYN:4 };
 
 const vertexShaderSource = `#version 300 es
 in vec4 a_position;
@@ -856,11 +856,21 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
   int kind=int(B.x); float h=B.y;
   int ls=int(C.x), ln=int(C.y);
   float d=1e5, m=1.0;
-  if(kind==1){                                                    // ROAD: min over segs
+  if(kind==1){                                                    // ROAD: segs, then wrecks
     float sd=1e5;
-    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 g=lvTexel(ls+i,17);
+    int nseg=int(B.y+0.5);
+    for(int i=0;i<6;i++){ if(i>=nseg) break; vec4 g=lvTexel(ls+i,17);
       sd=min(sd, seg2L(p.xz, g.xy, g.zw)); }
     d=max(sd-B.z, p.y-0.06); m=12.0;
+    float berm=max(abs(sd-(B.z+0.55))-0.35, p.y-0.20);            // LEVEL-PRIM shoulder berms
+    if(berm<d){ d=berm; m=3.0; }
+    for(int i=0;i<4;i++){ if(i+nseg>=ln) break; vec4 cr=lvTexel(ls+nseg+i,17);
+      vec2 l=p.xz-cr.xy; float ca=cos(cr.z), sa=sin(cr.z);
+      vec2 r2=vec2(ca*l.x+sa*l.y, -sa*l.x+ca*l.y);
+      float body=max(abs(r2.x)-1.85, max(abs(p.y-0.55)-0.42, abs(r2.y)-0.80));
+      float cab =max(abs(r2.x+0.35)-0.92, max(abs(p.y-1.18)-0.34, abs(r2.y)-0.72));
+      float cd=min(body,cab);
+      if(cd<d){ d=cd; m=18.0; } }
   }else if(kind==2){                                              // WALLS compound
     float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
     float inner=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x-0.5,h*0.5+0.2,hb.z-0.5));
@@ -899,7 +909,9 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     for(int i=0;i<6;i++){ if(i>=ln) break; vec4 t=lvTexel(ls+i,17);
       vec2 l=p.xz-t.xy; float ca=cos(t.z), sa=sin(t.z);
       vec2 r2=vec2(ca*l.x+sa*l.y, -sa*l.x+ca*l.y);
-      float td=max(max(abs(r2.x)-1.6, abs(r2.y)-2.1), p.y-1.5+abs(r2.x)*0.82);
+      float outerT=max(max(abs(r2.x)-1.6, abs(r2.y)-2.1), p.y-1.5+abs(r2.x)*0.82);
+      float innerT=max(abs(r2.x)-1.32, p.y-1.26+abs(r2.x)*0.82);
+      float td=max(outerT,-innerT);
       if(td<d){ d=td; m=4.0; } }
   }else if(kind==5){                                              // FACADE — shell only
     d=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z)); m=13.0;
@@ -931,6 +943,16 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     vec2 o=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.25)+vec2(hh,fract(hh*13.0))*0.5)*cell;
     if(o.x>c.x-hb.x&&o.x<c.x+hb.x&&o.y>c.z-hb.z&&o.y<c.z+hb.z){
       float rr=length(p.xz-o);
+      if(C.y>0.5){                                                // LEVEL-PRIM shrub understory
+        float h2=lvHash(g+ivec2(91,37));
+        if(h2>0.45){
+          vec2 so=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.15)+vec2(fract(h2*7.0),fract(h2*29.0))*0.7)*cell;
+          float sr=0.45+h2*0.4;
+          vec3 bd3=vec3(p.x-so.x,(p.y-sr*0.55)*1.7,p.z-so.y);
+          float sd3=length(bd3)-sr;
+          if(sd3<d){ d=sd3; m=17.0; }
+        }
+      }
       if(B.w>0.5 && o.x>C.z){                                     // logged half
         float sd2=max(rr-0.42, p.y-(0.35+hh*0.3));
         if(sd2<d){ d=sd2; m=16.0; }
@@ -1154,7 +1176,7 @@ vec2 map(vec3 p){
   if(dot(vp,vp)<2.6){
     vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
     if(uMenu>0.001){
-      float rise=(1.0-uMenu)*0.7;
+      float rise=(1.0-uMenu)*(1.0-uMenu)*0.45;   // ease-out: the prop settles, no lunge
       if(uMenuMode==1){
         vec3 bp=vl-vec3(0.0,-0.04-rise,0.85);
         bp=rotY(bp, sin(iTime*0.5)*0.08);
@@ -1222,7 +1244,8 @@ vec2 map(vec3 p){
 
 vec2 raycast(vec3 o, vec3 dir){
   // GROUND: bracket-marched to the true horizon — grazing rays cannot starve
-  vec2 g=traceGround(o,dir,2800.0);
+  float gFar=min(2800.0, 5.5/max(uFog,0.002));   // beyond this, fog owns every pixel anyway
+  vec2 g=traceGround(o,dir,gFar);
   float tG = g.x>0.0 ? g.x : 1e9;
   // STRUCTURES (+dynamics): sphere-traced with the ground hit as their ceiling
   gNoGround=true;
@@ -1237,7 +1260,7 @@ vec2 raycast(vec3 o, vec3 dir){
   }
   gNoGround=false;
   if(m>=0.0 && t<=tG) return vec2(t,m);
-  if(tG<2800.0){
+  if(tG<gFar){
     float gh=groundHF((o+dir*tG).xz);
     return vec2(tG, gh>(uLevelOn==1?4.0:1.5)?2.0:1.0);
   }
@@ -1309,6 +1332,7 @@ void main(){
     else if(m>14.5&&m<15.5){ matCol=vec3(0.45,0.40,0.28)*(0.8+0.4*vnoise(p.xz*3.0)); }   // sandbags
     else if(m>15.5&&m<16.5){ matCol=vec3(0.36,0.26,0.16)*(0.8+0.4*vnoise(vec2(p.y*2.0,p.x+p.z))); } // timber
     else if(m>16.5&&m<17.5){ matCol=vec3(0.16,0.30,0.17)*(0.75+0.5*vnoise(p.xz*1.4)); }  // foliage
+    else if(m>17.5&&m<18.5){ matCol=vec3(0.42,0.24,0.15)*(0.7+0.6*vnoise(p.xz*3.1+p.y)); }  // rust
     else if(m<3.5){   matCol=vec3(0.60,0.55,0.45)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*1.4));
                       matCol*=mix(0.55,1.0,smoothstep(0.0,1.3,p.y)); }             // stucco, grimy hem
     else if(m<4.5){   matCol=vec3(0.38,0.28,0.17)*(0.8+0.4*vnoise(vec2((p.x+p.z)*6.0,p.y*0.7))); } // timber
@@ -1736,19 +1760,30 @@ let highestDetection=0;
 //     any edit to one edits the other (grep: LEVEL-PRIM).
 // ======================================================================================
 const LVL={ TILES:16, KIND:{NONE:0,ROAD:1,WALLS:2,BUILDING:3,TENT:4,FACADE:5,FENCE:6,
-            PITS:7,STUMPS:8,TREES:9,PROPS:10} };
+            PITS:7,STUMPS:8,TREES:9,PROPS:10,CARS:11} };
 
 const LEVELS={};
 LEVELS.area1={
   id:'area1', name:'AREA 1 · THE CAMP', kind:'authored',
   bounds:{x0:-200,z0:-200,x1:200,z1:200},
-  insertion:{x:-182,y:0,z:-42,yaw:0.9},
+  insertion:{x:-182,y:0,z:-42,yaw:0.9},      // fallback
+  insertions:[ {x:-182,y:0,z:-42,yaw:0.9},    // west road
+               {x:-40, y:0,z:-160,yaw:0.2},   // south forest edge
+               {x:60,  y:0,z:170, yaw:-2.6},  // north rim gap
+               {x:186, y:0,z:-30, yaw:2.4} ], // east fence line
   ground:{rim:8, rimW:26, noise:0.35},      // a treed embankment; the hills carry the horizon
-  atmos:{far:470, fog:0.0015},               // a clear day: haze lives out on the hills
+  atmos:{far:470, fog:0.0040},               // the haze is back — it was always the mood
   ambient:1.0,
   regions:[
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
-    {id:'road', kind:LVL.KIND.ROAD, w:4.2,
+    {id:'crateA', kind:LVL.KIND.PROPS, box:[-114,-92,-102,-78],
+     crates:[[-110,-86,0.85],[-108.7,-85.1,0.7],[-104,-80,0.75],[-112,-79,0.9]]},
+    {id:'crateB', kind:LVL.KIND.PROPS, box:[104,-70,120,-50],
+     crates:[[108,-64,0.9],[109.3,-63,0.7],[116,-56,0.8],[106,-54,0.7]]},
+    {id:'crateC', kind:LVL.KIND.PROPS, box:[128,-80,140,-68],
+     crates:[[132,-76,0.85],[133.4,-75.1,0.7],[137,-71,0.75]]},
+    {id:'road', kind:LVL.KIND.ROAD, w:4.6,
+     cars:[[-24,-6,0.7],[6,32,2.3],[38,72,1.1]],
      segs:[[-196,-52,-12,6],[-12,6,96,132],[-6,2,112,58],[-58,-14,-78,-118],[-78,-118,-6,-96]]},
     // West: Weapon Design Lab — one composite region: wall ring + one-room building
     {id:'lab', kind:LVL.KIND.WALLS, box:[-170,-12,-124,42], h:3.2, gate:['E',14,6],
@@ -1757,9 +1792,9 @@ LEVELS.area1={
     {id:'pits', kind:LVL.KIND.PITS, box:[-98,92,-48,152], rings:[[-84,112],[-60,138],[-56,104]],
      trench:[-92,124,-52,136], trenchD:1.7},
     // North-center: Armory north of the forest
-    {id:'armory', kind:LVL.KIND.BUILDING, box:[2,102,20,116], h:3.4, door:['S',0,2.0]},
+    {id:'armory', kind:LVL.KIND.BUILDING, box:[2,102,20,116], h:3.4, door:['S',0,2.8]},
     // Center: ONE forest — standing trees west, logged stumps east of the cut line
-    {id:'forest', kind:LVL.KIND.TREES, box:[-44,34,88,96], cell:7.0, hMin:5.0,hMax:8.5, cutX:26},
+    {id:'forest', shrubs:true, kind:LVL.KIND.TREES, box:[-44,34,88,96], cell:7.0, hMin:5.0,hMax:8.5, cutX:26},
     // East: the brainwashing facility — SHELL ONLY. Footprint 64x68; the interior it
     // will one day contain is larger than this box. Doors are recesses, nothing more.
     {id:'facility', kind:LVL.KIND.FACADE, box:[120,58,184,126], h:9.0,
@@ -1772,8 +1807,8 @@ LEVELS.area1={
     {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
     {id:'tentsB', kind:LVL.KIND.TENT, box:[-22,-132,34,-64],  tents:[[-8,-92,0.2],[14,-108,2.9],[26,-84,1.6],[-2,-120,5.1]]},
     // Rim treeline strips (the cliff itself is in the ground formula)
-    {id:'rimN', kind:LVL.KIND.TREES, box:[-186,168,186,196], cell:8.0, hMin:6.0,hMax:9.5},
-    {id:'rimS', kind:LVL.KIND.TREES, box:[-186,-196,186,-168], cell:8.0, hMin:6.0,hMax:9.5},
+    {id:'rimN', shrubs:true, kind:LVL.KIND.TREES, box:[-186,168,186,196], cell:8.0, hMin:6.0,hMax:9.5},
+    {id:'rimS', shrubs:true, kind:LVL.KIND.TREES, box:[-186,-196,186,-168], cell:8.0, hMin:6.0,hMax:9.5},
     {id:'rimW', kind:LVL.KIND.TREES, box:[-196,-160,-176,160], cell:8.0, hMin:6.0,hMax:9.5},
   ],
   exfils:[
@@ -1792,10 +1827,19 @@ LEVELS.area1={
               {region:'testing',n:3},{region:'tentsA',n:2},{region:'tentsB',n:2},
               {region:'facility',n:2,outside:true} ],
     lootN:24, minSpace:6,
-    lootTable:['ammo9','ammo9','magStd','battS','battS','battM','dmgPlus','velPlus','twin',
-               'silentMod','fuseMod','splinter','boltCore','sparkCore','pickCore','beamCore',
-               'gripField','barrelC','barrelU','platS','reflex','scope','scope2x','suppressor','cyanide',
-               'beltBasic','holster1','harnessL','platesL','helmetCap','goggles','headphones'],
+    lootTiers:{
+      common:['ammo9','ammo9','ammo9','battS','battS','ration','ration','magStd'],
+      gear:  ['beltBasic','holster1','holster2','goggles','headphones','helmetCap','harnessL','battM'],
+      mods:  ['dmgPlus','velPlus','twin','gripField','reflex','barrelC','magStd',
+              'silentMod','fuseMod','splinter'],
+      cores: ['boltCore','sparkCore','pickCore','beamCore'],
+      rare:  ['scope','scope2x','suppressor','barrelU','platS','harnessM','harnessH',
+              'platesL','platesH','helmetSteel','helmetRig','battH','cyanide']
+    },
+    regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
+                 testing:['mods','common','rare'], tentsA:['common','gear','gear'],
+                 tentsB:['common','gear','common'], lab:['gear','rare','cores'],
+                 armory:['mods','cores','rare'] },
     lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
   },
 };
@@ -1868,6 +1912,16 @@ function regionSdfJS(r,px,py,pz){
     let sd=1e5;
     for(const g of r.segs) sd=Math.min(sd,_seg2(px,pz,g[0],g[1],g[2],g[3]));
     d=Math.max(sd-r.w, py-0.06); m=12.0;                   // a 6cm gravel slab
+    const berm=Math.max(Math.abs(sd-(r.w+0.55))-0.35, py-0.20);  // LEVEL-PRIM shoulder berms
+    if(berm<d){ d=berm; m=3.0; }
+    if(r.cars) for(const cr of r.cars){                          // LEVEL-PRIM wreck on the road
+      const lx=px-cr[0], lz=pz-cr[1], ca=Math.cos(cr[2]), sa=Math.sin(cr[2]);
+      const rx=ca*lx+sa*lz, rz=-sa*lx+ca*lz;
+      const body=Math.max(Math.abs(rx)-1.85, Math.max(Math.abs(py-0.55)-0.42, Math.abs(rz)-0.80));
+      const cab =Math.max(Math.abs(rx+0.35)-0.92, Math.max(Math.abs(py-1.18)-0.34, Math.abs(rz)-0.72));
+      const cd=Math.min(body,cab);
+      if(cd<d){ d=cd; m=18.0; }
+    }
   }else if(r.kind===K.WALLS){
     const outer=_sdBox3(px,py,pz,cx,r.h/2,cz,hx,r.h/2,hz);
     const inner=_sdBox3(px,py,pz,cx,r.h/2,cz,hx-0.5,r.h/2+0.2,hz-0.5);
@@ -1917,8 +1971,10 @@ function regionSdfJS(r,px,py,pz){
     for(const t of r.tents){
       const lx=px-t[0], lz=pz-t[1], ca=Math.cos(t[2]), sa=Math.sin(t[2]);
       const rx=ca*lx+sa*lz, rz=-sa*lx+ca*lz;
-      const td=Math.max(Math.max(Math.abs(rx)-1.6, Math.abs(rz)-2.1),
+      const outerT=Math.max(Math.max(Math.abs(rx)-1.6, Math.abs(rz)-2.1),
                         py-1.5+Math.abs(rx)*0.82);           // LEVEL-PRIM tent wedge
+      const innerT=Math.max(Math.abs(rx)-1.32, py-1.26+Math.abs(rx)*0.82); // runs past both ends
+      const td=Math.max(outerT,-innerT);
       if(td<d){ d=td; m=4.0; }
     }
   }else if(r.kind===K.FACADE){
@@ -1967,6 +2023,16 @@ function regionSdfJS(r,px,py,pz){
     const ox=bx[0]+(gx+0.25+h*0.5)*cell, oz=bx[1]+(gz+0.25+((h*13)%1)*0.5)*cell;
     if(ox>bx[0]&&ox<bx[2]&&oz>bx[1]&&oz<bx[3]){
       const rr=Math.hypot(px-ox,pz-oz);
+      if(r.shrubs){                                        // LEVEL-PRIM shrub understory
+        const h2=_hash2i(gx+91,gz+37);
+        if(h2>0.45){
+          const sx=bx[0]+(gx+0.15+((h2*7)%1)*0.7)*cell, sz=bx[1]+(gz+0.15+((h2*29)%1)*0.7)*cell;
+          const sr=0.45+h2*0.4;
+          const bdx=px-sx, bdz=pz-sz, bdy=(py-sr*0.55)*1.7;
+          const sd3=Math.sqrt(bdx*bdx+bdy*bdy+bdz*bdz)-sr;
+          if(sd3<d){ d=sd3; m=17.0; }
+        }
+      }
       if(r.cutX!==undefined && ox>r.cutX){                 // logged: a stump remains
         const sd2=Math.max(rr-0.42, py-(0.35+h*0.3));
         if(sd2<d){ d=sd2; m=16.0; }
@@ -2004,7 +2070,9 @@ function buildLevelTexData(level,bake){
     const cx=(bx[0]+bx[2])/2, cz=(bx[1]+bx[3])/2, hx=(bx[2]-bx[0])/2, hz=(bx[3]-bx[1])/2;
     let B=[r.kind,0,0,0], C=[17*0+pool,0,0,0];   // C.x = pool index (row 17 flat)
     const items=[];
-    if(r.kind===K.ROAD){ B=[r.kind,0,r.w,0]; r.segs.forEach(g=>items.push(g)); }
+    if(r.kind===K.ROAD){ B=[r.kind,r.segs.length,r.w,0];
+      r.segs.forEach(g=>items.push(g));
+      if(r.cars) r.cars.forEach(cr=>items.push([cr[0],cr[1],cr[2],0])); }
     if(r.kind===K.WALLS){
       B=[r.kind,r.h,0,r.bldgH||0];
       const g=r.gate; items.push([axis[g[0]],g[1],g[2],0]);
@@ -2026,7 +2094,7 @@ function buildLevelTexData(level,bake){
       const t=r.trench; items.push([t[0],t[1],t[2],t[3]]);
       C[1]=r.rings.length;   // ln = rings only; trench read at ls+ln
     }
-    if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,0,r.cutX??0,r.hMin]; }
+    if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,r.shrubs?1:0,r.cutX??0,r.hMin]; }
     if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
     if(r.kind===K.PROPS){ B=[r.kind,0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0])); }
     if(r.kind!==K.PITS) C[1]=items.length;
@@ -2463,6 +2531,7 @@ const ITEM_DEFS={
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
+  ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
   // ---- armor (stats provisional) ----
   rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6}),
   beltBasic:  ()=>new Armor('Web Belt',2,1,'#4a4436','belt',{invCols:1,invRows:1,slotMode:true}),
@@ -2599,6 +2668,9 @@ function invZones(){
       z.push({id:slot,label:it.name.toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
               locked:!!it.settingsDevice,storage:!it.settingsDevice,slotMode:!!it.slotMode}); };
   ['rucksack','harness','holster','belt','goggles','headphones'].forEach(push);
+  if(lootCrate && isInventoryOpen)
+    z.push({id:'crate',label:'CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
+            storage:true,external:true});
   return z;
 }
 function storageZones(){ return invZones().filter(z=>z.storage); }
@@ -2609,7 +2681,7 @@ function clampZone(){
 }
 // try each equipped storage grid, affinity-first (ordering only, never a restriction)
 function autoPlaceAny(item){
-  const zs=storageZones();
+  const zs=storageZones().filter(z=>!z.external);
   const order=[...zs];
   const pref=id=>{ const i=order.findIndex(z=>z.id===id); if(i>0) order.unshift(order.splice(i,1)[0]); };
   if(item instanceof Tool) pref('holster');
@@ -2724,7 +2796,8 @@ function menuInspect(item){
   else if(!item && currentFocus===2) setFocus(Menus.view==='tool'?1:0);
   refreshInvUI();
 }
-function closeAllInv(){ menuSet('closed'); }
+function closeAllInv(){ menuSet('closed'); lootCrate=null; }
+function openCrate(cr){ lootCrate=cr; menuSet('bag'); zoneIdx=Math.max(1,invZones().length-1); toast('CRATE'); }
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
   else if(inspectItem) closeInspect();                    // then any open sub-inventory
@@ -3103,6 +3176,12 @@ function updateInteract(dt){
     if(ex){ setPrompt(_pr, _exfilHold>0
         ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
         : ex.label+' — hold <b>E</b> to extract', true); return; }
+    const cr = gameState==='play' ? nearestCrate(2.3) : null;
+    if(cr && !uiOpen()){
+      setPrompt(_pr, 'A SUPPLY CRATE — <b>E</b>', true);
+      if(pressed('interact')){ openCrate(cr); }
+      return;
+    }
     const dr=nearStubDoor();
     if(dr){ if(pressed('interact')){ toast('SEALED. IT DOES NOT OPEN. YET.'); playSound('empty'); }
       setPrompt(_pr,'A DOOR INTO THE FACILITY — SEALED',true); return; }
@@ -3344,6 +3423,11 @@ function describeSequence(res){
 // triangle, hand full: the held item does its thing
 let _pillArm=0, _pillDeath=false;
 function heldUse(it){
+  if(it.ration){
+    playerPos.health=Math.min(playerPos.maxHealth, playerPos.health+14);
+    toast('TASTES LIKE THE WAR');
+    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+  }
   if(it.pill){
     const now=performance.now();
     if(_pillArm && now-_pillArm<3000){
@@ -4141,10 +4225,12 @@ function deployTo(levelId){
     activeLevel=L;
     levelBake=bakeLevel(L);
     levelTexDirty=true;
-    playerPos.x=L.insertion.x; playerPos.z=L.insertion.z;
-    playerPos.y=Math.max(0,levelGroundJS(L.insertion.x,L.insertion.z));
-    cameraYaw=L.insertion.yaw; cameraPitch=0;
+    const _ins = L.insertions ? L.insertions[Math.floor(runRng()*L.insertions.length)] : L.insertion;
+    playerPos.x=_ins.x; playerPos.z=_ins.z;
+    playerPos.y=Math.max(0,levelGroundJS(_ins.x,_ins.z));
+    cameraYaw=_ins.yaw; cameraPitch=0;
     playerPos.velY=0;
+    buildCrateRegistry(L);
     seedLevelSpawns(L);
     if(L.lights) for(const li of L.lights)
       dynLights.push({pos:{x:li.x,y:li.y,z:li.z},col:li.col,intensity:li.intensity,ttl:Infinity});
@@ -4163,6 +4249,25 @@ function deployTo(levelId){
   refreshInvUI();
 }
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
+let crateRegistry=[], lootCrate=null;
+function buildCrateRegistry(L){
+  crateRegistry=[]; lootCrate=null;
+  for(const r of L.regions){
+    if(r.kind!==LVL.KIND.PROPS||!r.crates) continue;
+    for(const c of r.crates){
+      const inv=Array(2).fill(null).map(()=>Array(3).fill(null));
+      crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:2});
+    }
+  }
+}
+function nearestCrate(maxD){
+  let best=null,bd=maxD*maxD;
+  for(const c of crateRegistry){
+    const d=(c.x-playerPos.x)**2+(c.z-playerPos.z)**2;
+    if(d<bd){ bd=d; best=c; }
+  }
+  return best;
+}
 function seedLevelSpawns(L){
   const seed=(Math.random()*1e9)|0;
   let sr=seed>>>0;
@@ -4189,7 +4294,15 @@ function seedLevelSpawns(L){
       const [x,z]=inBox(r.bldg?{box:r.bldg}:r);
       if(!clear(x,z,3)) continue;
       if(levelSdfJS(x,0.9,z)<0.3) continue;
-      const key=L.spawn.lootTable[Math.floor(rng()*L.spawn.lootTable.length)];
+      if(!L.spawn.lootTiers) continue;
+      const tiers=(L.spawn.regionLoot&&L.spawn.regionLoot[r.id])||['common'];
+      const tier=L.spawn.lootTiers[tiers[Math.floor(rng()*tiers.length)]];
+      const key=tier[Math.floor(rng()*tier.length)];
+      if(crateRegistry.length && rng()<0.7){                 // most of the camp is boxed up
+        const cr=crateRegistry[Math.floor(rng()*crateRegistry.length)];
+        const it2=ITEM_DEFS[key]();
+        if(autoPlace(it2,cr.inv,cr.invCols,cr.invRows)) continue;
+      }
       const it=ITEM_DEFS[key]();
       if(it instanceof Magazine) it.loaded=Math.floor(rng()*it.maxCapacity);
       spawnWorldItem(it, x, levelGroundJS(x,z)+0.14, z);
@@ -4434,6 +4547,7 @@ function tipBrief(it){                                  // the info square's row
     rows:[it.slots.length+' side slots','each fires alone']};
   if(it instanceof Armor) return {kind:'ARMOR · '+it.armorType.toUpperCase(), rows:[it.desc(), 'equip it in the rig column']};
   if(it&&it.widget) return {kind:'SETTING', rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired yet — turns freely']};
+  if(it.ration) return {kind:'RATION', rows:['+14 vitality','tastes like the war']};
   if(it.pill) return {kind:'LAST RESORT',
     rows:['every zealot carries one. now you do.','hold it · press [F] twice · the run ends']};
   if(it instanceof Battery) return {kind:'BATTERY · '+it.size.toUpperCase(),
@@ -5143,7 +5257,9 @@ function updatePlayer(dt){
     if(playerPos.velY<=0.001&&gd<0.30){
       const sy=restOnSurface(playerPos.x,playerPos.y+0.45,playerPos.z);
       if(sy>playerPos.y-0.38){                 // a step down, not a cliff
-        playerPos.y=sy; playerPos.onGround=true; playerPos.velY=0;
+        const dy=sy-playerPos.y;
+        playerPos.y += (Math.abs(dy)>0.20) ? dy : dy*Math.min(1,26*dt);   // ease, don't teleport
+        playerPos.onGround=true; playerPos.velY=0;
       }else playerPos.onGround=false;
     }
     else playerPos.onGround=false;
@@ -5204,7 +5320,11 @@ function updateWorldItems(dt){
       if(w.vel.y<-1.2){ w.vel.y*=-0.35; w.rotVelP=(runRng()*2-1)*2.2; playSound('drop'); }
       else if(w.vel.y<0){ w.vel.y=0;
         const sy=restOnSurface(w.pos.x,w.pos.y+0.3,w.pos.z);
-        if(sy>w.pos.y-0.6) w.pos.y+=((sy+0.12)-w.pos.y)*Math.min(1,14*dt);
+        if(sy>w.pos.y-0.6){
+          const dy=(sy+0.12)-w.pos.y;
+          w.pos.y += Math.abs(dy)<0.01 ? dy : dy*Math.min(1,14*dt);
+          if(Math.abs(dy)<0.05){ w.vel.x*=Math.max(0,1-14*dt); w.vel.z*=Math.max(0,1-14*dt); }  // grounded: real friction
+        }
       }
       w.vel.x*=Math.max(0,1-6*dt); w.vel.z*=Math.max(0,1-6*dt);
       w.rotVel*=Math.max(0,1-4*dt);
@@ -5220,7 +5340,7 @@ function updateWorldItems(dt){
 function menuNav(){
   const f=focusGrid();
   let moved=false;
-  if(f.grid||f.rack){
+  if(f.grid||f.rack||f.equipCol){
     clampCursor(f);
     const step=(dx,dy)=>{
       // racks draw slot 0 at the BOTTOM: screen-down must move toward the grip (index 0)
@@ -5245,10 +5365,9 @@ function menuNav(){
           zoneIdx--; const nz=zl[zoneIdx];
           cursorX=clamp(cursorX,0,nz.cols-1); cursorY=nz.rows-1; moved=true; return;
         }
-        if(dx>0 && f.equipCol){                                  // out of the rig column, into the pockets
-          if(zl.length>1){ zoneIdx=Math.max(1,zoneIdx); const nz=zl[Math.max(1,Math.min(zoneIdx,zl.length-1))];
-            zoneIdx=Math.max(1,Math.min(zoneIdx,zl.length-1));
-            cursorX=0; cursorY=clamp(cursorY,0,nz.rows-1); moved=true; return; }
+        if(dx>0 && f.equipCol && zl.length>1){                   // out of the rig, into the pockets
+          zoneIdx=1; const nz=zl[1];
+          cursorX=0; cursorY=clamp(cursorY,0,nz.rows-1); moved=true; return;
         }
         if(dx<0 && nx<0 && !f.equipCol){                          // left edge of any pocket -> the rig
           zoneIdx=0; cursorX=0; cursorY=clamp(cursorY,0,EQUIP_SLOTS.length-1); moved=true; return;
@@ -5380,7 +5499,7 @@ function frame(){
   const fcy=Math.cos(finalYaw),fsy=Math.sin(finalYaw),fcp=Math.cos(finalPitch),fsp=Math.sin(finalPitch);
   gl.uniform3f(U.uRight,fcy,0,-fsy);
   gl.uniform3f(U.uUp,-fsp*fsy,fcp,-fsp*fcy);
-  gl.uniform1f(U.fov,playerPos.currentFov*(1-0.22*menuAnim));
+  gl.uniform1f(U.fov,playerPos.currentFov*(1-0.07*menuAnim));
   gl.uniform1f(U.uMenu,menuAnim);
   gl.uniform1i(U.uMenuMode,menuMode);
   // rack presentation: menu prop AND the held viewmodel share this data
@@ -5431,10 +5550,16 @@ function frame(){
     gl.uniform4f(U.itemData[i],w.item.renderType,w.ry,w.held?1:0,w.pitch||0);
   }
 
-  // enemies (alive only)
+  // enemies: nearest first — the uniform array is small, the camp is not
   let ei=0;
-  for(const en of enemies){
-    if(en.health<=0||ei>=RLIM.ENEMIES) continue;
+  const _liveEn=enemies.filter(e=>e.health>0)
+    .sort((a,b)=>{
+      const da=(a.position.x-playerPos.x)**2+(a.position.z-playerPos.z)**2;
+      const db=(b.position.x-playerPos.x)**2+(b.position.z-playerPos.z)**2;
+      return da-db;
+    });
+  for(const en of _liveEn){
+    if(ei>=RLIM.ENEMIES) break;
     gl.uniform3f(U.enemyPos[ei],en.position.x,en.position.y,en.position.z);
     gl.uniform4f(U.enemyData[ei],en.yaw,en.state,en.muzzle,en.hurtFlash);
     ei++;
