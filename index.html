@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21g';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21h';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -841,6 +841,8 @@ float lvHash(ivec2 v){ int h=(v.x*374761393+v.y*668265263); h=(h^(h>>13))*127412
 float sdBoxL(vec3 p, vec3 c, vec3 h){ vec3 q=abs(p-c)-h; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
 float seg2L(vec2 p, vec2 a, vec2 b){ vec2 v=b-a,w=p-a; float t=clamp(dot(w,v)/dot(v,v),0.0,1.0); return length(p-(a+v*t)); }
 vec4 lvTexel(int x,int y){ return texelFetch(uLevelTex, ivec2(x,y), 0); }
+vec4 lvHdr(int i){ return texelFetch(uLevelTex, ivec2(i&63, 16+(i>>6)), 0); }
+vec4 lvPool(int i){ return texelFetch(uLevelTex, ivec2(i&63, 18+(i>>6)), 0); }
 // door/gate carve helper: axis 0=E 1=W 2=N 3=S at box bx (xz-min/max via c,h)
 float lvHole(vec3 p, vec3 c, vec3 h, vec4 g, float depth, float hh){
   float ax=g.x;
@@ -851,7 +853,7 @@ float lvHole(vec3 p, vec3 c, vec3 h, vec4 g, float depth, float hh){
 }
 // returns add-dist, writes mat + ground-cut
 vec2 lvRegion(int ri, vec3 p, inout float cut){
-  vec4 A=lvTexel(ri*3,16), B=lvTexel(ri*3+1,16), C=lvTexel(ri*3+2,16);
+  vec4 A=lvHdr(ri*3), B=lvHdr(ri*3+1), C=lvHdr(ri*3+2);
   vec3 c=vec3(A.x,0.0,A.y); vec3 hb=vec3(A.z,0.0,A.w);
   int kind=int(B.x); float h=B.y;
   int ls=int(C.x), ln=int(C.y);
@@ -859,12 +861,12 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
   if(kind==1){                                                    // ROAD: segs, then wrecks
     float sd=1e5;
     int nseg=int(B.y+0.5);
-    for(int i=0;i<6;i++){ if(i>=nseg) break; vec4 g=lvTexel(ls+i,17);
+    for(int i=0;i<6;i++){ if(i>=nseg) break; vec4 g=lvPool(ls+i);
       sd=min(sd, seg2L(p.xz, g.xy, g.zw)); }
     d=max(sd-B.z, p.y-0.06); m=12.0;
     float berm=max(abs(sd-(B.z+0.55))-0.35, p.y-0.20);            // LEVEL-PRIM shoulder berms
     if(berm<d){ d=berm; m=3.0; }
-    for(int i=0;i<4;i++){ if(i+nseg>=ln) break; vec4 cr=lvTexel(ls+nseg+i,17);
+    for(int i=0;i<4;i++){ if(i+nseg>=ln) break; vec4 cr=lvPool(ls+nseg+i);
       vec2 l=p.xz-cr.xy; float ca=cos(cr.z), sa=sin(cr.z);
       vec2 r2=vec2(ca*l.x+sa*l.y, -sa*l.x+ca*l.y);
       float body=max(abs(r2.x)-1.85, max(abs(p.y-0.55)-0.42, abs(r2.y)-0.80));
@@ -875,10 +877,10 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
     float inner=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x-0.5,h*0.5+0.2,hb.z-0.5));
     d=max(outer,-inner);
-    vec4 g=lvTexel(ls,17); d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),g,1.2,1.5));
+    vec4 g=lvPool(ls); d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),g,1.2,1.5));
     m=3.0;
     if(ln>1){                                                     // interior building
-      vec4 bb=lvTexel(ls+1,17); vec4 bd2=lvTexel(ls+2,17);        // bb=cx,cz,hx,hz  bd2=door(+boards in w)
+      vec4 bb=lvPool(ls+1); vec4 bd2=lvPool(ls+2);        // bb=cx,cz,hx,hz  bd2=door(+boards in w)
       float bh=B.w;
       float o2=sdBoxL(p, vec3(bb.x,bh*0.5,bb.y), vec3(bb.z,bh*0.5,bb.w));
       float i2=sdBoxL(p, vec3(bb.x,bh*0.5-0.12,bb.y), vec3(bb.z-0.35,bh*0.5-0.12,bb.w-0.35));
@@ -901,12 +903,12 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
     float inner=sdBoxL(p, vec3(c.x,h*0.5-0.12,c.z), vec3(hb.x-0.35,h*0.5-0.12,hb.z-0.35));
     d=max(outer,-inner); m=3.0;
-    vec4 dr=lvTexel(ls,17);
+    vec4 dr=lvPool(ls);
     if(dr.z>0.0) d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),dr,0.6,1.05));
     else{ float sd2=lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),vec4(3.0,0.0,0.7,0.0),0.28,1.0);
           d=max(d,-max(sd2,0.02)); }
   }else if(kind==4){                                              // TENTS
-    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 t=lvTexel(ls+i,17);
+    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 t=lvPool(ls+i);
       vec2 l=p.xz-t.xy; float ca=cos(t.z), sa=sin(t.z);
       vec2 r2=vec2(ca*l.x+sa*l.y, -sa*l.x+ca*l.y);
       float outerT=max(max(abs(r2.x)-1.6, abs(r2.y)-2.1), p.y-1.5+abs(r2.x)*0.82);
@@ -915,25 +917,25 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
       if(td<d){ d=td; m=4.0; } }
   }else if(kind==5){                                              // FACADE — shell only
     d=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z)); m=13.0;
-    vec4 w=lvTexel(ls,17);                                        // wing cx,cz,hx,hz
+    vec4 w=lvPool(ls);                                        // wing cx,cz,hx,hz
     float wd=sdBoxL(p, vec3(w.x,B.w*0.5,w.y), vec3(w.z,B.w*0.5,w.w));
     if(wd<d) d=wd;
-    for(int i=1;i<5;i++){ if(i>=ln) break; vec4 dr=lvTexel(ls+i,17);
+    for(int i=1;i<5;i++){ if(i>=ln) break; vec4 dr=lvPool(ls+i);
       d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),dr,0.32,1.25)); }
   }else if(kind==6){                                              // FENCE + blocks
     float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
     float inner=sdBoxL(p, vec3(c.x,h*0.5+0.2,c.z), vec3(hb.x-0.22,h*0.5+0.4,hb.z-0.22));
     d=max(outer,-inner); m=14.0;
-    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 it=lvTexel(ls+i,17);
+    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 it=lvPool(ls+i);
       if(it.w>0.5){ d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),it,0.8,1.3)); }
       else{ float bd=sdBoxL(p, vec3(it.x,0.9,it.y), vec3(1.1,0.9,0.5));
             if(bd<d){ d=bd; m=3.0; } } }
   }else if(kind==7){                                              // PITS + trench cut
-    for(int i=0;i<4;i++){ if(i>=ln) break; vec4 rg=lvTexel(ls+i,17);
+    for(int i=0;i<4;i++){ if(i>=ln) break; vec4 rg=lvPool(ls+i);
       float rr=length(p.xz-rg.xy);
       float rd=max(abs(rr-3.2)-0.55, p.y-0.85);
       if(rd<d){ d=rd; m=15.0; } }
-    vec4 t=lvTexel(ls+ln,17);                                     // trench box after rings
+    vec4 t=lvPool(ls+ln);                                     // trench box after rings
     cut=min(cut, sdBoxL(p, vec3((t.x+t.z)*0.5, 0.4-B.z, (t.y+t.w)*0.5),
                         vec3((t.z-t.x)*0.5, B.z, (t.w-t.y)*0.5)));
   }else if(kind==9){                                              // TREES (+cutX stumps)
@@ -946,7 +948,8 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
       if(C.y>0.5){                                                // LEVEL-PRIM shrub understory
         float h2=lvHash(g+ivec2(91,37));
         if(h2>0.45){
-          vec2 so=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.15)+vec2(fract(h2*7.0),fract(h2*29.0))*0.7)*cell;
+          vec2 jit=vec2(lvHash(g+ivec2(53,71)), lvHash(g+ivec2(7,97)));   // float32-safe jitter
+          vec2 so=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.15)+jit*0.7)*cell;
           float sr=0.45+h2*0.4;
           vec3 bd3=vec3(p.x-so.x,(p.y-sr*0.55)*1.7,p.z-so.y);
           float sd3=length(bd3)-sr;
@@ -972,7 +975,7 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     float rr=length(p.xz-o);
     d=max(rr-0.42, p.y-(0.35+hh*0.3)); m=16.0;
   }else if(kind==10){                                             // PROPS crates
-    for(int i=0;i<5;i++){ if(i>=ln) break; vec4 cr=lvTexel(ls+i,17);
+    for(int i=0;i<10;i++){ if(i>=ln) break; vec4 cr=lvPool(ls+i);
       float cd=sdBoxL(p, vec3(cr.x,cr.z*0.5,cr.y), vec3(cr.z*0.55,cr.z*0.5,cr.z*0.55));
       if(cd<d){ d=cd; m=4.0; } }
   }
@@ -1782,6 +1785,22 @@ LEVELS.area1={
      crates:[[108,-64,0.9],[109.3,-63,0.7],[116,-56,0.8],[106,-54,0.7]]},
     {id:'crateC', kind:LVL.KIND.PROPS, box:[128,-80,140,-68],
      crates:[[132,-76,0.85],[133.4,-75.1,0.7],[137,-71,0.75]]},
+    {id:'crateD', kind:LVL.KIND.PROPS, box:[-142,-142,-134,-134],
+     crates:[[-140,-140,0.8],[-138.6,-139.2,0.65],[-136,-136,0.75]]},
+    {id:'crateE', kind:LVL.KIND.PROPS, box:[-67,-142,-59,-134],
+     crates:[[-65,-140,0.85],[-63.6,-139.1,0.7],[-61,-136,0.8]]},
+    {id:'crateF', kind:LVL.KIND.PROPS, box:[84,-142,92,-134],
+     crates:[[86,-140,0.75],[87.3,-139.2,0.7],[90,-136,0.85]]},
+    {id:'crateG', kind:LVL.KIND.PROPS, box:[-167,-117,-159,-109],
+     crates:[[-165,-115,0.8],[-163.7,-114.1,0.65],[-161,-111,0.75]]},
+    {id:'crateH', kind:LVL.KIND.PROPS, box:[59,-92,67,-84],
+     crates:[[61,-90,0.85],[62.4,-89.1,0.7],[65,-86,0.8]]},
+    {id:'crateI', kind:LVL.KIND.PROPS, box:[159,-117,167,-109],
+     crates:[[161,-115,0.75],[162.3,-114.2,0.7],[165,-111,0.8]]},
+    {id:'crateJ', kind:LVL.KIND.PROPS, box:[9,-142,17,-134],
+     crates:[[11,-140,0.8],[12.4,-139.1,0.65],[15,-136,0.75]]},
+    {id:'crateK', kind:LVL.KIND.PROPS, box:[59,-67,67,-59],
+     crates:[[61,-65,0.85],[62.3,-64.2,0.7],[65,-61,0.8]]},
     {id:'road', kind:LVL.KIND.ROAD, w:4.6,
      cars:[[-24,-6,0.7],[6,32,2.3],[38,72,1.1]],
      segs:[[-196,-52,-12,6],[-12,6,96,132],[-6,2,112,58],[-58,-14,-78,-118],[-78,-118,-6,-96]]},
@@ -1826,7 +1845,7 @@ LEVELS.area1={
     zealots:[ {region:'pits',n:2},{region:'armory',n:1},{region:'forest',n:2},
               {region:'testing',n:3},{region:'tentsA',n:2},{region:'tentsB',n:2},
               {region:'facility',n:2,outside:true} ],
-    lootN:24, minSpace:6,
+    lootN:32, minSpace:6,
     lootTiers:{
       common:['ammo9','ammo9','ammo9','battS','battS','ration','ration','magStd'],
       gear:  ['beltBasic','holster1','holster2','goggles','headphones','helmetCap','harnessL','battM'],
@@ -1857,7 +1876,8 @@ LEVELS.hideout={
     {id:'house', kind:LVL.KIND.WALLS, box:[-9,-7,9,7], h:3.1, gate:['N',5.5,0.9],
      bldg:[-4.5,-4.5,1.5,0.5], bldgH:2.55, door:['E',0,0.9], boards:true},
     {id:'clutter', kind:LVL.KIND.PROPS, box:[-8,-6,8,6],
-     crates:[[-3.2,-3.4,0.9],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7]]},
+     crates:[[-3.2,-3.4,0.9],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
+             [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]]},
   ],
   exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[]},
   terminal:{x:-3.4,z:-0.6},
@@ -2026,7 +2046,8 @@ function regionSdfJS(r,px,py,pz){
       if(r.shrubs){                                        // LEVEL-PRIM shrub understory
         const h2=_hash2i(gx+91,gz+37);
         if(h2>0.45){
-          const sx=bx[0]+(gx+0.15+((h2*7)%1)*0.7)*cell, sz=bx[1]+(gz+0.15+((h2*29)%1)*0.7)*cell;
+          const jx=_hash2i(gx+53,gz+71), jz=_hash2i(gx+7,gz+97);   // float32-safe jitter
+          const sx=bx[0]+(gx+0.15+jx*0.7)*cell, sz=bx[1]+(gz+0.15+jz*0.7)*cell;
           const sr=0.45+h2*0.4;
           const bdx=px-sx, bdz=pz-sz, bdy=(py-sr*0.55)*1.7;
           const sd3=Math.sqrt(bdx*bdx+bdy*bdy+bdz*bdz)-sr;
@@ -2057,7 +2078,7 @@ function regionSdfJS(r,px,py,pz){
 let activeLevel=null, levelBake=null, levelTexDirty=false;
 // pack tilemap + region headers + param pool into one RGBA32F texture (64 x 18)
 function buildLevelTexData(level,bake){
-  const W=64,H=18, d=new Float32Array(W*H*4);
+  const W=64,H=20, d=new Float32Array(W*H*4);
   const put=(x,y,a,b,c2,e)=>{ const i=(y*W+x)*4; d[i]=a; d[i+1]=b; d[i+2]=c2; d[i+3]=e; };
   for(let tz=0;tz<16;tz++) for(let tx=0;tx<16;tx++){
     const t=bake.tiles[tz*16+tx];
@@ -2099,11 +2120,14 @@ function buildLevelTexData(level,bake){
     if(r.kind===K.PROPS){ B=[r.kind,0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0])); }
     if(r.kind!==K.PITS) C[1]=items.length;
     C[0]=pool;
-    put(i*3,16, cx,cz,hx,hz);
-    put(i*3+1,16, B[0],B[1],B[2],B[3]);
-    put(i*3+2,16, C[0],C[1],C[2],C[3]);
-    items.forEach(it=>{ put(pool%W, 17+Math.floor(pool/W), it[0],it[1],it[2],it[3]); pool++; });
+    const hi=i*3, hput=(o,a,b2,c2,e)=>put((hi+o)%W, 16+Math.floor((hi+o)/W), a,b2,c2,e);
+    hput(0, cx,cz,hx,hz);
+    hput(1, B[0],B[1],B[2],B[3]);
+    hput(2, C[0],C[1],C[2],C[3]);
+    items.forEach(it=>{ put(pool%W, 18+Math.floor(pool/W), it[0],it[1],it[2],it[3]); pool++; });
   });
+  if(level.regions.length*3>2*W) throw new Error(`level ${level.id} header overflow: ${level.regions.length} regions > ${Math.floor(2*W/3)}`);
+  if(pool>(H-18)*W) throw new Error(`level ${level.id} param pool overflow: ${pool} items > ${(H-18)*W}`);
   return {data:d,W,H};
 }
 let _levelTexGL=null;
@@ -4257,10 +4281,18 @@ function buildCrateRegistry(L){
   for(const r of L.regions){
     if(r.kind!==LVL.KIND.PROPS||!r.crates) continue;
     for(const c of r.crates){
-      const inv=Array(2).fill(null).map(()=>Array(3).fill(null));
-      crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:2});
+      const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
+      crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3});
     }
   }
+}
+function nearestCrateTo(x,z,skipFull){
+  const order=crateRegistry.map(c=>[(c.x-x)**2+(c.z-z)**2,c]).sort((a,b)=>a[0]-b[0]);
+  for(const [,c] of order){
+    if(skipFull && c.inv.flat().every(Boolean)) continue;
+    return c;
+  }
+  return null;
 }
 function nearestCrate(maxD){
   let best=null,bd=maxD*maxD;
@@ -4300,10 +4332,15 @@ function seedLevelSpawns(L){
       const tiers=(L.spawn.regionLoot&&L.spawn.regionLoot[r.id])||['common'];
       const tier=L.spawn.lootTiers[tiers[Math.floor(rng()*tiers.length)]];
       const key=tier[Math.floor(rng()*tier.length)];
-      if(crateRegistry.length && rng()<0.7){                 // most of the camp is boxed up
-        const cr=crateRegistry[Math.floor(rng()*crateRegistry.length)];
+      if(crateRegistry.length){                              // the camp is boxed up. all of it.
         const it2=ITEM_DEFS[key]();
-        if(autoPlace(it2,cr.inv,cr.invCols,cr.invRows)) continue;
+        let ok=false;
+        const near=nearestCrateTo(x,z,true);                   // regional flavor: nearest cluster
+        if(near && autoPlace(it2,near.inv,near.invCols,near.invRows)) ok=true;
+        if(!ok){ for(let a=0;a<crateRegistry.length;a++){      // overflow: any box with room
+          const cr=crateRegistry[(a+Math.floor(rng()*crateRegistry.length))%crateRegistry.length];
+          if(autoPlace(it2,cr.inv,cr.invCols,cr.invRows)){ ok=true; break; } } }
+        if(ok){ placed.push([x,z]); break; }                   // boxed: this item is DONE
       }
       const it=ITEM_DEFS[key]();
       if(it instanceof Magazine) it.loaded=Math.floor(rng()*it.maxCapacity);
