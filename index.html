@@ -352,7 +352,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v20u';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v20v';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1697,7 +1697,7 @@ LEVELS.area1={
     lootN:24, minSpace:6,
     lootTable:['ammo9','ammo9','magStd','battS','battS','battM','dmgPlus','velPlus','twin',
                'silentMod','fuseMod','splinter','boltCore','sparkCore','pickCore','beamCore',
-               'gripField','barrelC','barrelU','platS','reflex','scope','scope2x','suppressor'],
+               'gripField','barrelC','barrelU','platS','reflex','scope','scope2x','suppressor','cyanide'],
     lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
   },
 };
@@ -2356,6 +2356,7 @@ const ITEM_DEFS={
   heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6,surcharge:5},'Next core arcs and lands harder · +5⚡'),
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
+  cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, then blows 1.2s later · +4⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
@@ -3037,7 +3038,22 @@ function describeSequence(res){
 }
 
 // triangle, hand full: the held item does its thing
+let _pillArm=0, _pillDeath=false;
 function heldUse(it){
+  if(it.pill){
+    const now=performance.now();
+    if(_pillArm && now-_pillArm<3000){
+      _pillArm=0; _pillDeath=true;
+      toast('BITTER ALMONDS.');
+      playerPos.health=0;
+      onDeath();
+    }else{
+      _pillArm=now;
+      toast('BITE DOWN? PRESS AGAIN TO END THE RUN.');
+      playSound('click');
+    }
+    return;
+  }
   if(it instanceof Magazine){
     if(it.loaded>0){                                     // dump the rounds into the rucksack
       const rounds=new Ammunition(it.acceptedType+' rounds','#a07c2c',it.acceptedType,it.loaded);
@@ -3747,6 +3763,7 @@ function resetLevel(){
 function initLoadout(){
   bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
   const t=ITEM_DEFS.tool(); t.name='Foundling Tool';
+  autoPlace(ITEM_DEFS.cyanide(),bagGrid,BAG_COLS,BAG_ROWS);
   const mag=ITEM_DEFS.magStd(); mag.loaded=8;
   t.base.slots[0]=mag;                                  // slots are agnostic — the mag just sits there
   t.base.slots[1]=ITEM_DEFS.barrelC();                  // starting barrel extends the main column
@@ -3769,13 +3786,14 @@ function startRun(){
   refreshInvUI();
 }
 function onDeath(){
-  if(activeLevel&&activeLevel.id!=='hideout'){       // a lost raid, not a lost life
+  if(!_pillDeath && activeLevel&&activeLevel.id!=='hideout'){   // a lost raid, not a lost life
     playSound('death');
     playerPos.health=playerPos.maxHealth;
     showBanner('DRAGGED YOURSELF HOME');
     deployTo('hideout');
     return;
   }
+  _pillDeath=false;
   gameState='dead'; timeScale=0;
   playSound('death');
   endBeam();
@@ -4089,6 +4107,8 @@ function tipBrief(it){                                  // the info square's row
     rows:[it.length+' slots','+'+it.addedSpread.toFixed(2)+' spread','own muzzle slot']};
   if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
     rows:[it.slots.length+' side slots','each fires alone']};
+  if(it.pill) return {kind:'LAST RESORT',
+    rows:['every zealot carries one. now you do.','hold it · press [F] twice · the run ends']};
   if(it instanceof Battery) return {kind:'BATTERY · '+it.size.toUpperCase(),
     rows: battFunctional(it)
       ? [it.charge.toFixed(0)+' / '+it.cap+' \u26a1', it.cap<it.capMax?'worn: '+it.cap+' of '+it.capMax:'unworn']
