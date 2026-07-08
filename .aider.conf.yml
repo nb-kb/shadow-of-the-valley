@@ -1,0 +1,18 @@
+# aider configuration for Shadow of the Valley
+# aider is the tool that lets Gemini or a local model work on this repo.
+# Pick the "team member" with --model on the command line; this file just sets
+# sensible defaults and points aider at the project brief.
+
+# Default team member: Gemini Flash (cheap contractor). Override any time, e.g.:
+#   aider --model gemini/gemini-2.5-pro          (smarter Gemini)
+#   aider --model openai/local                   (free local intern, see notes)
+model: gemini/gemini-2.5-flash
+
+# aider auto-reads .env in this folder for API keys (GEMINI_API_KEY, etc.)
+
+# Always give the model the house rules so it respects the shader<->JS twin, etc.
+read: CLAUDE.md
+
+# Local commits are cheap and reversible (use /undo). You review before pushing.
+auto-commits: true
+attribute-author: false
