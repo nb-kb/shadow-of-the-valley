@@ -95,6 +95,42 @@ downstream — no dead stats** (verified).
 
 ---
 
+## Proposed edits (from the design doc)
+
+Source: the design/issues bible prompt "Design a first wave of mods." Directives:
+**14–18 mods**, balanced across **offensive / defensive / utility**; **≥3 purely
+positional** (splitter, trigger-on-impact, delay/timer, loop/wrap); **1–2
+SDF-world utility** (carve/deform, tunnel, scan-through-walls); every mod gets
+name·role·flavor·precise effect·⚡ cost·preferred sequence position; design for
+**ordering combos** (spec 5+, incl. one "trap" combo that looks strong but isn't);
+**no flat +X% filler**.
+
+Status vs. current code:
+
+| proposal | cat | proposed effect | ⚡ | behavior | status |
+|---|---|---|---|---|---|
+| **FUSE → relay** | mod | extend `fuse` | 4+ | on impact/death, **re-cast the next core in the sequence from the impact point** (not just blow) | **extends** current FUSE (fixed delay+blow) |
+| **TIMER** (tunable) | mod | `{delay:t}` | ? | generalize FUSE's fixed 1.2 s into an authored delay | extends FUSE |
+| **CONTACT** | mod | `{trigger:'impact'}` | ? | fire the pending charge on first contact / proximity | **new** (positional) |
+| **LOOP / WRAP** | mod | `{loop:n}` | ? | sequence/path re-emits or wraps N times | **new** (positional) |
+| **SPLITTER** | mod | `{split:n}` | 7 | shatter into N on impact | **done** = SPLINTER (`split:3`) |
+| **CARVE / SHAPER** | proj/util | `{kind:'carve'}` (SDF edit) | ? | deform/carve terrain | partial (PICK eats stone; BASTION build stubbed, index.html:1673) |
+| **TUNNEL** | proj/util | line of SDF carves | ? | bore a passage through the world | **new** — GPU: many `uEdits`, needs a hard cap |
+| **RECON / SCAN** | util | `{seeThrough:true}` | ? | mark enemies through walls (goggles-tied, stealth) | **new** (defensive/utility) — cheap (HUD overlay, not raymarch) |
+| Laser-variants of cores | mod | `laser` feeds a core → continuous, less dmg | 8 | bolt/spark → held beams | **done** = BEAM (`beamCore`) |
+| Grip core + physgun | proj | glue glob; +BEAM = physics-gun beam | 6 | — | **done** = GRIP (`gripField`) |
+| Beam = tac-laser thread | mod | gossamer thread, alone atop a column | 8 | — | **done** = BEAM |
+| _defensive role_ | — | — | — | doc wants offensive/**defensive**/utility balance; current roster is nearly all offensive | **gap to fill** (shield, smoke, decoy, reactive-armor mods) |
+
+Verbatim design notes worth keeping:
+- "fuse should cast the next spell in the sequence from its point of death/collision"
+- "laser should also turn mods continuous, with a decrease to damage… the functionality of the other cores turns into a continuous beam"
+- "When added in series with a core it works to create laser varieties of existing cores (bolt, spark, future cores)"
+- "Grip mod should be a Grip core… glob of glue that sticks to near-by globs… works with the tactical laser as a physics gun beam"
+- "Include 1–2 utility mods that exploit the SDF world (carve/deform terrain, tunnel, scan through walls)"
+
+**Biggest unbuilt wins:** FUSE-relay (turns the sequencer recursive — huge combo depth), the positional trio (CONTACT / LOOP / TIMER), and the defensive-role gap. The SDF-utility mods (TUNNEL especially) are the ones to watch on GPU cost.
+
 ## Rework scratch space
 
 Proposed new cores / modifiers / stats go here first (name · cat · effect ·
