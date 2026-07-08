@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21l';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21m';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -2767,7 +2767,7 @@ function setFocus(n,ex,ey){
 let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
 
 function isPlayable(){ return gameState==='play'||gameState==='hideout'; }
-function uiOpen(){ return isInventoryOpen||isToolMenuOpen||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
+function uiOpen(){ return isInventoryOpen||isToolMenuOpen||Menus.view==='crate'||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
 function pausedUI(){ return isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }   // bag/tool do NOT pause the world
 
 function gridFits(item,sx,sy,grid,cols,rows){
@@ -4986,7 +4986,7 @@ function rackSig(tool){
   return sig.join('|');
 }
 function refreshInvUI(){
-  if(isInventoryOpen) renderZones();
+  if(isInventoryOpen||Menus.view==='crate') renderZones();
   if(isToolMenuOpen){
     if(activeTool){
       activeTool._cols=null;                              // rack may have changed shape
@@ -5276,7 +5276,7 @@ function updateDebugWatch(dt){
 // ============================================================
 // PLAYER MOVEMENT · WORLD ITEM PHYSICS · MENU NAV
 // ============================================================
-function uiMenusOpen(){ return isInventoryOpen||isToolMenuOpen; }
+function uiMenusOpen(){ return isInventoryOpen||isToolMenuOpen||Menus.view==='crate'; }   // crate is a first-class menu: nav, render, close, mouse-lock all flow through here
 let stepAcc=0;
 const _c1=new Vec3(), _c2=new Vec3();
 
