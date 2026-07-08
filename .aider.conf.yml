@@ -3,12 +3,13 @@
 # Pick the "team member" with --model on the command line; this file just sets
 # sensible defaults and points aider at the project brief.
 
-# Default team member: Gemini Flash — works on the FREE tier (no billing needed).
-# Override any time, e.g.:
-#   aider --model gemini/gemini-3-flash-preview  (newest Gemini 3 Flash, also free tier)
-#   aider --model gemini/gemini-2.5-pro          (smartest — needs billing on, spends your $300)
-#   aider --model openai/local                   (free local intern, see notes)
-model: gemini/gemini-2.5-flash
+# Default team member: Gemini 3.5 Flash via Vertex AI (uses your autodelia $300 credits;
+# ~$0.001 per small task). Override any time, e.g.:
+#   aider --model gemini/gemini-2.5-flash        (FREE tier via API key — zero cost)
+#   aider --model gemini/gemini-3-flash-preview  (FREE tier, newest Gemini 3 Flash)
+#   aider --model vertex_ai/gemini-2.5-pro       (smartest, uses more credits)
+#   aider --model openai/local                   (free local intern — LM Studio)
+model: vertex_ai/gemini-3.5-flash
 
 # aider auto-reads .env in this folder for API keys (GEMINI_API_KEY, etc.)
 
