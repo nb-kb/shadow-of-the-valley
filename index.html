@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21n';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21o';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -2714,8 +2714,11 @@ function syncBagAlias(){
 // composed zones. Order = nav order = affinity fallback order.
 let zoneIdx=1;
 function invZones(){
-  if(Menus.view==='crate'&&lootCrate)
-    return [{id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
+  if(isCrateOpen&&lootCrate)
+    // show your kit AND the crate together, so you can lift loot into your hands
+    // (Square) and stow it into a pocket yourself — container-to-container transfer
+    return [...playerZones(),
+            {id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
              external:true}];
   return playerZones();
 }
@@ -2854,7 +2857,7 @@ function menuInspect(item){
   refreshInvUI();
 }
 function closeAllInv(){ menuSet('closed'); lootCrate=null; }
-function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=0; cursorX=0; cursorY=0; toast('SUPPLY CRATE'); }
+function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast('SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
   else if(Menus.view==='crate') closeAllInv();            // a crate is a room you simply leave
@@ -2961,14 +2964,13 @@ function interactInventory(){
     playSound('click'); return;
   }
 
-  // ---- someone else's box: take, never stash ----------------------------------------
+  // ---- someone else's box: take into your HANDS (never stash into it) ----------------
   if(f.external){
     if(heldWorld){ toast('TAKE ONLY'); playSound('empty'); return; }
-    if(cell){
-      if(autoPlaceAny(cell)){ removeFromGrid(cell,f.grid);
-        toast(cell.name.toUpperCase()+' TAKEN'); playSound('pickup'); }
-      else { toast('NO ROOM IN YOUR KIT'); playSound('empty'); }
-      refreshInvUI(); return;
+    if(cell){                                              // lift loot into your hands; you stow it yourself
+      removeFromGrid(cell,f.grid);
+      handHold(cell);                                      // spawns it in-hand + plays 'grab'
+      toast(cell.name.toUpperCase()+' TAKEN'); refreshInvUI(); return;
     }
     playSound('click'); return;
   }
