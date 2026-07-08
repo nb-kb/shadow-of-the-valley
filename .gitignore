@@ -4,6 +4,7 @@ node_modules/
 # Local env / secrets — NEVER commit API keys
 .env
 .env.*
+!.env.example
 *.key
 
 # Editor / OS cruft
