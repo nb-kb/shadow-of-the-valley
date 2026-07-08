@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21p';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21q';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -888,7 +888,7 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
       float o2=sdBoxL(p, vec3(bb.x,bh*0.5,bb.y), vec3(bb.z,bh*0.5,bb.w));
       float i2=sdBoxL(p, vec3(bb.x,bh*0.5-0.12,bb.y), vec3(bb.z-0.35,bh*0.5-0.12,bb.w-0.35));
       float bd=max(o2,-i2);
-      bd=max(bd,-lvHole(p,vec3(bb.x,0.,bb.y),vec3(bb.z,0.,bb.w),bd2,0.6,1.05));
+      bd=max(bd,-lvHole(p,vec3(bb.x,0.,bb.y),vec3(bb.z,0.,bb.w),bd2,1.1,1.05));
       if(bd<d) d=bd;
       if(bd2.w>0.5){                                              // LEVEL-PRIM: three slats, kid-nailed
         bool fE=bd2.x<1.5;
@@ -907,7 +907,7 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     float inner=sdBoxL(p, vec3(c.x,h*0.5-0.12,c.z), vec3(hb.x-0.35,h*0.5-0.12,hb.z-0.35));
     d=max(outer,-inner); m=3.0;
     vec4 dr=lvPool(ls);
-    if(dr.z>0.0) d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),dr,0.6,1.05));
+    if(dr.z>0.0) d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),dr,1.1,1.05));
     else{ float sd2=lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),vec4(3.0,0.0,0.7,0.0),0.28,1.0);
           d=max(d,-max(sd2,0.02)); }
   }else if(kind==4){                                              // TENTS
@@ -1947,7 +1947,10 @@ function _sdBox3(px,py,pz,cx,cy,cz,hx,hy,hz){
 function _seg2(px,pz,ax,az,bx,bz){ const vx=bx-ax,vz=bz-az, wx=px-ax,wz=pz-az;
   const t=Math.min(1,Math.max(0,(wx*vx+wz*vz)/(vx*vx+vz*vz)));
   return Math.hypot(px-(ax+vx*t), pz-(az+vz*t)); }
-function _hash2i(x,z){ let h=(x*374761393+z*668265263)|0; h=(h^(h>>13))*1274126177|0; return ((h^(h>>16))>>>0)/4294967296; }
+// MUST mirror GLSL lvHash bit-for-bit. Math.imul is required: the *1274126177
+// product exceeds 2^53, so plain `*...|0` rounds in f64 and desyncs from the
+// shader (the tree/stump collision-vs-visual drift in Area 1's forest).
+function _hash2i(x,z){ let h=(Math.imul(x,374761393)+Math.imul(z,668265263))|0; h=Math.imul(h^(h>>13),1274126177); return ((h^(h>>16))>>>0)/4294967296; }
 
 // region SDF -> [dist, mat, cut] ; cut carves the ground (trench)
 function regionSdfJS(r,px,py,pz){
@@ -1988,8 +1991,8 @@ function regionSdfJS(r,px,py,pz){
       let bd=Math.max(outer2,-inner2);
       const dr=r.door, dw=dr[2];
       const dd=(dr[0]==='E'||dr[0]==='W')
-        ? _sdBox3(px,py,pz,(dr[0]==='E'?b2[2]:b2[0]),1.05,b2cz+dr[1],0.6,1.05,dw*0.5)
-        : _sdBox3(px,py,pz,b2cx+dr[1],1.05,(dr[0]==='N'?b2[3]:b2[1]),dw*0.5,1.05,0.6);
+        ? _sdBox3(px,py,pz,(dr[0]==='E'?b2[2]:b2[0]),1.05,b2cz+dr[1],1.1,1.05,dw*0.5)
+        : _sdBox3(px,py,pz,b2cx+dr[1],1.05,(dr[0]==='N'?b2[3]:b2[1]),dw*0.5,1.05,1.1);
       bd=Math.max(bd,-dd);
       if(bd<d){ d=bd; }
       if(r.boards){                                       // LEVEL-PRIM: three slats, kid-nailed
@@ -2009,8 +2012,8 @@ function regionSdfJS(r,px,py,pz){
     const dr=r.door, dw=dr[2];
     if(dw>0){ const off=dr[1];
       const dd=(dr[0]==='E'||dr[0]==='W')
-        ? _sdBox3(px,py,pz,(dr[0]==='E'?bx[2]:bx[0]),1.05,cz+off,0.6,1.05,dw*0.5)
-        : _sdBox3(px,py,pz,cx+off,1.05,(dr[0]==='N'?bx[3]:bx[1]),dw*0.5,1.05,0.6);
+        ? _sdBox3(px,py,pz,(dr[0]==='E'?bx[2]:bx[0]),1.05,cz+off,1.1,1.05,dw*0.5)
+        : _sdBox3(px,py,pz,cx+off,1.05,(dr[0]==='N'?bx[3]:bx[1]),dw*0.5,1.05,1.1);
       d=Math.max(d,-dd); }
     else{ const dd=_sdBox3(px,py,pz,cx,1.0,bx[1],0.7,1.0,0.28); d=Math.max(d,-Math.max(dd,0.02)); }
     m=3.0;
@@ -5361,8 +5364,10 @@ function updatePlayer(dt){
       }else playerPos.onGround=false;
     }
     else playerPos.onGround=false;
-    // the camera trails the body: terrain noise reads as gait, not vibration
-    if(playerPos.ySm===undefined || Math.abs(playerPos.y-playerPos.ySm)>0.6) playerPos.ySm=playerPos.y;
+    // the camera trails the body only while GROUNDED: terrain noise reads as gait,
+    // not vibration. Airborne the body flies a clean arc — track it 1:1 so a jump
+    // or fall doesn't lag then snap ("pixel skip"); the landing eases in via the lerp.
+    if(playerPos.ySm===undefined || !playerPos.onGround || Math.abs(playerPos.y-playerPos.ySm)>0.6) playerPos.ySm=playerPos.y;
     else playerPos.ySm += (playerPos.y-playerPos.ySm)*Math.min(1,14*dt);
     // coyote: you may still jump a beat after leaving the edge
     playerPos.coyoteT = playerPos.onGround ? 0.09 : Math.max(0,playerPos.coyoteT-dt);

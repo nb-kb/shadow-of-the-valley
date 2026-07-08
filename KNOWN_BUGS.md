@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-08 (build v21p).
+Last reviewed: 2026-07-08 (build v21q).
 
 ## Open
 
@@ -15,25 +15,7 @@ Last reviewed: 2026-07-08 (build v21p).
   clean.** Chrome is the odd one out.
 - **Status:** UNRESOLVED. Needs a browser to pin the exact line / call path.
 
-### 2. Area 1 — armory / forest ("lumber yard") collision off
-- **Where:** the armory building (`BUILDING`, box `[2,102,20,116]`, door `S`,
-  ~line 1832) and the adjacent forest / logged-stumps region (~line 1834).
-- **Symptom:** collision inaccurate in that corner of Area 1 — the one spot
-  left after the v21p facade/fence doorway fix.
-- **Note:** the armory door offset is *relative* (0), which should already be a
-  correct GLSL↔JS twin — so this is a **different cause** than the facade fix.
-  Unclear yet whether it's the armory walls/door, the forest `TREES`/stumps
-  collision, or the timber props. **Uninvestigated** — needs in-browser pinning.
-
-### 3. Jump / landing feel (regression from the fort-jitter work)
-- **Symptom:** landing is rigid; the descent "skips a few pixels."
-- **Cause:** camera Y-smoother (~line 5364) hard-snaps when the body moves
-  >0.6 m in a frame, and landing does an exact snap to the ground (~line 5358).
-- **Fix (small, global — helps both levels):** track the body 1:1 while
-  airborne (gait-smoothing is only for footfalls); ease the landing snap.
-- **Priority:** low / not urgent.
-
-### 4. Invisible enemies — shader slot cap
+### 2. Invisible enemies — shader slot cap
 - **Cause:** shader renders at most 10 enemies (`RLIM.ENEMIES=10`, ~line 624;
   render gate ~line 1153), but the JS spawns up to 22 (facility, ~line 1863) or
   14 (raid, ~line 4216). The upload sends only the nearest-10 live enemies.
@@ -43,7 +25,7 @@ Last reviewed: 2026-07-08 (build v21p).
 - **Note:** enemies are *never* part of the player's movement-collision SDF by
   design — "solid" means bullet/LOS interaction only, not physical blocking.
 
-### 5. Crate opens and instantly grabs the top item
+### 3. Crate opens and instantly grabs the top item
 - **Cause:** the crate opens on `pressed('interact')` in `updateInteract`, then
   the same frame `menuNav()` (crate now counts as a menu) reads the same
   `pressed('interact')` edge and runs `interactInventory()` → take.
@@ -59,6 +41,22 @@ Last reviewed: 2026-07-08 (build v21p).
 
 ## Recently fixed
 
+- **v21q** — Building doorways (armory, NW lab) wouldn't let you in: the door
+  carve was only 0.6 m half-depth, so after the SDF subtraction the threshold
+  kept a ~0.15 m clearance ridge — below the 0.34 m player radius, so collision
+  shoved you back out even though the doorway *rendered* open (NOT a twin desync;
+  both sides agreed). Deepened the carve to 1.1 m (→ ~0.40 m clearance) on the
+  standalone `BUILDING` door and the `WALLS` interior-building door, GLSL + JS.
+  No visual change — the carve only extends into empty space either side of the
+  thin wall.
+- **v21q** — Forest tree/stump collision desync: `_hash2i` used
+  `(...)*1274126177|0`, whose product exceeds 2^53 and rounds in f64, diverging
+  from the shader's exact int hash in ~92% of cells — so collision trees sat
+  away from the drawn ones. Switched to `Math.imul` (mirrors GLSL `lvHash`; same
+  idiom `cellHash` already used).
+- **v21q** — Jump/landing feel: camera Y-smoother now tracks the body 1:1 while
+  airborne (was lagging then hard-snapping = the "pixel skip"); the grounded
+  lerp eases the touchdown instead of an instant rigid snap.
 - **v21p** — Facade/fence doorway twin desync: `FACADE`/`FENCE` door offsets are
   authored absolute, but GLSL's `lvHole` added the region center, flinging the
   carve ~96 m off the wall (facade/fence rendered solid while collision had the
