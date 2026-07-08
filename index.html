@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21o';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21p';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -2133,9 +2133,10 @@ function buildLevelTexData(level,bake){
     if(r.kind===K.TENT){ B=[r.kind,0,0,0]; r.tents.forEach(t=>items.push([t[0],t[1],t[2],0])); }
     if(r.kind===K.FACADE){ B=[r.kind,r.h,0,r.wingH];
       const w=r.wing; items.push([(w[0]+w[2])/2,(w[1]+w[3])/2,(w[2]-w[0])/2,(w[3]-w[1])/2]);
-      r.doors.forEach(dr=>items.push([axis[dr[0]],dr[1],0.95,0])); }
+      // door offsets are authored ABSOLUTE; lvHole adds region center, so pre-subtract it (E/W→z, N/S→x)
+      r.doors.forEach(dr=>{ const a=axis[dr[0]]; items.push([a, dr[1]-(a<1.5?cz:cx), 0.95, 0]); }); }
     if(r.kind===K.FENCE){ B=[r.kind,r.h,0,0];
-      r.gates.forEach(g=>items.push([axis[g[0]],g[1],2.2,1]));
+      r.gates.forEach(g=>{ const a=axis[g[0]]; items.push([a, g[1]-(a<1.5?cz:cx), 2.2, 1]); });
       r.blocks.forEach(b2=>items.push([b2[0],b2[1],0,0])); }
     if(r.kind===K.PITS){ B=[r.kind,0,r.trenchD,0];
       r.rings.forEach(rg=>items.push([rg[0],rg[1],0,0]));
