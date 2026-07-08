@@ -362,7 +362,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21q';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v21r';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -384,6 +384,7 @@ const PARAMS = {
   enemyDamage: {v:11,  min:0,   max:40,   step:1,   label:'zealot bolt dmg'},
   maxEnemies:  {v:3,   min:0,   max:6,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
+  rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
   fogDensity:  {v:0.014,min:0,  max:0.1,  step:0.002,label:'fog density'},
 };
 const P = k => PARAMS[k].v;
@@ -645,6 +646,7 @@ uniform vec3  uSkyHi;
 uniform vec3  uSkyLo;
 uniform float uFog;
 uniform float uFar;
+uniform int   uMaxSteps;    // main structure-march cap — the DETAIL graphics knob
 uniform vec2  uSeed;        // integer cell offset per run/ring
 uniform vec2  uGateCell;
 uniform vec3  uGatePos;
@@ -1264,6 +1266,7 @@ vec2 raycast(vec3 o, vec3 dir){
   float t=0.0; float m=-1.0;
   float tMax=min(min(uFar, tG+0.5), skyCap);
   for(int i=0;i<150;i++){
+    if(i>=uMaxSteps) break;                       // DETAIL knob: fewer steps = cheaper, softer far detail
     vec3 pp=o+dir*t;
     vec2 r=map(pp);
     if(r.x < (0.0007*t+0.0004)){ m=r.y; break; }
@@ -1510,7 +1513,7 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
- 'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uWorldTop','uVCrateCount',
+ 'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uWorldTop','uVCrateCount',
  'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
@@ -2662,6 +2665,10 @@ const SETTINGS_REGISTRY=[
    options:['50%','70%','85%','100%'],
    get:()=>['50%','70%','85%','100%'][Math.max(0,[0.5,0.7,0.85,1.0].findIndex(v=>Math.abs(v-P('renderScale'))<0.03))],
    set:v=>{ PARAMS.renderScale.v=[0.5,0.7,0.85,1.0][['50%','70%','85%','100%'].indexOf(v)]; resize(); }},
+  {container:'goggles', id:'rayQ', label:'DETAIL', kind:'enum', functional:true,
+   options:['FAST','MED','FULL'],
+   get:()=>['FAST','MED','FULL'][Math.max(0,[80,120,150].findIndex(v=>Math.abs(v-P('rayQuality'))<6))],
+   set:v=>{ PARAMS.rayQuality.v=[80,120,150][['FAST','MED','FULL'].indexOf(v)]; }},
   {container:'goggles', id:'brightness', label:'BRIGHT', kind:'range', min:0.5,max:1.5,step:0.1, functional:false},
   {container:'goggles', id:'resolution', label:'RES', kind:'enum', options:['LOW','MATCH'], functional:false, init:'LOW'},
   // headphones — the ears (per-category buses are a later seam: route each to its own gain node)
@@ -5651,6 +5658,7 @@ function frame(){
     for(let i=0;i<vc.length&&i<6;i++) gl.uniform4f(U.uVCrates[i], vc[i][0], vc[i][1], vc[i][2], 0);
   }
   gl.uniform1f(U.uFar, activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0);
+  gl.uniform1i(U.uMaxSteps, P('rayQuality')|0);
   gl.uniform2f(U.uSeed,SEED.x,SEED.y);
   gl.uniform2f(U.uGateCell,GATE.cx,GATE.cz);
   gl.uniform3f(U.uGatePos,GATE.x,0,GATE.z);
