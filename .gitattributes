@@ -1,0 +1,6 @@
+# Normalize line endings so versions don't churn across machines/agents
+*.html text eol=lf
+*.md   text eol=lf
+*.js   text eol=lf
+*.css  text eol=lf
+*.json text eol=lf
