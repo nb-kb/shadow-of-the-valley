@@ -68,6 +68,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   font-size:11px;letter-spacing:.14em;color:#ff5a66;text-shadow:0 0 6px #400;opacity:0;transition:opacity .15s;}
 #compassStrip{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;
   font-size:11px;letter-spacing:.2em;color:var(--gate);text-shadow:0 0 6px rgba(87,224,163,.6);}
+#photoStrip{position:absolute;top:24px;left:calc(50% + 42px);z-index:10;pointer-events:none;
+  font-size:10px;letter-spacing:.2em;color:var(--bone);text-shadow:0 0 6px rgba(255,217,138,.35);}
 
 /* damage vignette + alert flash */
 #vignette{position:absolute;inset:0;pointer-events:none;z-index:8;opacity:0;
@@ -215,6 +217,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </div>
 <div id="eyeWrap"><div id="eye"></div><div id="eyeLbl">EXPOSURE</div></div>
 <div id="compassStrip" class="hidden">▲ BEACON</div>
+<div id="photoStrip" class="hidden">SEEN --m</div>
 <div id="toolReadout" class="panel">
   <div class="big" id="trName">—</div>
   <div class="sub" id="trMode">BARE</div>
@@ -1889,7 +1892,7 @@ LEVELS.area1={
       common:['ammo9','ammo9','ammo9','ration','ration','battS','battS','battM',
               'magStd','magStd','watch','compass','gummies','bandAid'],
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
-              'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies'],
+              'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies','photometer'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
               'barrelC','heavyBarrel','serrated'],
@@ -1924,7 +1927,7 @@ LEVELS.hideout={
      crates:[[-3.2,-3.4,0.9,'stash'],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
              [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]]},
   ],
-  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[]},
+  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[],guaranteed:['photometer']},
   terminal:{x:-3.4,z:-0.6},
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
@@ -2641,6 +2644,7 @@ const ITEM_DEFS={
   // --- analog settings, as objects ---
   watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','While carried, the HUD keeps time.'),
   compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon heading.'),
+  photometer: ()=>new Gadget('Light Meter','#a8925f','photometer','While carried, reads how far out the light gives you away.'),
   opticsDial: ()=>new Gadget('Optics Dial','#8f9fb0','optics','Right-click: cycle render fidelity (this IS the settings menu).'),
   volumeKnob: ()=>new Gadget('Volume Knob','#b08f7f','volume','Right-click: cycle sound level.'),
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
@@ -3210,6 +3214,8 @@ function useGadget(g){
     case 'compass':{
       const dx=GATE.x-playerPos.x, dz=GATE.z-playerPos.z;
       toast('BEACON · '+Math.round(Math.hypot(dx,dz))+'m'); playSound('click'); break; }
+    case 'photometer':
+      toast('SEEN FROM · '+Math.round(spotDistance())+'m'); playSound('click'); break;
   }
 }
 function findGadget(kind){
@@ -3225,6 +3231,13 @@ function hasGadget(kind){
     if(it instanceof Gadget && it.kind===kind) return true;
   }
   return false;
+}
+// PHOTOMETER MATH — inverts the zealot perception line (Zealot.update):
+//   rate = exposure * (enemyVision/dist) * motion, accumulating only while rate > 0.12.
+// Standing+quiet motion is 0.6 → dist = exposure*enemyVision*5. Floor 2m; cap at the
+// 34m sight gate. Assumes the zealot is LOOKING — the cone is their problem, not the light's.
+function spotDistance(){
+  return clamp(playerPos.exposure*P('enemyVision')*0.6/0.12, 2, 34);
 }
 
 // ============================================================
@@ -4231,7 +4244,7 @@ class Zealot{
     let rate=0;
     if(seesLOS&&inCone){
       const motion=playerPos.isSprinting?1.35:(playerPos.noiseLevel>1.5?1.0:(playerPos.isCrouching?0.35:0.6));
-      rate=playerPos.exposure*(P('enemyVision')/Math.max(1,dist))*motion;
+      rate=playerPos.exposure*(P('enemyVision')/Math.max(1,dist))*motion;   // PHOTOMETER twin: spotDistance() inverts this line + the 0.12 gate below
     }
     if(dist<12){
       const heard=playerPos.noiseLevel/Math.max(1,dist)* (seesLOS?1:0.4);
@@ -4596,6 +4609,12 @@ function seedLevelSpawns(L){
         if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break;
       }
     }
+  }
+  // guaranteed: the level promises these regardless of the roll
+  for(const k of (L.spawn.guaranteed||[])){
+    if(!ITEM_DEFS[k]) continue;
+    const it=ITEM_DEFS[k]();
+    for(const cr of crateRegistry){ if(cr.stash) continue; if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break; }
   }
 }
 // exfiltration: stand in the circle, hold the verb, go home with the bag
@@ -5759,7 +5778,7 @@ function menuNav(){
 // ============================================================
 // MAIN LOOP
 // ============================================================
-let lastT=performance.now(), fpsEma=60, hudT=0;
+let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
 
 const FRAME_MS=1000/60;
@@ -6031,6 +6050,12 @@ function frame(){
       const ang=(Math.atan2(ddx,ddz)-cameraYaw)*180/Math.PI;
       comp.innerHTML='<span style="display:inline-block;transform:rotate('+ang.toFixed(0)+'deg)">▲</span> BEACON '+Math.round(Math.hypot(ddx,ddz))+'m';
     }else comp.classList.add('hidden');
+    // photometer: the true spot-distance, refreshed ~4Hz so the number doesn't shimmer
+    const pm=document.getElementById('photoStrip');
+    if(hasGadget('photometer')&&gameState==='play'){
+      if(pm.classList.contains('hidden')){ pm.classList.remove('hidden'); photoTick=1; }
+      if((photoTick^=1)===0) pm.textContent='SEEN '+Math.round(spotDistance())+'m';
+    }else pm.classList.add('hidden');
     updateToolReadout();
   }
   if(toastT>0){ toastT-=dt; if(toastT<=0) document.getElementById('banner').style.opacity=0; }
