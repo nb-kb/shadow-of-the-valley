@@ -4762,7 +4762,7 @@ function itemFromJSON(j){
     if(j.rs){ it.resist.burn=Math.min(0.6,Math.max(0,+j.rs[0]||0)); it.resist.bleed=Math.min(0.6,Math.max(0,+j.rs[1]||0)); }
   }
   if(it instanceof Barrel){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } }); it.muzzle=itemFromJSON(j.muzzle); }   // pre-retune saves ran longer — tail mods salvage, never vanish
-  if(it instanceof Platform){ j.slots.forEach((c,i)=>it.slots[i]=itemFromJSON(c));
+  if(it instanceof Platform){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } });   // same clamp as the Barrel — overlong saves salvage, never overrun
     if(j.cycles) it.cycles=j.cycles.slice(); }
   if(it instanceof Tool){ j.slots.forEach((c,i)=>it.base.slots[i]=itemFromJSON(c));
     it.base.muzzle=itemFromJSON(j.muzzle); it.baseCycle=j.cycle||0; it._wield=!!j.wielded; }
@@ -4808,18 +4808,29 @@ function saveMeta(slot){
 function loadGame(slot){
   const ls=_ls(); const meta=saveMeta(slot);
   if(!ls||!meta){ toast('EMPTY SLOT'); return; }
-  const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));
   _retuneOrphans.length=0;
-  for(const k of EQUIP_SLOTS) equip[k]=null;
-  activeTool=null;
-  for(const k in b.equip){ const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }
-  syncBagAlias(); clampZone();
-  if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
-  for(const row of stashInv) row.fill(null);              // in place — the crate registry holds this array. v2 reads empty.
-  for(const cj of (b.stash||[])){
-    const ch=itemFromJSON(cj); if(!ch) continue;          // unknown defKeys drop silently, as everywhere
-    if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
-    else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
+  try{                                                    // field-level rot can slip past saveMeta — a throw mid-rebuild
+    const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));       // must read as EMPTY, never crash over a half-wiped rig
+    for(const k of EQUIP_SLOTS) equip[k]=null;
+    activeTool=null;
+    for(const k in b.equip){ const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }
+    syncBagAlias(); clampZone();
+    if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
+    for(const row of stashInv) row.fill(null);            // in place — the crate registry holds this array. v2 reads empty.
+    for(const cj of (b.stash||[])){
+      const ch=itemFromJSON(cj); if(!ch) continue;        // unknown defKeys drop silently, as everywhere
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
+      else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
+    }
+  }catch(e){
+    for(const k of EQUIP_SLOTS) equip[k]=null;
+    activeTool=null;
+    for(const row of stashInv) row.fill(null);
+    _retuneOrphans.length=0;
+    syncBagAlias(); clampZone();
+    toast('SLOT '+(slot+1)+' CORRUPT — READ AS EMPTY'); playSound('empty');
+    refreshInvUI();
+    return;
   }
   toast('MEMORY RESTORED · SLOT '+(slot+1)); playSound('pickup');
   if(_retuneOrphans.length){                              // the retune unseated tail mods — pockets first, stash second
