@@ -1884,7 +1884,7 @@ LEVELS.area1={
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
               'helmetCap','harnessL','battH','lantern','magDrum'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
-              'splinter','bounce','pierce','heavy','compensator','hairTrigger',
+              'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
               'barrelC','heavyBarrel','serrated'],
       cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore'],
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
@@ -2619,7 +2619,9 @@ const ITEM_DEFS={
   helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
-  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, then blows 1.2s later · +4⚡'),
+  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it from the blast · +4⚡'),
+  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core triggers the instant it touches anything — no stick, no wait · +5⚡'),
+  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{fuseAdd:1.5,surcharge:3},'Next core waits +1.5s more on the fuse · +3⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
@@ -2635,7 +2637,7 @@ const ITEM_DEFS={
 for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
   ITEM_DEFS[k]=()=>{ const it=f(); it.defKey=k; return it; }; }
 const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
-                'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter',
+                'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter','contactMod','slowFuse',
                 'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
                 'barrelC','barrelU','barrelR','platS','platM','battS','battM','scope2x','scope3x'];
 
@@ -3420,7 +3422,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,burn:0,bleed:false,surcharge:0,laser:false}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,surcharge:0,laser:false}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
 function foldFrame(out,m){
   const e=m.effect;
@@ -3468,6 +3470,8 @@ function resolveLane(col,out){
       if(e.twin) pend.twin*=e.twin;
       if(e.silent) pend.silent=true;
       if(e.fuse) pend.fuse+=e.fuse;
+      if(e.fuseAdd) pend.fuse+=e.fuseAdd;             // TIMER: more patience on the same fuse
+      if(e.contact) pend.contact=true;
       if(e.split) pend.split+=e.split;
       if(e.laser) pend.laser=true;
       if(e.burn) pend.burn+=e.burn;
@@ -3481,6 +3485,8 @@ function resolveLane(col,out){
                   cost:(m.effect.base||0)+pend.surcharge,core:m,
                   spreadAdd:col.spreadAdd,lane};
       lane.shots.push(shot);
+      const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY: a fused core casts the NEXT core from its point of death
+      if(prev&&prev.pend.fuse>0&&!shot.pend.laser) prev.relayNext=shot;
       for(const f of feeders) lane.flow.push({from:f,to:m});
       pend=freshPend(); feeders=[];
     }
@@ -3617,13 +3623,15 @@ function emitProjectile(owner,origin,dir,shot,base){
     const d=new Vec3(dir.x+(runRng()-0.5)*spr*2, dir.y+(runRng()-0.5)*spr*2, dir.z+(runRng()-0.5)*spr*2).normalize();
     const kind=shot.kind;
     const speed=(kind==='spark'?34:kind==='pick'?60:82)*p.vel;
+    const rel=(i===0&&shot.relayNext)||null;          // only the first TWIN copy carries the chain — no 3^n fireworks
     projectiles.push({
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:2.2, owner, kind,
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything
       dmg:(kind==='spark'||kind==='pick'?12:base.dmg)+p.dmg,
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12,
-      fuse:p.fuse||0, split:p.split||0, stuck:false, push:!!(base&&base.pulse),
+      fuse:p.fuse||0, split:p.split||0, contact:!!p.contact, stuck:false, push:!!(base&&base.pulse),
+      relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
       burn:p.burn||0, bleed:!!p.bleed,
       col:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:[1.0,0.75,0.25],
       silent:p.silent||base.silenced,
@@ -3886,7 +3894,13 @@ function updateProjectiles(dt){
       // world
       const wd=mapWorldJS(pr.pos.x,pr.pos.y,pr.pos.z);
       if(wd<0.04){
-        if(pr.bounces>0){
+        if(pr.contact){                                // CONTACT: no patience — arrival IS the trigger
+          worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          pr.pos.addScaledVector(_n,0.06);
+          addDecal(pr.pos,_n,pr.kind==='spark'?0.7:0.22);
+          dead=true;
+          triggerPayload(pr);
+        }else if(pr.bounces>0){
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           const dot=pr.vel.dot(_n);
           pr.vel.x-=2*dot*_n.x; pr.vel.y-=2*dot*_n.y; pr.vel.z-=2*dot*_n.z;
@@ -3912,6 +3926,7 @@ function updateProjectiles(dt){
   }
 }
 function impactOrPierce(pr){
+  if(pr.contact){ triggerPayload(pr); return true; }   // CONTACT: flesh counts as arrival
   if(pr.kind==='spark'){ triggerPayload(pr); return true; }
   if(pr.split>0){ splinterBurst(pr); return true; }
   if(pr.pierce>0){ pr.pierce--; return false; }
@@ -3924,6 +3939,10 @@ function triggerPayload(pr){
   if(pr.kind==='grip') addGlob(pr.pos);
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
+  if(pr.relay){                                        // FUSE-RELAY: the death casts the next core — free, the fuse surcharge already paid
+    const sh=pr.relay; pr.relay=null;                  // one cast per corpse
+    emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase);
+  }
 }
 function splinterBurst(pr){
   const nFrag=Math.min(4,pr.split);
@@ -4719,6 +4738,8 @@ function tipBrief(it){                                  // the info square's row
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
     if(e.silenced||e.silent) rows.push('silenced');
     if(e.fuse) rows.push('fused '+e.fuse+'s');
+    if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
+    if(e.contact) rows.push('triggers on contact');
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.laser) rows.push('laser · ⚡+'+(e.surcharge||0));
     return {kind,rows};
