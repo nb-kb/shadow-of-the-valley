@@ -4622,9 +4622,12 @@ function seedLevelSpawns(L){
       }
     }
   }
-  // guaranteed: the level promises these regardless of the roll
+  // guaranteed: the level promises these regardless of the roll — a promise KEPT,
+  // not re-given: one already in a crate, the stash, or on the rig satisfies it
   for(const k of (L.spawn.guaranteed||[])){
     if(!ITEM_DEFS[k]) continue;
+    const owns=g=>!!g&&g.flat().some(x=>x&&x.defKey===k);
+    if(crateRegistry.some(cr=>owns(cr.inv))||EQUIP_SLOTS.some(s=>equip[s]&&owns(equip[s].inv))) continue;
     const it=ITEM_DEFS[k]();
     for(const cr of crateRegistry){ if(cr.stash) continue; if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break; }
   }
