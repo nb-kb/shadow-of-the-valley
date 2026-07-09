@@ -3705,7 +3705,7 @@ function runContinuousBeams(dt){
     // enemies intercept the thread
     let hitEn=null;
     for(const en of enemies){
-      if(en.health<=0) continue;
+      if(en.health<=0||en._dormant) continue;
       const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
       const tt=rx*f.x+ry*f.y+rz*f.z;
       if(tt>0.3&&tt<t){
@@ -3857,7 +3857,7 @@ function updateProjectiles(dt){
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
-          if(en.health<=0) continue;
+          if(en.health<=0||en._dormant) continue;        // dormant: bullets pass through
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
           if(d<0.55){
             en.hurt(pr.dmg,'player'); playSound('hit');
@@ -3937,7 +3937,7 @@ function explode(pr){
   addNoise(pr.pos.x,pr.pos.y,pr.pos.z,26);
   const R=2.4;
   for(const en of enemies){
-    if(en.health<=0) continue;
+    if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
     const d=en.position.distanceTo(pr.pos);
     if(d<R) en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner);
   }
@@ -4167,7 +4167,7 @@ class Zealot{
     }
   }
   tryShoot(dt,dist,seesLOS){
-    if(this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
+    if(this._dormant||this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
     const mag=toolMagazine(this.tool);
     const pool=this.res.shots.filter(sh=>!sh.pend.laser);   // continuous threads are a player verb
     if(!pool.length) return;
@@ -5701,7 +5701,8 @@ function frame(){
       return da-db;
     });
   for(const en of _liveEn){
-    if(ei>=RLIM.ENEMIES) break;
+    en._dormant = ei>=RLIM.ENEMIES;            // past the uniform cap: unrendered = dormant, can't shoot or be shot
+    if(en._dormant) continue;
     gl.uniform3f(U.enemyPos[ei],en.position.x,en.position.y,en.position.z);
     gl.uniform4f(U.enemyData[ei],en.yaw,en.state,en.muzzle,en.hurtFlash);
     ei++;
