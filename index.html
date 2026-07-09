@@ -3034,6 +3034,9 @@ function interactInventory(){
 
   if(heldWorld){
     const it=heldWorld.w.item;
+    // supply crates are TAKE-ONLY: they reseed on every deploy — whatever you leave, the
+    // valley eats. The stash (no external flag) is the one box that accepts.
+    if(f.external){ toast('A SUPPLY CRATE — TAKE ONLY'); playSound('empty'); return; }
     // held rounds pour straight into a magazine under the cursor
     if(it instanceof Ammunition && cell instanceof Magazine
        && cell.acceptedType===it.ammoType && cell.loaded<cell.maxCapacity){
