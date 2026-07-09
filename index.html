@@ -1913,10 +1913,10 @@ LEVELS.hideout={
     {id:'house', kind:LVL.KIND.WALLS, box:[-9,-7,9,7], h:3.1, gate:['N',5.5,0.9],
      bldg:[-4.5,-4.5,1.5,0.5], bldgH:2.55, door:['E',0,0.9], boards:true},
     {id:'clutter', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-8,-6,8,6],
-     crates:[[-3.2,-3.4,0.9],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
+     crates:[[-3.2,-3.4,0.9,'stash'],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
              [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]]},
   ],
-  exfils:[], doors:[], spawn:{zealots:[],lootN:4,minSpace:4,lootTable:[],lootRegions:[]},
+  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[]},
   terminal:{x:-3.4,z:-0.6},
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
@@ -2739,8 +2739,10 @@ function invZones(){
     // show your kit AND the crate together, so you can lift loot into your hands
     // (Square) and stow it into a pocket yourself — container-to-container transfer
     return [...playerZones(),
-            {id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
-             external:true}];
+            lootCrate.stash                               // THE STASH is yours: put AND take
+              ? {id:'stash',label:'THE STASH',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows}
+              : {id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
+                 external:true}];
   return playerZones();
 }
 function playerZones(){
@@ -2879,7 +2881,7 @@ function menuInspect(item){
   refreshInvUI();
 }
 function closeAllInv(){ menuSet('closed'); lootCrate=null; }
-function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast('SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
+function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast(cr.stash?'THE STASH':'SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
   else if(Menus.view==='crate') closeAllInv();            // a crate is a room you simply leave
@@ -3282,9 +3284,9 @@ function updateInteract(dt){
     if(ex){ setPrompt(_pr, _exfilHold>0
         ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
         : ex.label+' — hold <b>E</b> to extract', true); return; }
-    const cr = gameState==='play' ? nearestCrate(2.3) : null;
+    const cr = isPlayable() ? nearestCrate(2.3) : null;   // home boxes open too — the stash lives there
     if(cr && !uiOpen()){
-      setPrompt(_pr, 'A SUPPLY CRATE — <b>E</b>', true);
+      setPrompt(_pr, cr.stash?'THE STASH — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
       if(pressed('interact')){ openCrate(cr); }
       return;
     }
@@ -4277,11 +4279,16 @@ function startRun(){
   refreshInvUI();
 }
 function onDeath(){
-  if(!_pillDeath && activeLevel&&activeLevel.id!=='hideout'){   // a lost raid, not a lost life
+  if(!_pillDeath && !(activeLevel&&activeLevel.id==='hideout')){   // a lost raid, not a lost life
     playSound('death');
-    playerPos.health=playerPos.maxHealth;
-    showBanner('DRAGGED YOURSELF HOME');
+    // THE TEETH: the bag you carried is the valley's now. The rig on your back,
+    // the pockets sewn to it (belt·holster·harness), and the tool in your grip keep.
+    // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
+    const rk=equip.rucksack;
+    if(rk&&rk.inv) for(const row of rk.inv) row.fill(null);
+    playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
+    showBanner('THE VALLEY KEPT THE BAG');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
   _pillDeath=false;
@@ -4351,11 +4358,20 @@ function travelTo(dest){                      // THE LOOP: the valley is the lan
   toast(dest==='hideout' ? 'HAUL IT · THE GATE LEADS HOME'
                          : 'HOOF IT · THE GATE LEADS TO THE CAMP');
 }
+// THE STASH: the hideout's one box that remembers. Its grid lives at module
+// scope so it survives deploys; SAVE_VER 3 writes it into the slot blobs.
+const STASH_COLS=6, STASH_ROWS=4;
+const stashInv=Array(STASH_ROWS).fill(null).map(()=>Array(STASH_COLS).fill(null));
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
 let crateRegistry=[], lootCrate=null;
 function buildCrateRegistry(L){
   crateRegistry=[]; lootCrate=null;
   const add=(c,tiers)=>{
+    if(c[3]==='stash'){                                   // THE STASH: persistent grid, never seeded
+      crateRegistry.push({x:c[0], z:c[1], size:c[2], inv:stashInv,
+                          invCols:STASH_COLS, invRows:STASH_ROWS, tiers:[], stash:true});
+      return;
+    }
     const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
     crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3, tiers});
   };
@@ -4423,6 +4439,7 @@ function seedLevelSpawns(L){
     for(let n=0;n<(L.spawn.lootN||0);n++){
       for(let a=0;a<10;a++){
         const cr=crateRegistry[Math.floor(rng()*crateRegistry.length)];
+        if(cr.stash) continue;                            // the stash is the player's — seed nothing
         const tn=cr.tiers[Math.floor(rng()*cr.tiers.length)];
         const list=TIERS[tn]||TIERS.common;
         const it=ITEM_DEFS[list[Math.floor(rng()*list.length)]]();
@@ -4528,7 +4545,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=2, SAVE_KEY=i=>'sotv_save_'+i;
+const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash. v2 blobs load as an empty stash.
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
   if(!it) return null;
@@ -4576,8 +4593,13 @@ function saveGame(slot){
   const ls=_ls(); if(!ls){ toast('SAVE FAILED — NO MEMORY BANKS HERE'); playSound('empty'); return; }
   const eq={};
   for(const k of EQUIP_SLOTS) if(equip[k]) eq[k]=itemToJSON(equip[k]);   // containers carry their contents
+  const stash=[]; const seen=new Set();                   // top-left-anchored walk, same idiom as Armor inv
+  for(let r=0;r<STASH_ROWS;r++) for(let c=0;c<STASH_COLS;c++){
+    const ch=stashInv[r][c];
+    if(ch&&!seen.has(ch)&&ch.x===c&&ch.y===r){ seen.add(ch); stash.push(itemToJSON(ch)); }
+  }
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
-              equip:eq, wield:activeTool?itemToJSON(activeTool):null};
+              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash};
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
   const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
@@ -4589,10 +4611,11 @@ function saveMeta(slot){
   try{
     const raw=ls.getItem(SAVE_KEY(slot)); if(!raw) return null;
     const b=JSON.parse(raw);
-    if(b.version!==SAVE_VER||typeof b.equip!=='object') return null;
+    if((b.version!==2&&b.version!==SAVE_VER)||typeof b.equip!=='object') return null;   // v2 accepted: pre-stash
     let n=0; const walk=j=>{ if(!j) return; n++; (j.inv||[]).forEach(walk); (j.slots||[]).forEach(walk); walk(j.muzzle); };
     for(const k in b.equip) walk(b.equip[k]);
     walk(b.wield);
+    (b.stash||[]).forEach(walk);
     return {stamp:b.stamp, items:n};
   }catch(e){ return null; }
 }
@@ -4605,6 +4628,12 @@ function loadGame(slot){
   for(const k in b.equip){ const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }
   syncBagAlias(); clampZone();
   if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
+  for(const row of stashInv) row.fill(null);              // in place — the crate registry holds this array. v2 reads empty.
+  for(const cj of (b.stash||[])){
+    const ch=itemFromJSON(cj); if(!ch) continue;          // unknown defKeys drop silently, as everywhere
+    if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
+    else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
+  }
   toast('MEMORY RESTORED · SLOT '+(slot+1)); playSound('pickup');
   refreshInvUI();
 }
