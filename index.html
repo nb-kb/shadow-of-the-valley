@@ -3951,7 +3951,7 @@ function updateProjectiles(dt){
       // bodies
       if(pr.owner!=='player'){
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-        if(d<0.42){ damagePlayer(pr.dmg); applyStatus(playerPos,pr); dead=impactOrPierce(pr); continue; }
+        if(d<0.42){ damagePlayer(pr.dmg); if(pr.kind!=='spark') applyStatus(playerPos,pr); dead=impactOrPierce(pr); continue; }   // spark dose rides the explosion — once
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
@@ -3960,7 +3960,7 @@ function updateProjectiles(dt){
           const hd=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+1.62),pr.pos.z-en.position.z);
           if(d<0.55||hd<0.24){
             const head=hd<0.24;
-            en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); applyStatus(en,pr); playSound('hit');
+            en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark') applyStatus(en,pr); playSound('hit');   // spark dose rides the explosion — once
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
             dead=impactOrPierce(pr); break; }
         }
@@ -4005,6 +4005,7 @@ function impactOrPierce(pr){
   if(pr.kind==='spark'){ triggerPayload(pr); return true; }
   if(pr.split>0){ splinterBurst(pr); return true; }
   if(pr.pierce>0){ pr.pierce--; return false; }
+  if(pr.relay||pr.fuse>0) triggerPayload(pr);          // FUSE on flesh: still terminal — the payload fires, the chain casts
   return true;
 }
 // one routing point for what a shot DOES when it lands (immediate or fused)
