@@ -43,6 +43,10 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .meter>div{height:100%;width:100%;transition:width .15s linear;}
 #healthFill{background:linear-gradient(90deg,#7c2418,var(--alert));}
 #suspicionFill{background:linear-gradient(90deg,#4a3208,var(--amber));width:0%;}
+#healthMeter{position:relative;}
+#burnMask{position:absolute;top:0;right:0;background:#2e2c26;border-left:1px solid var(--line);}
+#bleedTick{color:var(--alert);animation:bleedPulse .9s steps(2,start) infinite;}
+@keyframes bleedPulse{50%{opacity:.15;}}
 #hudClock,#hudDepth,#hudFps{color:var(--bone);}
 #gpStatus{color:var(--stealth);}
 #toolReadout{position:absolute;right:14px;bottom:14px;z-index:10;pointer-events:none;text-align:right;padding:10px 12px;}
@@ -202,7 +206,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- HUD -->
 <div id="hud" class="panel">
-  <div class="row stencil"><span>Vitality</span><div class="meter"><div id="healthFill"></div></div></div>
+  <div class="row stencil"><span>Vitality</span><span id="bleedTick" class="hidden">BLEED</span><div class="meter" id="healthMeter"><div id="healthFill"></div><div id="burnMask" style="width:0%"></div></div></div>
   <div class="row stencil"><span>Suspicion</span><div class="meter"><div id="suspicionFill"></div></div></div>
   <div class="row stencil"><span id="hudDepthLabel">Ring</span><span id="hudDepth">I</span></div>
   <div class="row stencil" id="clockRow"><span>Watch</span><span id="hudClock">--:--</span></div>
@@ -1881,9 +1885,9 @@ LEVELS.area1={
     lootN:32, minSpace:6,
     lootTiers:{
       common:['ammo9','ammo9','ammo9','ration','ration','battS','battS','battM',
-              'magStd','magStd','watch','compass'],
+              'magStd','magStd','watch','compass','gummies','bandAid'],
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
-              'helmetCap','harnessL','battH','lantern','magDrum'],
+              'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
               'barrelC','heavyBarrel','serrated'],
@@ -2605,6 +2609,9 @@ const ITEM_DEFS={
   serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core opens a wound · 1 hurt / 1.5s for 30s · +5⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
+  gummies:    ()=>{ const it=new Item('Gummies',1,1,'#a04a5e'); it.gummies=true; return it; },
+  bandAid:    ()=>{ const it=new Item('Band-Aid',1,1,'#c9b78f'); it.bandAid=true; return it; },
+  aloe:       ()=>{ const it=new Item('Aloe Vera',1,1,'#57764a'); it.aloe=true; return it; },
   // ---- armor (stats provisional) ----
   rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6}),
   beltBasic:  ()=>new Armor('Web Belt',2,1,'#4a4436','belt',{invCols:1,invRows:1,slotMode:true}),
@@ -3555,6 +3562,21 @@ function heldUse(it){
   if(it.ration){
     playerPos.health=Math.min(effMaxHP(), playerPos.health+14);
     toast('TASTES LIKE THE WAR');
+    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+  }
+  if(it.gummies){
+    playerPos.health=Math.min(effMaxHP(), playerPos.health+30);
+    toast('SUGAR ON A DEAD TONGUE');
+    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+  }
+  if(it.bandAid){
+    playerPos.status.bleedT=0;
+    toast('PRESSURE HELD');
+    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+  }
+  if(it.aloe){
+    playerPos.status.burn=0; playerPos.burnedMax=0;
+    toast('THE SKIN FORGIVES');
     consumeHeld(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.pill){
@@ -5962,6 +5984,8 @@ function frame(){
   if(hudT<=0){
     hudT=0.12;
     document.getElementById('healthFill').style.width=(playerPos.health/playerPos.maxHealth*100)+'%';
+    document.getElementById('burnMask').style.width=(playerPos.burnedMax/playerPos.maxHealth*100)+'%';
+    document.getElementById('bleedTick').classList.toggle('hidden',!(playerPos.status.bleedT>0));
     document.getElementById('suspicionFill').style.width=(highestDetection*100)+'%';
     // gadget rows exist only while the gadget is in the rucksack
     const wg=findGadget('watch');
