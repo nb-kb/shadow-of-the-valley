@@ -973,8 +973,10 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
           vec2 jit=vec2(lvHash(g+ivec2(53,71)), lvHash(g+ivec2(7,97)));   // float32-safe jitter
           vec2 so=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.15)+jit*0.7)*cell;
           float sr=0.45+h2*0.4;
-          vec3 bd3=vec3(p.x-so.x,(p.y-sr*0.55)*1.7,p.z-so.y);
-          float sd3=length(bd3)-sr;
+          vec3 bd3=vec3(p.x-so.x,p.y-sr*0.55,p.z-so.y);           // squashed-sphere shrub, honest
+          vec3 br=vec3(sr,sr/1.7,sr);                             // distance: the old *1.7 y-scale
+          float k0=length(bd3/br), k1=length(bd3/(br*br));        // overestimated 1.7x and the march
+          float sd3=(k1<1e-9)?-br.y:k0*(k0-1.0)/k1;               // tunneled. Same surface exactly.
           if(sd3<d){ d=sd3; m=17.0; }
         }
       }
@@ -2117,8 +2119,10 @@ function regionSdfJS(r,px,py,pz){
           const jx=_hash2i(gx+53,gz+71), jz=_hash2i(gx+7,gz+97);   // float32-safe jitter
           const sx=bx[0]+(gx+0.15+jx*0.7)*cell, sz=bx[1]+(gz+0.15+jz*0.7)*cell;
           const sr=0.45+h2*0.4;
-          const bdx=px-sx, bdz=pz-sz, bdy=(py-sr*0.55)*1.7;
-          const sd3=Math.sqrt(bdx*bdx+bdy*bdy+bdz*bdz)-sr;
+          const bdx=px-sx, bdz=pz-sz, bdy=py-sr*0.55, brY=sr/1.7; // twin of the shader's exact-form
+          const k0=Math.sqrt((bdx/sr)*(bdx/sr)+(bdy/brY)*(bdy/brY)+(bdz/sr)*(bdz/sr));
+          const k1=Math.sqrt((bdx/(sr*sr))*(bdx/(sr*sr))+(bdy/(brY*brY))*(bdy/(brY*brY))+(bdz/(sr*sr))*(bdz/(sr*sr)));
+          const sd3=(k1<1e-9)?-brY:k0*(k0-1)/k1;                  // squashed-sphere shrub
           if(sd3<d){ d=sd3; m=17.0; }
         }
       }
