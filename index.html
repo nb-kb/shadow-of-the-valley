@@ -1890,9 +1890,10 @@ LEVELS.area1={
     lootN:32, minSpace:6,
     lootTiers:{
       common:['ammo9','ammo9','ammo9','ration','ration','battS','battS','battM',
-              'magStd','magStd','watch','compass','gummies','bandAid'],
+              'magStd','magStd','watch','compass','gummies','bandAid','barrelC','barrelC'],
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
-              'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies','photometer'],
+              'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies','photometer',
+              'platS','platS'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
               'barrelC','heavyBarrel','serrated'],
@@ -4166,9 +4167,10 @@ class Zealot{
     else if(roll<0.50) { put('suppressor'); put('boltCore'); }
     else if(roll<0.58) { put('autoSear');   put('boltCore'); }
     else               { put('boltCore'); }
-    // deeper rings chain a barrel with its own little sequence
-    if(depth>=2 && runRng()<0.35 && bi<t.base.slots.length){
-      const b=ITEM_DEFS[runRng()<0.7?'barrelC':'barrelU']();
+    // deeper rings chain a barrel with its own little sequence — Ring I tastes it
+    // rarely, and only ever the common one
+    if(runRng()<(depth>=2?0.35:0.12) && bi<t.base.slots.length){
+      const b=ITEM_DEFS[depth>=2&&runRng()>=0.7?'barrelU':'barrelC']();
       if(runRng()<0.6) b.slots[0]=ITEM_DEFS[['dmgPlus','velPlus','twin','splinter'][Math.floor(runRng()*4)]]();
       b.slots[1]=ITEM_DEFS[runRng()<0.75?'boltCore':'sparkCore']();
       t.base.slots[bi++]=b;
