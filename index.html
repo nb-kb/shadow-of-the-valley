@@ -2339,10 +2339,10 @@ class Magazine extends Item{
 }
 const BARREL_TIERS={
   common:   {len:3,  spr:0.04, color:'#6e6a5e', w:1,h:2},
-  uncommon: {len:6,  spr:0.03, color:'#4f7a5c', w:1,h:2},
-  rare:     {len:9,  spr:0.02, color:'#3c5f8f', w:1,h:3},
-  epic:     {len:12, spr:0.01, color:'#7a4f8f', w:1,h:3},
-  legendary:{len:15, spr:0.00, color:'#a3822e', w:1,h:4},
+  uncommon: {len:5,  spr:0.03, color:'#4f7a5c', w:1,h:2},
+  rare:     {len:7,  spr:0.02, color:'#3c5f8f', w:1,h:3},
+  epic:     {len:9,  spr:0.01, color:'#7a4f8f', w:1,h:3},
+  legendary:{len:11, spr:0.00, color:'#a3822e', w:1,h:4},
 };
 const PLATFORM_TIERS={ small:{perSide:1,color:'#5a5f52'}, medium:{perSide:2,color:'#4f6a5c'}, large:{perSide:3,color:'#465a7a'} };
 const CHAIN_SPREAD_CAP=0.12;
@@ -4626,7 +4626,7 @@ function itemFromJSON(j){
   if(j.count!==undefined) it.count=j.count;
   if(j.cap!==undefined){ it.cap=j.cap; it.charge=Math.min(j.charge,j.cap); }
   if(j.on!==undefined) it.on=j.on;
-  if(it instanceof Barrel){ j.slots.forEach((c,i)=>it.slots[i]=itemFromJSON(c)); it.muzzle=itemFromJSON(j.muzzle); }
+  if(it instanceof Barrel){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); }); it.muzzle=itemFromJSON(j.muzzle); }   // pre-retune saves ran longer
   if(it instanceof Platform){ j.slots.forEach((c,i)=>it.slots[i]=itemFromJSON(c));
     if(j.cycles) it.cycles=j.cycles.slice(); }
   if(it instanceof Tool){ j.slots.forEach((c,i)=>it.base.slots[i]=itemFromJSON(c));
