@@ -369,6 +369,8 @@ function fatal(msg){
   throw new Error(msg);
 }
 
+let engineReady=false;   // flips true at BOOT — early handlers no-op if top-level init aborted (Chrome TDZ guard)
+
 // -------- tunable parameters (debug console edits these live)
 const PARAMS = {
   dayLength:   {v:300, min:60,  max:1200, step:10,  label:'day length (s)'},
@@ -2781,7 +2783,7 @@ function setFocus(n,ex,ey){
 let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
 
 function isPlayable(){ return gameState==='play'||gameState==='hideout'; }
-function uiOpen(){ return isInventoryOpen||isToolMenuOpen||isCrateOpen||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
+function uiOpen(){ if(!engineReady) return true; return isInventoryOpen||isToolMenuOpen||isCrateOpen||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
 function pausedUI(){ return isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }   // bag/tool do NOT pause the world
 
 function gridFits(item,sx,sy,grid,cols,rows){
@@ -4593,6 +4595,7 @@ function resetSaveData(){
 
 let introArmed=false;
 function anyKeyGate(){
+  if(!engineReady) return;                    // init aborted — gameState is TDZ
   audioInit();
   if(gameState==='intro'&&introArmed){
     document.getElementById('introScreen').classList.add('hidden');
@@ -5817,6 +5820,7 @@ function frame(){
 updateDayNight();
 initLoadout();          // so the intro backdrop has a tool readout
 updateToolReadout();
+engineReady=true;       // every top-level let/const is initialized past this point
 frame();
 </script>
 <script>
