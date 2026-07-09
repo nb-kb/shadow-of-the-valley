@@ -484,6 +484,12 @@ function markEdges(code,isPad){
     if((isPad&&b.pad===code)||(!isPad&&b.kb===code)) INPUT.frameDown[a.id]=true;
   }
 }
+function navEdges(){        // one read for the three menu cursors — arrows + d-pad
+  const k=INPUT.rawKey, p=INPUT.rawPad;
+  return { up:!!(k['ArrowUp']||p[12]),    down:!!(k['ArrowDown']||p[13]),
+           left:!!(k['ArrowLeft']||p[14]), right:!!(k['ArrowRight']||p[15]),
+           confirm:!!k['KeyE'], back:!!k['Escape'] };   // kb halves only — each menu ORs its own pad face
+}
 
 window.addEventListener('keydown',e=>{
   if(e.target && (e.target.tagName==='INPUT'||e.target.tagName==='SELECT')) return;
@@ -4497,10 +4503,11 @@ function termActivate(){
 }
 function termNav(){
   const sc=TERM_SCREENS[termScreen]();
-  if(INPUT.rawKey['ArrowUp']||INPUT.rawPad[12]){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
-  if(INPUT.rawKey['ArrowDown']||INPUT.rawPad[13]){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
-  if(INPUT.rawKey['KeyE']||INPUT.rawPad[0]) termActivate();
-  if(INPUT.rawKey['Escape']||INPUT.rawPad[1]){
+  const nav=navEdges();
+  if(nav.up){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
+  if(nav.down){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
+  if(nav.confirm||INPUT.rawPad[0]) termActivate();
+  if(nav.back||INPUT.rawPad[1]){
     if(termScreen!=='home'){ termScreen='home'; termSel=0; playSound('click'); renderTerminal(); }
     else closeTerminal();
   }
@@ -5234,12 +5241,13 @@ function dbgNav(){
   const cols=8;
   let moved=false;
   const step=d=>{ dbgSel=clamp(dbgSel+d,0,DBG_KEYS.length-1); moved=true; };
-  if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1);
-  if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1);
-  if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(-cols);
-  if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(cols);
-  if(INPUT.rawPad[1]){ toggleDebug(); return; }                       // ○ backs out
-  if(INPUT.rawKey['KeyE']||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
+  const nav=navEdges();
+  if(nav.left)  step(-1);
+  if(nav.right) step(1);
+  if(nav.up)    step(-cols);
+  if(nav.down)  step(cols);
+  if(INPUT.rawPad[1]){ toggleDebug(); return; }                       // ○ backs out — Esc stays with frame()
+  if(nav.confirm||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
   if(moved){ playSound('click'); renderDebugItems(); }
 }
 function buildDebugPanel(){
@@ -5522,10 +5530,11 @@ function menuNav(){
       // ragged racks: clamp Y against the DESTINATION column's height
       cursorY=clamp(ny,0,(f.rack?f.rowsOf(cursorX):f.rows)-1); moved=true;
     };
-    if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1,0);
-    if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1,0);
-    if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(0,-1);
-    if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(0,1);
+    const nav=navEdges();
+    if(nav.left)  step(-1,0);
+    if(nav.right) step(1,0);
+    if(nav.up)    step(0,-1);
+    if(nav.down)  step(0,1);
     if(pressed('interact')||INPUT.rawKey['Enter']){ interactInventory(); moved=true; }   // E · □ · Enter — pick·place
     if(INPUT.rawKey['KeyX']||INPUT.rawPad[0]){ activateAtCursor(); moved=true; }         // X · ✕ — inspect·activate
     if(INPUT.rawKey['KeyF']||INPUT.rawPad[3]){ quickUse(); moved=true; }                 // F · △ — wield·feed
