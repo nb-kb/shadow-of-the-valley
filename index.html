@@ -2043,7 +2043,7 @@ LEVELS.hideout={
              [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]],
      term:[-3.4,-0.6,0.4]},   // the stolen terminal's body — keep on LEVELS.hideout.terminal below
   ],
-  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[],guaranteed:['photometer']},
+  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[],guaranteed:['photometer','compass']},
   terminal:{x:-3.4,z:-0.6},   // interact point — the model is clutter's `term`
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
@@ -2774,7 +2774,7 @@ const ITEM_DEFS={
   lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'A light of your own. It sees you back. [F]'),
   // --- analog settings, as objects ---
   watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','While carried, the HUD keeps time.'),
-  compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon heading.'),
+  compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon — or the nearest exfil in a raid.'),
   photometer: ()=>new Gadget('Light Meter','#a8925f','photometer','While carried, reads how far out the light gives you away.'),
   opticsDial: ()=>new Gadget('Optics Dial','#8f9fb0','optics','Right-click: cycle render fidelity (this IS the settings menu).'),
   volumeKnob: ()=>new Gadget('Volume Knob','#b08f7f','volume','Right-click: cycle sound level.'),
@@ -4679,6 +4679,7 @@ function deployTo(levelId){
   else if(TRAVEL){ hl.textContent='Trek'; hv.textContent=TRAVEL.dest==='hideout'?'HOME':'OUT'; }
   else{ hl.textContent='Ring'; hv.textContent=roman(depth); }
   showBanner(L.name);
+  if(L.kind==='authored'&&L.exfils.length) toast('REACH AN EXFIL — HOLD E INSIDE THE SMOKE');   // once per arrival, travelTo-style
   refreshInvUI();
 }
 function travelTo(dest){                      // THE LOOP: the valley is the land between places
@@ -5024,7 +5025,7 @@ function anyKeyGate(){
 }
 setTimeout(()=>{introArmed=true;
   const bs=document.getElementById('bootStatus');
-  if(bs) bs.textContent='— press any key or pad button —';
+  if(bs) bs.textContent='— press any key or pad button — ['+BUILD_TAG+']';   // the fault banner's tag style: no more which-build guessing
 },600);
 
 // ============================================================
