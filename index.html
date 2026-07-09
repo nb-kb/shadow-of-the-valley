@@ -6079,11 +6079,17 @@ function frame(){
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
     eye.style.filter='brightness('+(0.3+e*1.6).toFixed(2)+')';
     const comp=document.getElementById('compassStrip');
-    if(hasGadget('compass')&&gameState==='play'&&!activeLevel){
+    if(hasGadget('compass')&&gameState==='play'&&(!activeLevel||activeLevel.exfils.length)){
       comp.classList.remove('hidden');
-      const ddx=GATE.x-playerPos.x, ddz=GATE.z-playerPos.z;
+      // valley (travel legs included): the gate — the gate IS the way out on a leg.
+      // an authored raid steers to the nearest exfil instead.
+      let tgt=GATE, lbl='BEACON';
+      if(activeLevel){ lbl='EXFIL'; let bd=1e9;
+        for(const ex of activeLevel.exfils){ const d=Math.hypot(ex.x-playerPos.x,ex.z-playerPos.z); if(d<bd){ bd=d; tgt=ex; } }
+      }
+      const ddx=tgt.x-playerPos.x, ddz=tgt.z-playerPos.z;
       const ang=(Math.atan2(ddx,ddz)-cameraYaw)*180/Math.PI;
-      comp.innerHTML='<span style="display:inline-block;transform:rotate('+ang.toFixed(0)+'deg)">▲</span> BEACON '+Math.round(Math.hypot(ddx,ddz))+'m';
+      comp.innerHTML='<span style="display:inline-block;transform:rotate('+ang.toFixed(0)+'deg)">▲</span> '+lbl+' '+Math.round(Math.hypot(ddx,ddz))+'m';
     }else comp.classList.add('hidden');
     // photometer: the true spot-distance, refreshed ~4Hz so the number doesn't shimmer
     const pm=document.getElementById('photoStrip');
