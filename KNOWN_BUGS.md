@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-08 (build v21q).
+Last reviewed: 2026-07-08 (build v22a).
 
 ## Open
 
@@ -13,24 +13,10 @@ Last reviewed: 2026-07-08 (build v21q).
   forward-ref, which is already fixed — this is a separate one.
 - **Repro:** load in Chrome, often after a GPU overload. **Zen/Firefox run
   clean.** Chrome is the odd one out.
-- **Status:** UNRESOLVED. Needs a browser to pin the exact line / call path.
-
-### 2. Invisible enemies — shader slot cap
-- **Cause:** shader renders at most 10 enemies (`RLIM.ENEMIES=10`, ~line 624;
-  render gate ~line 1153), but the JS spawns up to 22 (facility, ~line 1863) or
-  14 (raid, ~line 4216). The upload sends only the nearest-10 live enemies.
-- **Symptom:** enemies ranked 11+ are invisible yet still shoot you and eat your
-  bullets (JS combat loops are uncapped). Which enemies are drawn flickers with
-  a per-frame distance sort.
-- **Note:** enemies are *never* part of the player's movement-collision SDF by
-  design — "solid" means bullet/LOS interaction only, not physical blocking.
-
-### 3. Crate opens and instantly grabs the top item
-- **Cause:** the crate opens on `pressed('interact')` in `updateInteract`, then
-  the same frame `menuNav()` (crate now counts as a menu) reads the same
-  `pressed('interact')` edge and runs `interactInventory()` → take.
-- **Fix:** consume/clear the interact edge on open (e.g. in `openCrate`), or a
-  one-frame guard.
+- **Status:** guard landed in v22a — early handlers (`anyKeyGate`, `uiOpen`)
+  no-op until `engineReady` flips at BOOT, so the TDZ access path is closed by
+  inspection. Kept open until a Chrome load confirms the banner stays quiet;
+  the *why-does-init-abort* question is still unpinned.
 
 ## Backlog (future — low priority)
 
@@ -41,6 +27,20 @@ Last reviewed: 2026-07-08 (build v21q).
 
 ## Recently fixed
 
+- **v22a** — Crate opened and instantly grabbed the top item: the
+  `pressed('interact')` edge that opened the crate survived into the same
+  frame's `menuNav()` and ran the take. Menu transitions now SPEND the edge —
+  `menuSet` (and terminal open/close) clear `INPUT.frameDown`/raw maps, so no
+  handler downstream inherits the press that changed rooms.
+- **v22a** — Invisible enemies shooting from off-render: the shader still draws
+  only the nearest 10 (`RLIM.ENEMIES`), but unrendered zealots are now DORMANT —
+  they hold fire and bullets pass through them, so nothing invisible can hurt
+  you or eat your shots. The cap itself stands; dormancy makes it fair.
+- **v22a** — Save feedback (note, not a fix of a listed bug): saves are now
+  verified by reading the slot BACK after the write — success toast reports
+  slot + item count, and every failure path (no localStorage, quota full, bad
+  read-back) gets its own distinct SAVE FAILED toast instead of a false
+  "MEMORY WRITTEN".
 - **v21q** — Building doorways (armory, NW lab) wouldn't let you in: the door
   carve was only 0.6 m half-depth, so after the SDF subtraction the threshold
   kept a ~0.15 m clearance ridge — below the 0.34 m player radius, so collision
