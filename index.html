@@ -835,6 +835,7 @@ uniform int   uLevelOn;
 uniform vec4  uLevelBounds;   // x0, z0, invTileW, invTileH
 uniform vec4  uLevelGround;   // rimH, rimW, noiseAmp, (pad)
 bool gNoGround=false;                 // primary rays split ground from structures
+float gBound=1e9;                     // nearest entity bound this map() call — paces the march, never a surface
 uniform highp sampler2D uLevelTex;  // rows0-15 tilemap(r,g=ids), row16 headers x3, row17+ pool
 
 float lvGround(vec2 xz){
@@ -1133,13 +1134,14 @@ float sdBackpack(vec3 p){
 // ============================================================
 vec2 map(vec3 p){
   vec2 res = mapStatic(p);
+  gBound=1e9;
   vec3 fwd=normalize(rd);
 
   for(int i=0;i<${RLIM.ITEMS};i++){
     if(i>=worldItemCount) break;
     vec3 iPos = p - worldItemPos[i];
     float bd = length(iPos) - 0.55;
-    if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
     float t = worldItemData[i].x;
     vec3 lp = rotX(rotY(iPos, -worldItemData[i].y), -worldItemData[i].w);
     float d = 1000.0;
@@ -1163,7 +1165,7 @@ vec2 map(vec3 p){
     if(i>=uEnemyCount) break;
     vec3 ep = p - enemyPos[i];
     float bd = length(ep - vec3(0.0,0.95,0.0)) - 1.35;
-    if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
     vec3 lp = rotY(ep, -enemyData[i].x);
     float ph=iTime*6.5+float(i)*2.13;
     float sw=sin(ph)*mix(0.16,0.38,clamp(enemyData[i].y,0.0,1.0));
@@ -1184,7 +1186,7 @@ vec2 map(vec3 p){
     if(i>=tracerCount) break;
     vec3 mid = (tracerA[i]+tracerB[i])*0.5;
     float bd = length(p-mid) - (length(tracerA[i]-tracerB[i])*0.5 + 0.15);
-    if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
     float hot = step(1.5, tracerCol[i].x+tracerCol[i].y+tracerCol[i].z);
     float d = sdCapsule(p, tracerA[i], tracerB[i], mix(0.035, 0.011, hot));   // gossamer for lasers
     if(d < res.x) res = vec2(d, 50.0 + float(i));
@@ -1278,7 +1280,7 @@ vec2 raycast(vec3 o, vec3 dir){
     vec3 pp=o+dir*t;
     vec2 r=map(pp);
     if(r.x < (0.0007*t+0.0004)){ m=r.y; break; }
-    t += r.x*0.93;
+    t += min(r.x,gBound)*0.93;   // entity bounds pace the step but never register as hits
     if(t > tMax) break;
   }
   gNoGround=false;
