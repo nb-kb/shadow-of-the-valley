@@ -1767,6 +1767,7 @@ function marchWorldJS(ox,oy,oz,dx,dy,dz,maxDist){
 const playerPos={
   x:2.5,y:0,z:2.5, velY:0, onGround:true, coyoteT:0, jumpBufT:0,
   health:100,maxHealth:100,
+  status:{burn:0,bleedT:0}, burnedMax:0,     // BURN pools · BLEED runs a clock · fire scars the ceiling
   eyeHeight:1.32, baseHeight:1.32,          // a child's eye line
   isAiming:false,isSprinting:false,isCrouching:false,
   lean:0,currentLean:0,currentFov:1.0,
@@ -1884,8 +1885,8 @@ LEVELS.area1={
               'helmetCap','harnessL','battH','lantern','magDrum'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
               'splinter','bounce','pierce','heavy','compensator','hairTrigger',
-              'barrelC','heavyBarrel'],
-      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse'],
+              'barrelC','heavyBarrel','serrated'],
+      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore'],
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
               'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
               'platesH','helmetSteel','helmetRig','autoSear','burstCam','rucksack',
@@ -2588,6 +2589,7 @@ const ITEM_DEFS={
   // --- sequence: projectile cores ---
   boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt',base:0},'Core · fires a slug from the magazine'),
   sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18},'Core · bursting ember · 18⚡'),
+  emberCore:  ()=>new ToolMod('EMBER','#e64a19','proj',{kind:'spark',base:16,burn:12},'Core · fire that keeps eating · 12 burn · 16⚡'),
   beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: the shot becomes a held, continuous thread (less hurt) · alone atop a column: tactical laser'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
@@ -2598,6 +2600,7 @@ const ITEM_DEFS={
   heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6,surcharge:5},'Next core arcs and lands harder · +5⚡'),
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
+  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core opens a wound · 1 hurt / 1.5s for 30s · +5⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
   // ---- armor (stats provisional) ----
@@ -3417,7 +3420,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,surcharge:0,laser:false}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,burn:0,bleed:false,surcharge:0,laser:false}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
 function foldFrame(out,m){
   const e=m.effect;
@@ -3467,10 +3470,13 @@ function resolveLane(col,out){
       if(e.fuse) pend.fuse+=e.fuse;
       if(e.split) pend.split+=e.split;
       if(e.laser) pend.laser=true;
+      if(e.burn) pend.burn+=e.burn;
+      if(e.bleed) pend.bleed=true;
       pend.surcharge+=e.surcharge||0;
       feeders.push(m);
     }else if(m.cat==='proj'){
       if(pend.twin>3) pend.twin=3;                  // TWIN cap: no shotgun accidents
+      if(m.effect.burn) pend.burn+=m.effect.burn;   // FIRE cores carry their own ember
       const shot={kind:m.effect.kind,pend:{...pend},
                   cost:(m.effect.base||0)+pend.surcharge,core:m,
                   spreadAdd:col.spreadAdd,lane};
@@ -3532,7 +3538,7 @@ function describeSequence(res){
 let _pillArm=0, _pillDeath=false;
 function heldUse(it){
   if(it.ration){
-    playerPos.health=Math.min(playerPos.maxHealth, playerPos.health+14);
+    playerPos.health=Math.min(effMaxHP(), playerPos.health+14);
     toast('TASTES LIKE THE WAR');
     consumeHeld(); playSound('reload'); refreshInvUI(); return;
   }
@@ -3618,7 +3624,8 @@ function emitProjectile(owner,origin,dir,shot,base){
       dmg:(kind==='spark'||kind==='pick'?12:base.dmg)+p.dmg,
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12,
       fuse:p.fuse||0, split:p.split||0, stuck:false, push:!!(base&&base.pulse),
-      col:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:[1.0,0.75,0.25],
+      burn:p.burn||0, bleed:!!p.bleed,
+      col:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:[1.0,0.75,0.25],
       silent:p.silent||base.silenced,
     });
   }
@@ -3725,8 +3732,8 @@ function runContinuousBeams(dt){
     }
     const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
     st.acc=(st.acc||0)+dt;
-    if(sh.kind==='bolt'&&hitEn){ hitEn.hurt(((24+sh.pend.dmg)*0.55)*dt,'player'); }
-    if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player'}); }
+    if(sh.kind==='bolt'&&hitEn){ hitEn.hurt(((24+sh.pend.dmg)*0.55)*dt,'player'); applyStatus(hitEn,sh.pend); }
+    if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
     if(sh.kind==='pick'&&st.acc>0.16){ st.acc=0; carveAt({pos:end,dmg:8,r:0.55}); }
     if(sh.kind==='grip'){
       if(!heldWorld){ const pick=itemUnderCrosshair(40); if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam'); }
@@ -3863,14 +3870,14 @@ function updateProjectiles(dt){
       // bodies
       if(pr.owner!=='player'){
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-        if(d<0.42){ damagePlayer(pr.dmg); dead=impactOrPierce(pr); continue; }
+        if(d<0.42){ damagePlayer(pr.dmg); applyStatus(playerPos,pr); dead=impactOrPierce(pr); continue; }
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
           if(en.health<=0||en._dormant) continue;        // dormant: bullets pass through
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
           if(d<0.55){
-            en.hurt(pr.dmg,'player'); playSound('hit');
+            en.hurt(pr.dmg,'player'); applyStatus(en,pr); playSound('hit');
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
             dead=impactOrPierce(pr); break; }
         }
@@ -3930,6 +3937,7 @@ function splinterBurst(pr){
       dmg:Math.max(2,Math.round(pr.dmg*0.45)),
       bounces:pr.bounces, pierce:pr.pierce, grav:6,
       fuse:0, split:0, stuck:false,                      // fragments never re-split
+      burn:Math.round((pr.burn||0)*0.45), bleed:!!pr.bleed,
       col:pr.col, silent:pr.silent,
     });
   }
@@ -3949,14 +3957,21 @@ function explode(pr){
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
     const d=en.position.distanceTo(pr.pos);
-    if(d<R) en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner);
+    if(d<R){ en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner); applyStatus(en,pr); }
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-  if(pd<R) damagePlayer(pr.dmg*(1-pd/R));
+  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)); applyStatus(playerPos,pr); }
   for(const w of worldItems){
     const d=w.pos.distanceTo(pr.pos);
     if(d<R){ const f=new Vec3().subVectors(w.pos,pr.pos).normalize(); w.vel.addScaledVector(f,(1-d/R)*14); w.vel.y+=3; }
   }
+}
+// ---- statuses: burn POOLS (capped), bleed REFRESHES (never stacks) ----
+function effMaxHP(){ return playerPos.maxHealth-playerPos.burnedMax; }   // burned health stays burned until treated
+function applyStatus(t,pr){
+  if(!t.status) return;
+  if(pr.burn)  t.status.burn=Math.min(30, t.status.burn+pr.burn);
+  if(pr.bleed) t.status.bleedT=Math.max(t.status.bleedT, 30);
 }
 function damagePlayer(dmg){
   // ---- armor seam: plates multiply, helmet shaves. Global for now; a later pass can
@@ -4006,6 +4021,7 @@ class Zealot{
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
+    this.status={burn:0,bleedT:0};
     this.muzzle=0; this.hurtFlash=0;
     this.targetPoint=this.newPatrolTarget();
     this.buildTool();
@@ -4071,6 +4087,14 @@ class Zealot{
       if(this.respawnT<=0) this.reinforce();
       return;
     }
+    // ---- statuses tick even mid-stagger (and dormant, if that ever lands) ----
+    if(this.status.burn>0){
+      const b=Math.min(this.status.burn,2*dt);       // 2 hp/s — a 12-burn runs ~6s
+      this.status.burn-=b; this.health-=b;
+      this.hurtFlash=Math.max(this.hurtFlash,0.35);  // the body shows the fire — free telegraph
+    }
+    if(this.status.bleedT>0){ this.status.bleedT-=dt; this.health-=dt/1.5; }
+    if(this.health<=0){ this.die(); return; }
     if(this.stagger>0){ this.stagger-=dt; this.position.addScaledVector(this.velocity,dt*0.4); this.settle(dt); return; }
 
     const px=playerPos.x, pz=playerPos.z;
@@ -4208,6 +4232,7 @@ class Zealot{
     this.position.set(playerPos.x+Math.cos(a)*r,0,playerPos.z+Math.sin(a)*r);
     this.startPos=this.position.clone();
     this.health=34; this.detection=0; this.state=0; this.investigate=null;
+    this.status.burn=0; this.status.bleedT=0;
     this.buildTool();
   }
 }
@@ -4246,7 +4271,7 @@ function resetLevel(){
     const ez=runRng()*76-38;                              // valley strip only
     enemies.push(new Zealot(ex,ez));
   }
-  playerPos.health=Math.min(playerPos.maxHealth, playerPos.health+25);
+  playerPos.health=Math.min(effMaxHP(), playerPos.health+25);
   buildCrateRegistry(LEVELS.valley);
   seedLevelSpawns(LEVELS.valley);
   document.getElementById('hudDepth').textContent=roman(depth);
@@ -4274,6 +4299,7 @@ function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
+  playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
   initLoadout();
   deployTo('hideout'); timeScale=1;
   refreshInvUI();
@@ -4288,6 +4314,7 @@ function onDeath(){
     if(rk&&rk.inv) for(const row of rk.inv) row.fill(null);
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
+    playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
     showBanner('THE VALLEY KEPT THE BAG');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
@@ -5477,6 +5504,21 @@ function updatePlayer(dt){
     else { toast('NO LANTERN RACKED IN TOOL'); playSound('empty'); }
   }
   if(pressed('throwHeld')&&heldWorld&&!menus) releaseHeld(true);
+
+  // ---- statuses: BURN eats the ceiling down, BLEED runs a clock ----
+  if(gameState==='play'&&!FLAGS.god){
+    const st=playerPos.status; let dot=0;
+    if(st.burn>0){
+      const b=Math.min(st.burn,2*dt);                // 2 hp/s — a 12-burn runs ~6s
+      st.burn-=b; dot+=b;
+      playerPos.burnedMax=Math.min(playerPos.maxHealth-10, playerPos.burnedMax+b);
+    }
+    if(st.bleedT>0){ st.bleedT=Math.max(0,st.bleedT-dt); dot+=dt/1.5; }   // 1 hurt / 1.5s · 30s
+    if(dot>0){
+      playerPos.health=Math.max(0, Math.min(playerPos.health,effMaxHP())-dot);
+      if(playerPos.health<=0){ st.burn=0; st.bleedT=0; onDeath(); }
+    }
+  }
 }
 
 function updateWorldItems(dt){
