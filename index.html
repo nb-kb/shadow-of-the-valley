@@ -689,7 +689,8 @@ uniform vec4  uVCrates[6];                  // valley gate cache: x,z,size,unuse
 uniform int   uVCrateCount;
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
-uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state z:muzzle w:hurt (+2 when helmed)
+uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates)
+uniform vec2  uEnemyEye;                     // x:cos(fov/2) y:vision-cone range
 
 uniform int   tracerCount;
 uniform vec3  tracerA[${RLIM.TRACERS}];
@@ -716,6 +717,17 @@ float sdCylY(vec3 p,float r,float h){ vec2 d=abs(vec2(length(p.xz),p.y))-vec2(r,
 float sdOcta(vec3 p,float s){ p=abs(p); return (p.x+p.y+p.z-s)*0.57735; }
 vec3 rotY(vec3 p,float a){ float c=cos(a),s=sin(a); return vec3(c*p.x - s*p.z, p.y, s*p.x + c*p.z); }
 vec3 rotX(vec3 p,float a){ float c=cos(a),s=sin(a); return vec3(p.x, c*p.y - s*p.z, s*p.y + c*p.z); }
+
+// ---- ZEALOT HEAD-LOOK — the telegraph. TWIN: enemyHeadLook()/enemyHeadPos() in JS.
+// ---- Change one, change both, run the twin probe (docs in the JS twin's banner).
+float enHeadYaw(vec4 D, vec3 epos, float phi){
+  float st=floor(D.y+0.01);
+  if(st<0.5) return 0.0;
+  if(st<1.5) return sin(iTime*1.6+phi)*0.85;
+  float want=atan(ro.x-epos.x, ro.z-epos.z)-D.x;
+  want-=6.2831853*floor((want+3.1415927)/6.2831853);
+  return clamp(want,-1.2,1.2);
+}
 
 float hash(vec2 p){
   p = fract(p*vec2(123.34,456.21));
@@ -1189,20 +1201,40 @@ vec2 map(vec3 p){
     vec3 ep = p - enemyPos[i];
     float bd = length(ep - vec3(0.0,0.95,0.0)) - 1.35;
     if(bd > 0.1){ gBound=min(gBound,bd); continue; }
-    vec3 lp = rotY(ep, -enemyData[i].x);
-    float ph=iTime*6.5+float(i)*2.13;
-    float sw=sin(ph)*mix(0.16,0.38,clamp(enemyData[i].y,0.0,1.0));
-    float legL=sdCapsule(lp, vec3(-0.12,0.92,0.0), vec3(-0.12,0.10, sw*0.5), 0.10);
-    float legR=sdCapsule(lp, vec3( 0.12,0.92,0.0), vec3( 0.12,0.10,-sw*0.5), 0.10);
-    float torso=sdCapsule(lp, vec3(0.0,0.98,0.0), vec3(0.0,1.44,0.0), 0.23);
-    float vest=sdBox(lp-vec3(0.0,1.22,0.0), vec3(0.25,0.20,0.16));
-    float armR=sdCapsule(lp, vec3(0.27,1.40,0.0), vec3(0.13,1.18,0.30), 0.075);
-    float armL=sdCapsule(lp, vec3(-0.27,1.40,0.0), vec3(-0.04,1.20,0.28), 0.075);
-    float head=sdSphere(lp-vec3(0.0,1.62,0.0), 0.155);
-    float helm=enemyData[i].w>=2.0 ? max(sdSphere(lp-vec3(0.0,1.66,0.0), 0.19), 1.585-lp.y) : 1e5;
-    float gun=sdBox(lp-vec3(0.10,1.20,0.42), vec3(0.035,0.05,0.22));
-    float d=min(min(min(legL,legR),min(torso,vest)),min(min(armR,armL),min(min(head,helm),gun)));
-    if(d < res.x) res = vec2(d, 40.0 + float(i));
+    vec4 D=enemyData[i];
+    float st=floor(D.y+0.01), walk=(D.y-st)*2.0;
+    vec3 lp = rotY(ep, D.x);
+    float phi=float(i)*2.13;
+    float s1=sin(iTime*7.0+phi)*walk;
+    float br=0.015*sin(iTime*1.4+phi);
+    float ha=enHeadYaw(D, enemyPos[i], phi);
+    float d=  sdCapsule(lp, vec3(-0.11,0.88,0.0), vec3(-0.11,0.05, s1*0.40), 0.085);
+    d=min(d,  sdCapsule(lp, vec3( 0.11,0.88,0.0), vec3( 0.11,0.05,-s1*0.40), 0.085));
+    d=min(d,  sdBox(lp-vec3(0.0,0.72,-s1*0.06), vec3(0.21,0.22,0.15)));
+    d=min(d,  sdCapsule(lp, vec3(0.0,0.92,0.0), vec3(0.0,1.40+br,0.0), 0.205));
+    if(st>1.5){
+      vec3 tp=rotY(lp-vec3(0.0,1.32,0.0), ha);
+      d=min(d, sdCapsule(tp, vec3( 0.24,0.06,-0.02), vec3( 0.07,-0.02,0.26), 0.07));
+      d=min(d, sdCapsule(tp, vec3(-0.22,0.04,-0.02), vec3(-0.02,-0.04,0.22), 0.07));
+      d=min(d, sdBox(tp-vec3(0.05,-0.02,0.30), vec3(0.035,0.045,0.24)));
+    }else{
+      d=min(d, sdCapsule(lp, vec3( 0.245,1.36,0.02), vec3( 0.06,1.12,0.24), 0.07));
+      d=min(d, sdCapsule(lp, vec3(-0.245,1.36,0.02), vec3(-0.08,1.10,0.20), 0.07));
+      d=min(d, sdBox(lp-vec3(-0.01,1.10,0.22), vec3(0.16,0.04,0.05)));
+    }
+    vec3 hc=vec3(sin(ha)*0.07, 1.63+br-(st>1.5?0.04:0.0), cos(ha)*0.07);
+    d=min(d,  sdSphere(lp-hc, 0.165));
+    float tag=0.0;
+    float w=D.w; float hasP=step(4.0,w); w-=hasP*4.0;
+    if(w>=2.0){
+      float helm=max(sdSphere(lp-hc-vec3(0.0,0.045,0.0), 0.195), (hc.y-0.03)-lp.y);
+      if(helm<d){ d=helm; tag=0.375; }
+    }
+    if(hasP>0.5){
+      float pl=sdBox(lp-vec3(0.0,1.22,0.16), vec3(0.17,0.15,0.045));
+      if(pl<d){ d=pl; tag=0.25; }
+    }
+    if(d < res.x) res = vec2(d, 40.0 + float(i) + tag);
   }
 
   for(int i=0;i<${RLIM.TRACERS};i++){
@@ -1412,11 +1444,26 @@ void main(){
     }
     else if(m<50.0){
       int ei=int(m-40.0+0.5);
+      vec4 D=enemyData[ei];
+      float st=floor(D.y+0.01), part=fract(m);
       matCol=vec3(0.25,0.25,0.19);
-      matCol=mix(matCol, vec3(0.45,0.22,0.12), clamp(enemyData[ei].y-1.0,0.0,1.0)*0.4);
-      float hw=enemyData[ei].w; hw-=step(2.0,hw)*2.0;                       // strip the helm bit
-      matCol+=vec3(0.9,0.1,0.05)*hw;
-      emiss=enemyData[ei].z*0.7;
+      matCol=mix(matCol, vec3(0.45,0.22,0.12), clamp(st-1.0,0.0,1.0)*0.4);
+      if(part>0.19&&part<0.31) matCol=vec3(0.13,0.14,0.16);
+      if(part>0.31)            matCol=vec3(0.30,0.31,0.33);
+      float w=D.w; w-=step(4.0,w)*4.0; w-=step(2.0,w)*2.0;
+      matCol+=vec3(0.9,0.1,0.05)*w;
+      emiss=D.z*0.7;
+      float phi=float(ei)*2.13;
+      float ha=enHeadYaw(D, enemyPos[ei], phi), hy=D.x+ha;
+      float br=0.015*sin(iTime*1.4+phi);
+      vec3 hc=enemyPos[ei]+vec3(sin(hy)*0.07, 1.63+br-(st>1.5?0.04:0.0), cos(hy)*0.07);
+      vec3 hl=rotY(p-hc, hy);
+      if(length(hl)<0.22 && hl.z>0.08 && abs(hl.y-0.015)<0.020){
+        matCol = st<0.5? vec3(0.10,0.22,0.20)
+               : st<1.5? vec3(1.0,0.62,0.12)*(0.75+0.25*sin(iTime*7.0))
+               :         vec3(1.0,0.10,0.06)*1.3;
+        emiss=max(emiss, st<0.5?0.55:1.2);
+      }
     }
     else{
       int ti=int(m-50.0+0.5);
@@ -1476,6 +1523,24 @@ void main(){
         float lDif=clamp(dot(n,ld),0.0,1.0);
         float att=1.0/(1.0+0.3*lDist+0.15*lDist*lDist);
         lit += matCol * dynCol[i] * lDif * att * dynPos[i].w;
+      }
+      // ---- zealot vision cones, painted on the ground the way the head points ----
+      if(n.y>0.65 && (m<2.5 || (m>11.5&&m<13.5))){
+        for(int i=0;i<${RLIM.ENEMIES};i++){
+          if(i>=uEnemyCount) break;
+          float st=floor(enemyData[i].y+0.01);
+          if(st<0.5) continue;
+          vec2 g=p.xz-enemyPos[i].xz;
+          float r2=dot(g,g);
+          if(r2>uEnemyEye.y*uEnemyEye.y || r2<0.04) continue;
+          if(abs(p.y-enemyPos[i].y)>3.0) continue;
+          float hy=enemyData[i].x+enHeadYaw(enemyData[i], enemyPos[i], float(i)*2.13);
+          float rl=sqrt(r2);
+          float ca=dot(g/rl, vec2(sin(hy),cos(hy)));
+          float fall=1.0-rl/uEnemyEye.y;
+          lit += (st<1.5? vec3(1.0,0.62,0.12)*0.045 : vec3(1.0,0.10,0.06)*0.075)
+                 * smoothstep(uEnemyEye.x, uEnemyEye.x+0.06, ca) * fall*fall;
+        }
       }
       col = lit + matCol*emiss;
     }
@@ -1549,7 +1614,7 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uWorldTop','uVCrateCount',
- 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure']
+ 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
 U.edits    = locArray('uEdits', 16);
@@ -3802,7 +3867,8 @@ function runContinuousBeams(dt){
       const tt=rx*f.x+ry*f.y+rz*f.z;
       if(tt>0.3&&tt<t){
         const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
-        const hd=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+1.62)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
+        const hp=enemyHeadPos(en,_hpV);
+        const hd=Math.hypot(hp.x-(o.x+f.x*tt),hp.y-(o.y+f.y*tt),hp.z-(o.z+f.z*tt));
         if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
       }
     }
@@ -3935,14 +4001,33 @@ function runBeam_DEAD(dt,res,shot){
   }
 }
 
-// ---- HEADSHOTS: the head is a second, smaller test sphere — twin of the GLSL head
-// ---- at local (0,1.62,0) r0.155 (rotY leaves an on-axis point fixed, so world = pos+1.62y).
-// ---- Bare head takes ×2; a helm eats the bonus and cracks a point instead.
+// ---- HEADSHOTS: the head is a second, smaller test sphere — twin of the GLSL head.
+// ---- The center MOVES: it rides the head-look (enHeadYaw in the shader — change one,
+// ---- change both, run the twin probe). Bare head takes x2; a helm eats the
+// ---- bonus and cracks a point instead. Hit r 0.24 vs visual r 0.165: ~12mm twin skew budget.
+const _hpV=new Vec3(0,0,0);
+function enemyHeadLook(en){
+  if(en.state===0) return 0;
+  const phi=(en._slot||0)*2.13;
+  if(en.state===1) return Math.sin(gameTime*1.6+phi)*0.85;
+  const c=camPos();
+  let d=Math.atan2(c.x-en.position.x, c.z-en.position.z)-en.yaw;
+  while(d>3.1415927)d-=6.2831853; while(d<-3.1415927)d+=6.2831853;
+  return clamp(d,-1.2,1.2);
+}
+function enemyHeadPos(en,out){
+  const hy=en.yaw+enemyHeadLook(en);
+  const br=0.015*Math.sin(gameTime*1.4+(en._slot||0)*2.13);
+  return out.set(en.position.x+Math.sin(hy)*0.07,
+                 en.position.y+1.63+br-(en.state===2?0.04:0),
+                 en.position.z+Math.cos(hy)*0.07);
+}
 function crackHelm(en){
   if(!en.helm) return;
   if(--en.helm.dur>0){ playSound('click'); return; }
   en.helm=null; playSound('hit');                     // rings off — the dome vanishes with it
-  addDyn(en.position.x,en.position.y+1.7,en.position.z,[0.9,0.85,0.6],0.8,0.06);
+  const hp=enemyHeadPos(en,_hpV);
+  addDyn(hp.x,hp.y+0.08,hp.z,[0.9,0.85,0.6],0.8,0.06);
 }
 function headshotDmg(en,dmg,head){
   if(!head) return dmg;
@@ -3978,7 +4063,8 @@ function updateProjectiles(dt){
         for(const en of enemies){
           if(en.health<=0||en._dormant) continue;        // dormant: bullets pass through
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
-          const hd=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+1.62),pr.pos.z-en.position.z);
+          const hp=enemyHeadPos(en,_hpV);
+          const hd=Math.hypot(pr.pos.x-hp.x,pr.pos.y-hp.y,pr.pos.z-hp.z);
           if(d<0.55||hd<0.24){
             const head=hd<0.24;
             en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark') applyStatus(en,pr); playSound('hit');   // spark dose rides the explosion — once
@@ -6000,11 +6086,16 @@ function frame(){
   for(const en of _liveEn){
     en._dormant = ei>=RLIM.ENEMIES;            // past the uniform cap: unrendered = dormant, can't shoot or be shot
     if(en._dormant) continue;
+    en._slot=ei;
+    const wt=(en.stagger>0)?0:Math.min(1,Math.hypot(en.velocity.x,en.velocity.z)/1.6);
+    en._walk=(en._walk||0)+(wt-(en._walk||0))*Math.min(1,dt*10);
     gl.uniform3f(U.enemyPos[ei],en.position.x,en.position.y,en.position.z);
-    gl.uniform4f(U.enemyData[ei],en.yaw,en.state,en.muzzle,en.hurtFlash+(en.helm?2:0));
+    gl.uniform4f(U.enemyData[ei],en.yaw,en.state+en._walk*0.5,en.muzzle,
+                 en.hurtFlash+(en.helm?2:0)+(en.plates?4:0));
     ei++;
   }
   gl.uniform1i(U.uEnemyCount,ei);
+  gl.uniform2f(U.uEnemyEye, Math.cos(P('enemyFovDeg')*Math.PI/360), Math.min(spotDistance(),16));
 
   // tracers = live projectiles + beam segments
   let ti=0;
