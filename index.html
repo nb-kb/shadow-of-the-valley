@@ -43,6 +43,10 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .meter>div{height:100%;width:100%;transition:width .15s linear;}
 #healthFill{background:linear-gradient(90deg,#7c2418,var(--alert));}
 #suspicionFill{background:linear-gradient(90deg,#4a3208,var(--amber));width:0%;}
+#healthMeter{position:relative;}
+#burnMask{position:absolute;top:0;right:0;background:#2e2c26;border-left:1px solid var(--line);}
+#bleedTick{color:var(--alert);animation:bleedPulse .9s steps(2,start) infinite;}
+@keyframes bleedPulse{50%{opacity:.15;}}
 #hudClock,#hudDepth,#hudFps{color:var(--bone);}
 #gpStatus{color:var(--stealth);}
 #toolReadout{position:absolute;right:14px;bottom:14px;z-index:10;pointer-events:none;text-align:right;padding:10px 12px;}
@@ -64,6 +68,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   font-size:11px;letter-spacing:.14em;color:#ff5a66;text-shadow:0 0 6px #400;opacity:0;transition:opacity .15s;}
 #compassStrip{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;
   font-size:11px;letter-spacing:.2em;color:var(--gate);text-shadow:0 0 6px rgba(87,224,163,.6);}
+#photoStrip{position:absolute;top:24px;left:calc(50% + 42px);z-index:10;pointer-events:none;
+  font-size:10px;letter-spacing:.2em;color:var(--bone);text-shadow:0 0 6px rgba(255,217,138,.35);}
 
 /* damage vignette + alert flash */
 #vignette{position:absolute;inset:0;pointer-events:none;z-index:8;opacity:0;
@@ -202,15 +208,16 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- HUD -->
 <div id="hud" class="panel">
-  <div class="row stencil"><span>Vitality</span><div class="meter"><div id="healthFill"></div></div></div>
+  <div class="row stencil"><span>Vitality</span><span id="bleedTick" class="hidden">BLEED</span><div class="meter" id="healthMeter"><div id="healthFill"></div><div id="burnMask" style="width:0%"></div></div></div>
   <div class="row stencil"><span>Suspicion</span><div class="meter"><div id="suspicionFill"></div></div></div>
   <div class="row stencil"><span id="hudDepthLabel">Ring</span><span id="hudDepth">I</span></div>
   <div class="row stencil" id="clockRow"><span>Watch</span><span id="hudClock">--:--</span></div>
   <div class="row stencil" id="fpsRow"><span>FPS</span><span id="hudFps">--</span></div>
   <div class="row stencil hidden" id="gpStatus"><span>Pad</span><span id="gpName">linked</span></div>
 </div>
-<div id="eyeWrap"><div id="eye"></div><div id="eyeLbl">EXPOSURE</div></div>
+<div id="eyeWrap" class="hidden"><div id="eye"></div><div id="eyeLbl">EXPOSURE</div></div>
 <div id="compassStrip" class="hidden">▲ BEACON</div>
+<div id="photoStrip" class="hidden">SEEN --m</div>
 <div id="toolReadout" class="panel">
   <div class="big" id="trName">—</div>
   <div class="sub" id="trMode">BARE</div>
@@ -362,12 +369,14 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v21r';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22d';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
   throw new Error(msg);
 }
+
+let engineReady=false;   // flips true at BOOT — early handlers no-op if top-level init aborted (Chrome TDZ guard)
 
 // -------- tunable parameters (debug console edits these live)
 const PARAMS = {
@@ -481,6 +490,12 @@ function markEdges(code,isPad){
     const b=BIND[a.id];
     if((isPad&&b.pad===code)||(!isPad&&b.kb===code)) INPUT.frameDown[a.id]=true;
   }
+}
+function navEdges(){        // one read for the three menu cursors — arrows + d-pad
+  const k=INPUT.rawKey, p=INPUT.rawPad;
+  return { up:!!(k['ArrowUp']||p[12]),    down:!!(k['ArrowDown']||p[13]),
+           left:!!(k['ArrowLeft']||p[14]), right:!!(k['ArrowRight']||p[15]),
+           confirm:!!k['KeyE'], back:!!k['Escape'] };   // kb halves only — each menu ORs its own pad face
 }
 
 window.addEventListener('keydown',e=>{
@@ -623,6 +638,7 @@ function beamAudio(on){
 // SHADERS
 // ============================================================
 const RLIM = { ITEMS:16, ENEMIES:10, TRACERS:12, DECALS:20, DYN:4 };
+const EXFIL_SMOKE_H=38.0;   // exfil smoke column height — folded into uWorldTop so the sky slab clears it
 
 const vertexShaderSource = `#version 300 es
 in vec4 a_position;
@@ -663,6 +679,7 @@ uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uHasTool;
 uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w unused
+uniform float uExposure;    // 0..1 player light exposure — dims the viewmodel in cover
 
 uniform int   worldItemCount;
 uniform vec3  worldItemPos[${RLIM.ITEMS}];
@@ -671,9 +688,12 @@ uniform vec4  worldItemData[${RLIM.ITEMS}];  // x:type y:yaw z:held w:pitch
 uniform float uWorldTop;                    // nothing exists above this; upward rays stop at the slab exit
 uniform vec4  uVCrates[6];                  // valley gate cache: x,z,size,unused
 uniform int   uVCrateCount;
+uniform int   uExfilCount;                  // authored-level exfil smoke columns
+uniform vec4  uExfils[3];                   // xyz column base · w live — VISUAL ONLY, no JS twin
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
-uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state z:muzzle w:hurt
+uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates)
+uniform vec2  uEnemyEye;                     // x:cos(fov/2) y:vision-cone range
 
 uniform int   tracerCount;
 uniform vec3  tracerA[${RLIM.TRACERS}];
@@ -700,6 +720,17 @@ float sdCylY(vec3 p,float r,float h){ vec2 d=abs(vec2(length(p.xz),p.y))-vec2(r,
 float sdOcta(vec3 p,float s){ p=abs(p); return (p.x+p.y+p.z-s)*0.57735; }
 vec3 rotY(vec3 p,float a){ float c=cos(a),s=sin(a); return vec3(c*p.x - s*p.z, p.y, s*p.x + c*p.z); }
 vec3 rotX(vec3 p,float a){ float c=cos(a),s=sin(a); return vec3(p.x, c*p.y - s*p.z, s*p.y + c*p.z); }
+
+// ---- ZEALOT HEAD-LOOK — the telegraph. TWIN: enemyHeadLook()/enemyHeadPos() in JS.
+// ---- Change one, change both, run the twin probe (docs in the JS twin's banner).
+float enHeadYaw(vec4 D, vec3 epos, float phi){
+  float st=floor(D.y+0.01);
+  if(st<0.5) return 0.0;
+  if(st<1.5) return sin(iTime*1.6+phi)*0.85;
+  float want=atan(ro.x-epos.x, ro.z-epos.z)-D.x;
+  want-=6.2831853*floor((want+3.1415927)/6.2831853);
+  return clamp(want,-1.2,1.2);
+}
 
 float hash(vec2 p){
   p = fract(p*vec2(123.34,456.21));
@@ -827,6 +858,7 @@ uniform int   uLevelOn;
 uniform vec4  uLevelBounds;   // x0, z0, invTileW, invTileH
 uniform vec4  uLevelGround;   // rimH, rimW, noiseAmp, (pad)
 bool gNoGround=false;                 // primary rays split ground from structures
+float gBound=1e9;                     // nearest entity bound this map() call — paces the march, never a surface
 uniform highp sampler2D uLevelTex;  // rows0-15 tilemap(r,g=ids), row16 headers x3, row17+ pool
 
 float lvGround(vec2 xz){
@@ -956,8 +988,10 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
           vec2 jit=vec2(lvHash(g+ivec2(53,71)), lvHash(g+ivec2(7,97)));   // float32-safe jitter
           vec2 so=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.15)+jit*0.7)*cell;
           float sr=0.45+h2*0.4;
-          vec3 bd3=vec3(p.x-so.x,(p.y-sr*0.55)*1.7,p.z-so.y);
-          float sd3=length(bd3)-sr;
+          vec3 bd3=vec3(p.x-so.x,p.y-sr*0.55,p.z-so.y);           // squashed-sphere shrub, honest
+          vec3 br=vec3(sr,sr/1.7,sr);                             // distance: the old *1.7 y-scale
+          float k0=length(bd3/br), k1=length(bd3/(br*br));        // overestimated 1.7x and the march
+          float sd3=(k1<1e-9)?-br.y:k0*(k0-1.0)/k1;               // tunneled. Same surface exactly.
           if(sd3<d){ d=sd3; m=17.0; }
         }
       }
@@ -972,6 +1006,14 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
         if(td<d){ d=td; m=(td==trunk)?16.0:17.0; }
       }
     }
+    if(gNoGround){                          // LEVEL-PRIM tree-cell pacing: each cell only knows its
+      vec2 cf=fract((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell);         // own tree, so the distance lies
+      vec2 ce=min(cf,1.0-cf)*cell;                                // across borders. Cap the march at
+      float top=(B.w>0.5&&o.x>C.z+cell*1.5)?1.0:B.y;              // the border (+0.6 > hit eps) so a
+      d=min(d, max(min(ce.x,ce.y), p.y-top)+0.6);                 // ray can't leap the neighbor's
+    }                                       // trunk/canopy. Deep in the logged half nothing beats 1m
+                                            // (stumps+shrubs), so high rays run free. March-only:
+                                            // never a hit, never in JS — geometry is unchanged.
   }else if(kind==8){                                              // STUMPS field
     float cell=B.z;
     ivec2 g=ivec2(floor((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell));
@@ -979,10 +1021,30 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     vec2 o=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.3)+vec2(hh,fract(hh*7.0))*0.4)*cell;
     float rr=length(p.xz-o);
     d=max(rr-0.42, p.y-(0.35+hh*0.3)); m=16.0;
+    if(gNoGround){                                                // tree-cell pacing, see TREES
+      vec2 cf=fract((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell);
+      vec2 ce=min(cf,1.0-cf)*cell;
+      d=min(d, max(min(ce.x,ce.y), p.y-0.65)+0.6);
+    }
   }else if(kind==10){                                             // PROPS crates
-    for(int i=0;i<10;i++){ if(i>=ln) break; vec4 cr=lvPool(ls+i);
+    int nc=ln-int(B.y+0.5);                                       // B.y flags a terminal in the last slot
+    for(int i=0;i<10;i++){ if(i>=nc) break; vec4 cr=lvPool(ls+i);
       float cd=sdBoxL(p, vec3(cr.x,cr.z*0.5,cr.y), vec3(cr.z*0.55,cr.z*0.5,cr.z*0.55));
       if(cd<d){ d=cd; m=4.0; } }
+    if(B.y>0.5){                                                  // LEVEL-PRIM stolen terminal: desk, stand, tilted slab
+      vec4 t=lvPool(ls+nc);                                       // t = x, z, yaw
+      vec2 l=p.xz-t.xy; float ca=cos(t.z), sa=sin(t.z);
+      vec2 r2=vec2(ca*l.x+sa*l.y, -sa*l.x+ca*l.y);
+      float td=sdBoxL(vec3(r2.x,p.y,r2.y), vec3(0.0,0.375,0.0), vec3(0.42,0.375,0.30));
+      if(td<d){ d=td; m=4.0; }                                    // the desk: scrap timber
+      float st2=sdBoxL(vec3(r2.x,p.y,r2.y), vec3(0.0,0.81,0.06), vec3(0.05,0.06,0.05));
+      if(st2<d){ d=st2; m=20.0; }                                 // the stand: gunmetal
+      float dy=p.y-1.02, dz=r2.y-0.06;                            // slab leans 0.16 back; literals keep the twins bit-equal
+      float ty=0.98723*dy+0.15932*dz, tz=0.98723*dz-0.15932*dy;
+      float md=sdBoxL(vec3(r2.x,ty,tz), vec3(0.0), vec3(0.25,0.175,0.03));
+      if(md<d){ d=md;                                             // screen face: beacon phosphor — mat split only, no geometry
+        m=(tz<-0.015&&abs(r2.x)<0.20&&abs(ty)<0.13)?7.0:20.0; }
+    }
   }
   return vec2(d,m);
 }
@@ -1125,13 +1187,14 @@ float sdBackpack(vec3 p){
 // ============================================================
 vec2 map(vec3 p){
   vec2 res = mapStatic(p);
+  gBound=1e9;
   vec3 fwd=normalize(rd);
 
   for(int i=0;i<${RLIM.ITEMS};i++){
     if(i>=worldItemCount) break;
     vec3 iPos = p - worldItemPos[i];
     float bd = length(iPos) - 0.55;
-    if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
     float t = worldItemData[i].x;
     vec3 lp = rotX(rotY(iPos, -worldItemData[i].y), -worldItemData[i].w);
     float d = 1000.0;
@@ -1155,31 +1218,65 @@ vec2 map(vec3 p){
     if(i>=uEnemyCount) break;
     vec3 ep = p - enemyPos[i];
     float bd = length(ep - vec3(0.0,0.95,0.0)) - 1.35;
-    if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
-    vec3 lp = rotY(ep, -enemyData[i].x);
-    float ph=iTime*6.5+float(i)*2.13;
-    float sw=sin(ph)*mix(0.16,0.38,clamp(enemyData[i].y,0.0,1.0));
-    float legL=sdCapsule(lp, vec3(-0.12,0.92,0.0), vec3(-0.12,0.10, sw*0.5), 0.10);
-    float legR=sdCapsule(lp, vec3( 0.12,0.92,0.0), vec3( 0.12,0.10,-sw*0.5), 0.10);
-    float torso=sdCapsule(lp, vec3(0.0,0.98,0.0), vec3(0.0,1.44,0.0), 0.23);
-    float vest=sdBox(lp-vec3(0.0,1.22,0.0), vec3(0.25,0.20,0.16));
-    float armR=sdCapsule(lp, vec3(0.27,1.40,0.0), vec3(0.13,1.18,0.30), 0.075);
-    float armL=sdCapsule(lp, vec3(-0.27,1.40,0.0), vec3(-0.04,1.20,0.28), 0.075);
-    float head=sdSphere(lp-vec3(0.0,1.62,0.0), 0.155);
-    float helm=max(sdSphere(lp-vec3(0.0,1.66,0.0), 0.19), 1.585-lp.y);
-    float gun=sdBox(lp-vec3(0.10,1.20,0.42), vec3(0.035,0.05,0.22));
-    float d=min(min(min(legL,legR),min(torso,vest)),min(min(armR,armL),min(min(head,helm),gun)));
-    if(d < res.x) res = vec2(d, 40.0 + float(i));
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
+    vec4 D=enemyData[i];
+    float st=floor(D.y+0.01), walk=(D.y-st)*2.0;
+    vec3 lp = rotY(ep, D.x);
+    float phi=float(i)*2.13;
+    float s1=sin(iTime*7.0+phi)*walk;
+    float br=0.015*sin(iTime*1.4+phi);
+    float ha=enHeadYaw(D, enemyPos[i], phi);
+    float d=  sdCapsule(lp, vec3(-0.11,0.88,0.0), vec3(-0.11,0.05, s1*0.40), 0.085);
+    d=min(d,  sdCapsule(lp, vec3( 0.11,0.88,0.0), vec3( 0.11,0.05,-s1*0.40), 0.085));
+    d=min(d,  sdBox(lp-vec3(0.0,0.72,-s1*0.06), vec3(0.21,0.22,0.15)));
+    d=min(d,  sdCapsule(lp, vec3(0.0,0.92,0.0), vec3(0.0,1.40+br,0.0), 0.205));
+    if(st>1.5){
+      vec3 tp=rotY(lp-vec3(0.0,1.32,0.0), ha);
+      d=min(d, sdCapsule(tp, vec3( 0.24,0.06,-0.02), vec3( 0.07,-0.02,0.26), 0.07));
+      d=min(d, sdCapsule(tp, vec3(-0.22,0.04,-0.02), vec3(-0.02,-0.04,0.22), 0.07));
+      d=min(d, sdBox(tp-vec3(0.05,-0.02,0.30), vec3(0.035,0.045,0.24)));
+    }else{
+      d=min(d, sdCapsule(lp, vec3( 0.245,1.36,0.02), vec3( 0.06,1.12,0.24), 0.07));
+      d=min(d, sdCapsule(lp, vec3(-0.245,1.36,0.02), vec3(-0.08,1.10,0.20), 0.07));
+      d=min(d, sdBox(lp-vec3(-0.01,1.10,0.22), vec3(0.16,0.04,0.05)));
+    }
+    vec3 hc=vec3(sin(ha)*0.07, 1.63+br-(st>1.5?0.04:0.0), cos(ha)*0.07);
+    d=min(d,  sdSphere(lp-hc, 0.165));
+    float tag=0.0;
+    float w=D.w; float hasP=step(4.0,w); w-=hasP*4.0;
+    if(w>=2.0){
+      float helm=max(sdSphere(lp-hc-vec3(0.0,0.045,0.0), 0.195), (hc.y-0.03)-lp.y);
+      if(helm<d){ d=helm; tag=0.375; }
+    }
+    if(hasP>0.5){
+      float pl=sdBox(lp-vec3(0.0,1.22,0.16), vec3(0.17,0.15,0.045));
+      if(pl<d){ d=pl; tag=0.25; }
+    }
+    if(d < res.x) res = vec2(d, 40.0 + float(i) + tag);
   }
 
   for(int i=0;i<${RLIM.TRACERS};i++){
     if(i>=tracerCount) break;
     vec3 mid = (tracerA[i]+tracerB[i])*0.5;
     float bd = length(p-mid) - (length(tracerA[i]-tracerB[i])*0.5 + 0.15);
-    if(bd > 0.1){ if(bd < res.x) res = vec2(max(bd,0.1), res.y); continue; }
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
     float hot = step(1.5, tracerCol[i].x+tracerCol[i].y+tracerCol[i].z);
     float d = sdCapsule(p, tracerA[i], tracerB[i], mix(0.035, 0.011, hot));   // gossamer for lasers
     if(d < res.x) res = vec2(d, 50.0 + float(i));
+  }
+
+  // exfil smoke signals — VISUAL ONLY (like tracers): you walk THROUGH smoke, so no JS twin
+  for(int i=0;i<3;i++){
+    if(i>=uExfilCount) break;
+    vec4 ex=uExfils[i];
+    if(ex.w<0.5) continue;
+    float bd = length(p.xz-ex.xz) - 2.4;      // column reach: 0.8 sway + fat top + margin
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
+    vec3 sp=p-ex.xyz;
+    sp.x-=sin(iTime*0.40+p.y*0.15)*0.8;       // the drift that says smoke, not pole
+    sp.z-=cos(iTime*0.31+p.y*0.12)*0.8;
+    float d = sdCapsule(sp, vec3(0.0,-2.0,0.0), vec3(0.0,${EXFIL_SMOKE_H.toFixed(1)},0.0), 0.35+max(sp.y,0.0)*0.008)*0.85;
+    if(d < res.x) res = vec2(d, 19.0);
   }
 
   // first-person Tool + arm, or the raised menu prop
@@ -1270,7 +1367,7 @@ vec2 raycast(vec3 o, vec3 dir){
     vec3 pp=o+dir*t;
     vec2 r=map(pp);
     if(r.x < (0.0007*t+0.0004)){ m=r.y; break; }
-    t += r.x*0.93;
+    t += min(r.x,gBound)*0.93;   // entity bounds pace the step but never register as hits
     if(t > tMax) break;
   }
   gNoGround=false;
@@ -1348,6 +1445,7 @@ void main(){
     else if(m>15.5&&m<16.5){ matCol=vec3(0.36,0.26,0.16)*(0.8+0.4*vnoise(vec2(p.y*2.0,p.x+p.z))); } // timber
     else if(m>16.5&&m<17.5){ matCol=vec3(0.16,0.30,0.17)*(0.75+0.5*vnoise(p.xz*1.4)); }  // foliage
     else if(m>17.5&&m<18.5){ matCol=vec3(0.42,0.24,0.15)*(0.7+0.6*vnoise(p.xz*3.1+p.y)); }  // rust
+    else if(m>18.5&&m<19.5){ matCol=vec3(1.0,0.62,0.30)*(0.7+0.5*vnoise(vec2((p.x+p.z)*0.9, p.y*0.45-iTime*0.7))); emiss=1.0; }  // exfil smoke: warm flare, rising grain
     else if(m<3.5){   matCol=vec3(0.60,0.55,0.45)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*1.4));
                       matCol*=mix(0.55,1.0,smoothstep(0.0,1.3,p.y)); }             // stucco, grimy hem
     else if(m<4.5){   matCol=vec3(0.38,0.28,0.17)*(0.8+0.4*vnoise(vec2((p.x+p.z)*6.0,p.y*0.7))); } // timber
@@ -1379,10 +1477,26 @@ void main(){
     }
     else if(m<50.0){
       int ei=int(m-40.0+0.5);
+      vec4 D=enemyData[ei];
+      float st=floor(D.y+0.01), part=fract(m);
       matCol=vec3(0.25,0.25,0.19);
-      matCol=mix(matCol, vec3(0.45,0.22,0.12), clamp(enemyData[ei].y-1.0,0.0,1.0)*0.4);
-      matCol+=vec3(0.9,0.1,0.05)*enemyData[ei].w;
-      emiss=enemyData[ei].z*0.7;
+      matCol=mix(matCol, vec3(0.45,0.22,0.12), clamp(st-1.0,0.0,1.0)*0.4);
+      if(part>0.19&&part<0.31) matCol=vec3(0.13,0.14,0.16);
+      if(part>0.31)            matCol=vec3(0.30,0.31,0.33);
+      float w=D.w; w-=step(4.0,w)*4.0; w-=step(2.0,w)*2.0;
+      matCol+=vec3(0.9,0.1,0.05)*w;
+      emiss=D.z*0.7;
+      float phi=float(ei)*2.13;
+      float ha=enHeadYaw(D, enemyPos[ei], phi), hy=D.x+ha;
+      float br=0.015*sin(iTime*1.4+phi);
+      vec3 hc=enemyPos[ei]+vec3(sin(hy)*0.07, 1.63+br-(st>1.5?0.04:0.0), cos(hy)*0.07);
+      vec3 hl=rotY(p-hc, hy);
+      if(length(hl)<0.22 && hl.z>0.08 && abs(hl.y-0.015)<0.020){
+        matCol = st<0.5? vec3(0.10,0.22,0.20)
+               : st<1.5? vec3(1.0,0.62,0.12)*(0.75+0.25*sin(iTime*7.0))
+               :         vec3(1.0,0.10,0.06)*1.3;
+        emiss=max(emiss, st<0.5?0.55:1.2);
+      }
     }
     else{
       int ti=int(m-50.0+0.5);
@@ -1443,8 +1557,27 @@ void main(){
         float att=1.0/(1.0+0.3*lDist+0.15*lDist*lDist);
         lit += matCol * dynCol[i] * lDif * att * dynPos[i].w;
       }
+      // ---- zealot vision cones, painted on the ground the way the head points ----
+      if(n.y>0.65 && (m<2.5 || (m>11.5&&m<13.5))){
+        for(int i=0;i<${RLIM.ENEMIES};i++){
+          if(i>=uEnemyCount) break;
+          float st=floor(enemyData[i].y+0.01);
+          if(st<0.5) continue;
+          vec2 g=p.xz-enemyPos[i].xz;
+          float r2=dot(g,g);
+          if(r2>uEnemyEye.y*uEnemyEye.y || r2<0.04) continue;
+          if(abs(p.y-enemyPos[i].y)>3.0) continue;
+          float hy=enemyData[i].x+enHeadYaw(enemyData[i], enemyPos[i], float(i)*2.13);
+          float rl=sqrt(r2);
+          float ca=dot(g/rl, vec2(sin(hy),cos(hy)));
+          float fall=1.0-rl/uEnemyEye.y;
+          lit += (st<1.5? vec3(1.0,0.62,0.12)*0.045 : vec3(1.0,0.10,0.06)*0.075)
+                 * smoothstep(uEnemyEye.x, uEnemyEye.x+0.06, ca) * fall*fall;
+        }
+      }
       col = lit + matCol*emiss;
     }
+    if(m>19.5 && m<21.5) col *= mix(0.35, 1.0, smoothstep(0.0, 0.8, uExposure)); // hands darken with the cover you stand in — viewmodel only
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
     col = mix(col, skyColor(rayDir), fogAmt);            // aerial perspective, one truth
   }else{
@@ -1514,7 +1647,7 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uWorldTop','uVCrateCount',
- 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
+ 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
 U.edits    = locArray('uEdits', 16);
@@ -1523,6 +1656,7 @@ U.itemPos  = locArray('worldItemPos', RLIM.ITEMS);
 U.itemData = locArray('worldItemData',RLIM.ITEMS);
 U.enemyPos = locArray('enemyPos',     RLIM.ENEMIES);
 U.uVCrates = locArray('uVCrates',     6);
+U.uExfils  = locArray('uExfils',      3);
 U.enemyData= locArray('enemyData',    RLIM.ENEMIES);
 U.trA      = locArray('tracerA',      RLIM.TRACERS);
 U.trB      = locArray('tracerB',      RLIM.TRACERS);
@@ -1757,6 +1891,7 @@ function marchWorldJS(ox,oy,oz,dx,dy,dz,maxDist){
 const playerPos={
   x:2.5,y:0,z:2.5, velY:0, onGround:true, coyoteT:0, jumpBufT:0,
   health:100,maxHealth:100,
+  status:{burn:0,bleedT:0}, burnedMax:0,     // BURN pools · BLEED runs a clock · fire scars the ceiling
   eyeHeight:1.32, baseHeight:1.32,          // a child's eye line
   isAiming:false,isSprinting:false,isCrouching:false,
   lean:0,currentLean:0,currentFov:1.0,
@@ -1869,13 +2004,14 @@ LEVELS.area1={
     lootN:32, minSpace:6,
     lootTiers:{
       common:['ammo9','ammo9','ammo9','ration','ration','battS','battS','battM',
-              'magStd','magStd','watch','compass'],
+              'magStd','magStd','watch','compass','gummies','bandAid','barrelC','barrelC'],
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
-              'helmetCap','harnessL','battH','lantern','magDrum'],
+              'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies','photometer',
+              'platS','platS'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
-              'splinter','bounce','pierce','heavy','compensator','hairTrigger',
-              'barrelC','heavyBarrel'],
-      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse'],
+              'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
+              'barrelC','heavyBarrel','serrated'],
+      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore'],
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
               'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
               'platesH','helmetSteel','helmetRig','autoSear','burstCam','rucksack',
@@ -1903,11 +2039,12 @@ LEVELS.hideout={
     {id:'house', kind:LVL.KIND.WALLS, box:[-9,-7,9,7], h:3.1, gate:['N',5.5,0.9],
      bldg:[-4.5,-4.5,1.5,0.5], bldgH:2.55, door:['E',0,0.9], boards:true},
     {id:'clutter', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-8,-6,8,6],
-     crates:[[-3.2,-3.4,0.9],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
-             [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]]},
+     crates:[[-3.2,-3.4,0.9,'stash'],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
+             [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]],
+     term:[-3.4,-0.6,0.4]},   // the stolen terminal's body — keep on LEVELS.hideout.terminal below
   ],
-  exfils:[], doors:[], spawn:{zealots:[],lootN:4,minSpace:4,lootTable:[],lootRegions:[]},
-  terminal:{x:-3.4,z:-0.6},
+  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[],guaranteed:['photometer','compass']},
+  terminal:{x:-3.4,z:-0.6},   // interact point — the model is clutter's `term`
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
   crates:[[6,-3,0.85],[7.2,-2.4,0.7],[-5,6,0.8],[-6,-5,0.7],[8,5,0.85],[-3,8,0.75]],
@@ -2082,8 +2219,10 @@ function regionSdfJS(r,px,py,pz){
           const jx=_hash2i(gx+53,gz+71), jz=_hash2i(gx+7,gz+97);   // float32-safe jitter
           const sx=bx[0]+(gx+0.15+jx*0.7)*cell, sz=bx[1]+(gz+0.15+jz*0.7)*cell;
           const sr=0.45+h2*0.4;
-          const bdx=px-sx, bdz=pz-sz, bdy=(py-sr*0.55)*1.7;
-          const sd3=Math.sqrt(bdx*bdx+bdy*bdy+bdz*bdz)-sr;
+          const bdx=px-sx, bdz=pz-sz, bdy=py-sr*0.55, brY=sr/1.7; // twin of the shader's exact-form
+          const k0=Math.sqrt((bdx/sr)*(bdx/sr)+(bdy/brY)*(bdy/brY)+(bdz/sr)*(bdz/sr));
+          const k1=Math.sqrt((bdx/(sr*sr))*(bdx/(sr*sr))+(bdy/(brY*brY))*(bdy/(brY*brY))+(bdz/(sr*sr))*(bdz/(sr*sr)));
+          const sd3=(k1<1e-9)?-brY:k0*(k0-1)/k1;                  // squashed-sphere shrub
           if(sd3<d){ d=sd3; m=17.0; }
         }
       }
@@ -2102,6 +2241,18 @@ function regionSdfJS(r,px,py,pz){
     for(const c of r.crates){
       const cd=_sdBox3(px,py,pz,c[0],c[2]/2,c[1],c[2]*0.55,c[2]/2,c[2]*0.55);
       if(cd<d){ d=cd; m=4.0; }
+    }
+    if(r.term){                                  // LEVEL-PRIM stolen terminal — GLSL twin in lvRegion kind==10
+      const t=r.term, lx=px-t[0], lz=pz-t[1], ca=Math.cos(t[2]), sa=Math.sin(t[2]);
+      const rx=ca*lx+sa*lz, rz=-sa*lx+ca*lz;
+      const td=_sdBox3(rx,py,rz,0,0.375,0,0.42,0.375,0.30);
+      if(td<d){ d=td; m=4.0; }                   // the desk
+      const st2=_sdBox3(rx,py,rz,0,0.81,0.06,0.05,0.06,0.05);
+      if(st2<d){ d=st2; m=20.0; }                // the stand
+      const dy=py-1.02, dz=rz-0.06;              // slab leans 0.16 back; literals keep the twins bit-equal
+      const ty=0.98723*dy+0.15932*dz, tz=0.98723*dz-0.15932*dy;
+      const md=_sdBox3(rx,ty,tz,0,0,0,0.25,0.175,0.03);
+      if(md<d){ d=md; m=20.0; }                  // screen mat split is shader-only — same box, zero collision drift
     }
   }
   return [d,m,cut];
@@ -2151,7 +2302,8 @@ function buildLevelTexData(level,bake){
     }
     if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,r.shrubs?1:0,r.cutX??0,r.hMin]; }
     if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
-    if(r.kind===K.PROPS){ B=[r.kind,0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0])); }
+    if(r.kind===K.PROPS){ B=[r.kind,r.term?1:0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0]));
+      if(r.term) items.push([r.term[0],r.term[1],r.term[2],0]); }   // terminal rides the last slot; B.y flags it
     if(r.kind!==K.PITS) C[1]=items.length;
     C[0]=pool;
     const hi=i*3, hput=(o,a,b2,c2,e)=>put((hi+o)%W, 16+Math.floor((hi+o)/W), a,b2,c2,e);
@@ -2328,10 +2480,10 @@ class Magazine extends Item{
 }
 const BARREL_TIERS={
   common:   {len:3,  spr:0.04, color:'#6e6a5e', w:1,h:2},
-  uncommon: {len:6,  spr:0.03, color:'#4f7a5c', w:1,h:2},
-  rare:     {len:9,  spr:0.02, color:'#3c5f8f', w:1,h:3},
-  epic:     {len:12, spr:0.01, color:'#7a4f8f', w:1,h:3},
-  legendary:{len:15, spr:0.00, color:'#a3822e', w:1,h:4},
+  uncommon: {len:5,  spr:0.03, color:'#4f7a5c', w:1,h:2},
+  rare:     {len:7,  spr:0.02, color:'#3c5f8f', w:1,h:3},
+  epic:     {len:9,  spr:0.01, color:'#7a4f8f', w:1,h:3},
+  legendary:{len:11, spr:0.00, color:'#a3822e', w:1,h:4},
 };
 const PLATFORM_TIERS={ small:{perSide:1,color:'#5a5f52'}, medium:{perSide:2,color:'#4f6a5c'}, large:{perSide:3,color:'#465a7a'} };
 const CHAIN_SPREAD_CAP=0.12;
@@ -2578,8 +2730,10 @@ const ITEM_DEFS={
   // --- sequence: projectile cores ---
   boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt',base:0},'Core · fires a slug from the magazine'),
   sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18},'Core · bursting ember · 18⚡'),
+  emberCore:  ()=>new ToolMod('EMBER','#e64a19','proj',{kind:'spark',base:16,burn:12},'Core · fire that keeps eating · 12 burn · 16⚡'),
   beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: the shot becomes a held, continuous thread (less hurt) · alone atop a column: tactical laser'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
+  decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands, sings to the camp for 12s · 10⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
   velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:1.6,surcharge:4},'Next core ×1.6 speed · +4⚡'),
@@ -2588,8 +2742,12 @@ const ITEM_DEFS={
   heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6,surcharge:5},'Next core arcs and lands harder · +5⚡'),
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
+  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core opens a wound · 1 hurt / 1.5s for 30s · +5⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
+  gummies:    ()=>{ const it=new Item('Gummies',1,1,'#a04a5e'); it.gummies=true; return it; },
+  bandAid:    ()=>{ const it=new Item('Band-Aid',1,1,'#c9b78f'); it.bandAid=true; return it; },
+  aloe:       ()=>{ const it=new Item('Aloe Vera',1,1,'#57764a'); it.aloe=true; return it; },
   // ---- armor (stats provisional) ----
   rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6}),
   beltBasic:  ()=>new Armor('Web Belt',2,1,'#4a4436','belt',{invCols:1,invRows:1,slotMode:true}),
@@ -2599,14 +2757,16 @@ const ITEM_DEFS={
   harnessL:   ()=>new Armor('Light Harness',2,2,'#3f4a3a','harness',{invCols:3,invRows:2}),
   harnessM:   ()=>new Armor('Field Harness',2,2,'#44503c','harness',{invCols:3,invRows:3}),
   harnessH:   ()=>new Armor('Assault Harness',2,3,'#4a5640','harness',{invCols:4,invRows:4}),
-  platesL:    ()=>new Armor('Scrap Plates',2,2,'#5c5c60','plates',{damageMult:0.75}),
-  platesH:    ()=>new Armor('Ceramic Plates',2,2,'#6a6a70','plates',{damageMult:0.6}),
-  helmetCap:  ()=>new Armor('Padded Cap',2,1,'#6b5a3e','helmet',{reduce:0.94}),
-  helmetSteel:()=>new Armor('Steel Pot',2,1,'#61646a','helmet',{reduce:0.88}),
-  helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true}),
+  platesL:    ()=>new Armor('Scrap Plates',2,2,'#5c5c60','plates',{damageMult:0.75,dur:20}),
+  platesH:    ()=>new Armor('Ceramic Plates',2,2,'#6a6a70','plates',{damageMult:0.6,dur:30}),
+  helmetCap:  ()=>new Armor('Padded Cap',2,1,'#6b5a3e','helmet',{reduce:0.94,dur:10}),
+  helmetSteel:()=>new Armor('Steel Pot',2,1,'#61646a','helmet',{reduce:0.88,dur:18}),
+  helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
-  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, then blows 1.2s later · +4⚡'),
+  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it from the blast · +4⚡'),
+  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core triggers the instant it touches anything — no stick, no wait · +5⚡'),
+  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{fuseAdd:1.5,surcharge:3},'Next core waits +1.5s more on the fuse · +3⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
@@ -2614,7 +2774,8 @@ const ITEM_DEFS={
   lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'A light of your own. It sees you back. [F]'),
   // --- analog settings, as objects ---
   watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','While carried, the HUD keeps time.'),
-  compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon heading.'),
+  compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon — or the nearest exfil in a raid.'),
+  photometer: ()=>new Gadget('Light Meter','#a8925f','photometer','While carried, reads how far out the light gives you away.'),
   opticsDial: ()=>new Gadget('Optics Dial','#8f9fb0','optics','Right-click: cycle render fidelity (this IS the settings menu).'),
   volumeKnob: ()=>new Gadget('Volume Knob','#b08f7f','volume','Right-click: cycle sound level.'),
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
@@ -2622,7 +2783,7 @@ const ITEM_DEFS={
 for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
   ITEM_DEFS[k]=()=>{ const it=f(); it.defKey=k; return it; }; }
 const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
-                'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter',
+                'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter','contactMod','slowFuse',
                 'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
                 'barrelC','barrelU','barrelR','platS','platM','battS','battM','scope2x','scope3x'];
 
@@ -2638,13 +2799,20 @@ class Armor extends Item{
     super(name,w,h,color);
     this.armorType=armorType;
     Object.assign(this,stats||{});
+    if(this.dur){ this.durMax=this.dur;                 // hard armor: wears out, breaks off
+      this.resist={burn:Math.round(runRng()*60)/100, bleed:Math.round(runRng()*60)/100}; }
     if(this.invCols){ this.inv=Array(this.invRows).fill(null).map(()=>Array(this.invCols).fill(null)); }
   }
   get renderType(){ return 9; }
+  wearTag(){
+    if(!this.durMax) return '';
+    return ' · '+Math.max(0,this.dur)+'/'+this.durMax+' integrity · resists burn '
+         +Math.round(this.resist.burn*100)+'% · bleed '+Math.round(this.resist.bleed*100)+'%';
+  }
   desc(){
     switch(this.armorType){
-      case 'plates': return 'incoming ×'+this.damageMult;
-      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port (dormant)':'');
+      case 'plates': return 'incoming ×'+this.damageMult+this.wearTag();
+      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port (dormant)':'')+this.wearTag();
       case 'goggles': case 'headphones': return 'a settings device — dials live inside';
       default: return this.invCols? this.invCols+'×'+this.invRows+' pockets':'';
     }
@@ -2729,8 +2897,10 @@ function invZones(){
     // show your kit AND the crate together, so you can lift loot into your hands
     // (Square) and stow it into a pocket yourself — container-to-container transfer
     return [...playerZones(),
-            {id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
-             external:true}];
+            lootCrate.stash                               // THE STASH is yours: put AND take
+              ? {id:'stash',label:'THE STASH',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows}
+              : {id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
+                 external:true}];
   return playerZones();
 }
 function playerZones(){
@@ -2781,7 +2951,7 @@ function setFocus(n,ex,ey){
 let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
 
 function isPlayable(){ return gameState==='play'||gameState==='hideout'; }
-function uiOpen(){ return isInventoryOpen||isToolMenuOpen||isCrateOpen||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
+function uiOpen(){ if(!engineReady) return true; return isInventoryOpen||isToolMenuOpen||isCrateOpen||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
 function pausedUI(){ return isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }   // bag/tool do NOT pause the world
 
 function gridFits(item,sx,sy,grid,cols,rows){
@@ -2841,6 +3011,7 @@ function wornHidden(){
 function menuSet(view){
   Menus.prev=Menus.view;                                  // provenance: who are we leaving?
   Menus.view=view;
+  if(Menus.prev!==view){ INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={}; }  // the press that changed rooms is SPENT — no handler downstream inherits it
   if(view!=='closed' && Menus.inspect && !(view==='bag'||view==='tool')) Menus.inspect=null;
   if(view==='closed') Menus.inspect=null;
   // derived legacy aliases (read across the game + tests)
@@ -2868,7 +3039,7 @@ function menuInspect(item){
   refreshInvUI();
 }
 function closeAllInv(){ menuSet('closed'); lootCrate=null; }
-function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast('SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
+function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast(cr.stash?'THE STASH':'SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
   else if(Menus.view==='crate') closeAllInv();            // a crate is a room you simply leave
@@ -2994,6 +3165,9 @@ function interactInventory(){
 
   if(heldWorld){
     const it=heldWorld.w.item;
+    // supply crates are TAKE-ONLY: they reseed on every deploy — whatever you leave, the
+    // valley eats. The stash (no external flag) is the one box that accepts.
+    if(f.external){ toast('A SUPPLY CRATE — TAKE ONLY'); playSound('empty'); return; }
     // held rounds pour straight into a magazine under the cursor
     if(it instanceof Ammunition && cell instanceof Magazine
        && cell.acceptedType===it.ammoType && cell.loaded<cell.maxCapacity){
@@ -3174,6 +3348,8 @@ function useGadget(g){
     case 'compass':{
       const dx=GATE.x-playerPos.x, dz=GATE.z-playerPos.z;
       toast('BEACON · '+Math.round(Math.hypot(dx,dz))+'m'); playSound('click'); break; }
+    case 'photometer':
+      toast('SEEN FROM · '+Math.round(spotDistance())+'m'); playSound('click'); break;
   }
 }
 function findGadget(kind){
@@ -3189,6 +3365,13 @@ function hasGadget(kind){
     if(it instanceof Gadget && it.kind===kind) return true;
   }
   return false;
+}
+// PHOTOMETER MATH — inverts the zealot perception line (Zealot.update):
+//   rate = exposure * (enemyVision/dist) * motion, accumulating only while rate > 0.12.
+// Standing+quiet motion is 0.6 → dist = exposure*enemyVision*5. Floor 2m; cap at the
+// 34m sight gate. Assumes the zealot is LOOKING — the cone is their problem, not the light's.
+function spotDistance(){
+  return clamp(playerPos.exposure*P('enemyVision')*0.6/0.12, 2, 34);
 }
 
 // ============================================================
@@ -3268,12 +3451,13 @@ function updateInteract(dt){
   if(activeLevel){
     const _pr=document.getElementById('interactPrompt');
     const ex=updateExfil(dt);
+    if(!activeLevel){ setPrompt(_pr,'',false); return; }  // exfil completed — travelTo tore the level down mid-frame
     if(ex){ setPrompt(_pr, _exfilHold>0
         ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
         : ex.label+' — hold <b>E</b> to extract', true); return; }
-    const cr = gameState==='play' ? nearestCrate(2.3) : null;
+    const cr = isPlayable() ? nearestCrate(2.3) : null;   // home boxes open too — the stash lives there
     if(cr && !uiOpen()){
-      setPrompt(_pr, 'A SUPPLY CRATE — <b>E</b>', true);
+      setPrompt(_pr, cr.stash?'THE STASH — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
       if(pressed('interact')){ openCrate(cr); }
       return;
     }
@@ -3404,7 +3588,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,surcharge:0,laser:false}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,surcharge:0,laser:false}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
 function foldFrame(out,m){
   const e=m.effect;
@@ -3452,16 +3636,23 @@ function resolveLane(col,out){
       if(e.twin) pend.twin*=e.twin;
       if(e.silent) pend.silent=true;
       if(e.fuse) pend.fuse+=e.fuse;
+      if(e.fuseAdd) pend.fuse+=e.fuseAdd;             // TIMER: more patience on the same fuse
+      if(e.contact) pend.contact=true;
       if(e.split) pend.split+=e.split;
       if(e.laser) pend.laser=true;
+      if(e.burn) pend.burn+=e.burn;
+      if(e.bleed) pend.bleed=true;
       pend.surcharge+=e.surcharge||0;
       feeders.push(m);
     }else if(m.cat==='proj'){
       if(pend.twin>3) pend.twin=3;                  // TWIN cap: no shotgun accidents
+      if(m.effect.burn) pend.burn+=m.effect.burn;   // FIRE cores carry their own ember
       const shot={kind:m.effect.kind,pend:{...pend},
                   cost:(m.effect.base||0)+pend.surcharge,core:m,
                   spreadAdd:col.spreadAdd,lane};
       lane.shots.push(shot);
+      const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY: a fused core casts the NEXT core from its point of death
+      if(prev&&prev.pend.fuse>0&&!shot.pend.laser) prev.relayNext=shot;
       for(const f of feeders) lane.flow.push({from:f,to:m});
       pend=freshPend(); feeders=[];
     }
@@ -3519,8 +3710,23 @@ function describeSequence(res){
 let _pillArm=0, _pillDeath=false;
 function heldUse(it){
   if(it.ration){
-    playerPos.health=Math.min(playerPos.maxHealth, playerPos.health+14);
+    playerPos.health=Math.min(effMaxHP(), playerPos.health+14);
     toast('TASTES LIKE THE WAR');
+    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+  }
+  if(it.gummies){
+    playerPos.health=Math.min(effMaxHP(), playerPos.health+30);
+    toast('SUGAR ON A DEAD TONGUE');
+    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+  }
+  if(it.bandAid){
+    playerPos.status.bleedT=0;
+    toast('PRESSURE HELD');
+    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+  }
+  if(it.aloe){
+    playerPos.status.burn=0; playerPos.burnedMax=0;
+    toast('THE SKIN FORGIVES');
     consumeHeld(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.pill){
@@ -3597,15 +3803,18 @@ function emitProjectile(owner,origin,dir,shot,base){
     const spr=base.spread*(count>1?1.8:1.0)*(playerPos.isAiming&&owner==='player'?0.45:1);
     const d=new Vec3(dir.x+(runRng()-0.5)*spr*2, dir.y+(runRng()-0.5)*spr*2, dir.z+(runRng()-0.5)*spr*2).normalize();
     const kind=shot.kind;
-    const speed=(kind==='spark'?34:kind==='pick'?60:82)*p.vel;
+    const speed=(kind==='spark'?34:kind==='pick'?60:kind==='decoy'?22:82)*p.vel;
+    const rel=(i===0&&shot.relayNext)||null;          // only the first TWIN copy carries the chain — no 3^n fireworks
     projectiles.push({
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:2.2, owner, kind,
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything
-      dmg:(kind==='spark'||kind==='pick'?12:base.dmg)+p.dmg,
-      bounces:p.bounce, pierce:p.pierce, grav:p.grav*12,
-      fuse:p.fuse||0, split:p.split||0, stuck:false, push:!!(base&&base.pulse),
-      col:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:[1.0,0.75,0.25],
+      dmg:(kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg,
+      bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:0),
+      fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
+      relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
+      burn:p.burn||0, bleed:!!p.bleed,
+      col:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:[1.0,0.75,0.25],   // decoy olive sums under the shader's hot gate — a slow puck draws fat, not gossamer
       silent:p.silent||base.silenced,
     });
   }
@@ -3699,21 +3908,30 @@ function runContinuousBeams(dt){
     if(!st){ st={acc:0}; _beamLanes.set(li,st); wearRoll(toolPowerCells(activeTool).slice(0,1)); }
     st.engaged=true;
     let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,50);
-    // enemies intercept the thread
-    let hitEn=null;
+    // enemies intercept the thread — head tested above the body, same ray foot
+    let hitEn=null, hitHead=false;
     for(const en of enemies){
-      if(en.health<=0) continue;
+      if(en.health<=0||en._dormant) continue;
       const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
       const tt=rx*f.x+ry*f.y+rz*f.z;
       if(tt>0.3&&tt<t){
         const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
-        if(d<0.55){ t=tt; hitEn=en; }
+        const hp=enemyHeadPos(en,_hpV);
+        const hd=Math.hypot(hp.x-(o.x+f.x*tt),hp.y-(o.y+f.y*tt),hp.z-(o.z+f.z*tt));
+        if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
       }
     }
     const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
     st.acc=(st.acc||0)+dt;
-    if(sh.kind==='bolt'&&hitEn){ hitEn.hurt(((24+sh.pend.dmg)*0.55)*dt,'player'); }
-    if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player'}); }
+    if(sh.kind==='bolt'&&hitEn){
+      let bdmg=((24+sh.pend.dmg)*0.55)*dt;
+      if(hitHead){
+        if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
+        else bdmg*=2;
+      }
+      hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
+    }
+    if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
     if(sh.kind==='pick'&&st.acc>0.16){ st.acc=0; carveAt({pos:end,dmg:8,r:0.55}); }
     if(sh.kind==='grip'){
       if(!heldWorld){ const pick=itemUnderCrosshair(40); if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam'); }
@@ -3832,11 +4050,49 @@ function runBeam_DEAD(dt,res,shot){
   }
 }
 
+// ---- HEADSHOTS: the head is a second, smaller test sphere — twin of the GLSL head.
+// ---- The center MOVES: it rides the head-look (enHeadYaw in the shader — change one,
+// ---- change both, run the twin probe). Bare head takes x2; a helm eats the
+// ---- bonus and cracks a point instead. Hit r 0.24 vs visual r 0.165: ~12mm twin skew budget.
+const _hpV=new Vec3(0,0,0);
+function enemyHeadLook(en){
+  if(en.state===0) return 0;
+  const phi=(en._slot||0)*2.13;
+  if(en.state===1) return Math.sin(gameTime*1.6+phi)*0.85;
+  const c=camPos();
+  let d=Math.atan2(c.x-en.position.x, c.z-en.position.z)-en.yaw;
+  while(d>3.1415927)d-=6.2831853; while(d<-3.1415927)d+=6.2831853;
+  return clamp(d,-1.2,1.2);
+}
+function enemyHeadPos(en,out){
+  const hy=en.yaw+enemyHeadLook(en);
+  const br=0.015*Math.sin(gameTime*1.4+(en._slot||0)*2.13);
+  return out.set(en.position.x+Math.sin(hy)*0.07,
+                 en.position.y+1.63+br-(en.state===2?0.04:0),
+                 en.position.z+Math.cos(hy)*0.07);
+}
+function crackHelm(en){
+  if(!en.helm) return;
+  if(--en.helm.dur>0){ playSound('click'); return; }
+  en.helm=null; playSound('hit');                     // rings off — the dome vanishes with it
+  const hp=enemyHeadPos(en,_hpV);
+  addDyn(hp.x,hp.y+0.08,hp.z,[0.9,0.85,0.6],0.8,0.06);
+}
+function headshotDmg(en,dmg,head){
+  if(!head) return dmg;
+  if(!en.helm) return dmg*2;
+  crackHelm(en);
+  return dmg;
+}
 function updateProjectiles(dt){
   for(let i=projectiles.length-1;i>=0;i--){
     const pr=projectiles[i];
     if(pr.stuck){                                        // FUSEd: sit, count, blow
       pr.fuseT-=dt;
+      if(pr.kind==='decoy'&&pr.fuseT>0){                 // LURE: sing to the camp
+        pr.pingT-=dt;
+        if(pr.pingT<=0){ pr.pingT=1.5; addNoise(pr.pos.x,pr.pos.y,pr.pos.z,14); addDyn(pr.pos.x,pr.pos.y,pr.pos.z,pr.col,1.4,0.12); playSound('click'); }
+      }
       if(pr.fuseT<=0){ triggerPayload(pr); projectiles.splice(i,1); }
       continue;
     }
@@ -3850,14 +4106,17 @@ function updateProjectiles(dt){
       // bodies
       if(pr.owner!=='player'){
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-        if(d<0.42){ damagePlayer(pr.dmg); dead=impactOrPierce(pr); continue; }
+        if(d<0.42){ damagePlayer(pr.dmg); if(pr.kind!=='spark') applyStatus(playerPos,pr); dead=impactOrPierce(pr); continue; }   // spark dose rides the explosion — once
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
-          if(en.health<=0) continue;
+          if(en.health<=0||en._dormant) continue;        // dormant: bullets pass through
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
-          if(d<0.55){
-            en.hurt(pr.dmg,'player'); playSound('hit');
+          const hp=enemyHeadPos(en,_hpV);
+          const hd=Math.hypot(pr.pos.x-hp.x,pr.pos.y-hp.y,pr.pos.z-hp.z);
+          if(d<0.55||hd<0.24){
+            const head=hd<0.24;
+            en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark') applyStatus(en,pr); playSound('hit');   // spark dose rides the explosion — once
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
             dead=impactOrPierce(pr); break; }
         }
@@ -3866,7 +4125,13 @@ function updateProjectiles(dt){
       // world
       const wd=mapWorldJS(pr.pos.x,pr.pos.y,pr.pos.z);
       if(wd<0.04){
-        if(pr.bounces>0){
+        if(pr.contact){                                // CONTACT: no patience — arrival IS the trigger
+          worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          pr.pos.addScaledVector(_n,0.06);
+          addDecal(pr.pos,_n,pr.kind==='spark'?0.7:0.22);
+          dead=true;
+          triggerPayload(pr);
+        }else if(pr.bounces>0){
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           const dot=pr.vel.dot(_n);
           pr.vel.x-=2*dot*_n.x; pr.vel.y-=2*dot*_n.y; pr.vel.z-=2*dot*_n.z;
@@ -3892,9 +4157,11 @@ function updateProjectiles(dt){
   }
 }
 function impactOrPierce(pr){
+  if(pr.contact){ triggerPayload(pr); return true; }   // CONTACT: flesh counts as arrival
   if(pr.kind==='spark'){ triggerPayload(pr); return true; }
   if(pr.split>0){ splinterBurst(pr); return true; }
   if(pr.pierce>0){ pr.pierce--; return false; }
+  if(pr.relay||pr.fuse>0) triggerPayload(pr);          // FUSE on flesh: still terminal — the payload fires, the chain casts
   return true;
 }
 // one routing point for what a shot DOES when it lands (immediate or fused)
@@ -3904,6 +4171,10 @@ function triggerPayload(pr){
   if(pr.kind==='grip') addGlob(pr.pos);
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
+  if(pr.relay){                                        // FUSE-RELAY: the death casts the next core — free, the fuse surcharge already paid
+    const sh=pr.relay; pr.relay=null;                  // one cast per corpse
+    emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase);
+  }
 }
 function splinterBurst(pr){
   const nFrag=Math.min(4,pr.split);
@@ -3917,6 +4188,7 @@ function splinterBurst(pr){
       dmg:Math.max(2,Math.round(pr.dmg*0.45)),
       bounces:pr.bounces, pierce:pr.pierce, grav:6,
       fuse:0, split:0, stuck:false,                      // fragments never re-split
+      burn:Math.round((pr.burn||0)*0.45), bleed:!!pr.bleed,
       col:pr.col, silent:pr.silent,
     });
   }
@@ -3934,23 +4206,47 @@ function explode(pr){
   addNoise(pr.pos.x,pr.pos.y,pr.pos.z,26);
   const R=2.4;
   for(const en of enemies){
-    if(en.health<=0) continue;
+    if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
     const d=en.position.distanceTo(pr.pos);
-    if(d<R) en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner);
+    if(d<R){ en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner); applyStatus(en,pr); }
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-  if(pd<R) damagePlayer(pr.dmg*(1-pd/R));
+  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)); applyStatus(playerPos,pr); }
   for(const w of worldItems){
     const d=w.pos.distanceTo(pr.pos);
     if(d<R){ const f=new Vec3().subVectors(w.pos,pr.pos).normalize(); w.vel.addScaledVector(f,(1-d/R)*14); w.vel.y+=3; }
   }
 }
+// ---- statuses: burn POOLS (capped), bleed REFRESHES (never stacks) ----
+function effMaxHP(){ return playerPos.maxHealth-playerPos.burnedMax; }   // burned health stays burned until treated
+function applyStatus(t,pr){
+  if(!t.status) return;
+  const pl=t===playerPos;                              // worn resists shave the dose — both sides
+  if(pr.burn)  t.status.burn=Math.min(30, t.status.burn+pr.burn*(pl?playerResist('burn'):t.resist?t.resist('burn'):1));
+  if(pr.bleed) t.status.bleedT=Math.max(t.status.bleedT, 30*(pl?playerResist('bleed'):t.resist?t.resist('bleed'):1));
+}
+// ---- a worn piece absorbs a point per hit; at 0 it breaks off the rig for good
+function armorWear(slot){
+  const a=equip[slot]; if(!a||!a.durMax) return;
+  if(--a.dur>0) return;
+  equip[slot]=null;
+  syncBagAlias(); clampZone();
+  toast(a.name.toUpperCase()+' BROKE'); playSound('empty'); refreshInvUI();
+}
+// ---- status seam: burn/bleed magnitudes route through here once statuses land.
+// ---- Multiplicative — each piece shaves its rolled share.
+function playerResist(kind){
+  let m=1;
+  for(const s of ['plates','helmet']){ const a=equip[s]; if(a&&a.resist) m*=1-(a.resist[kind]||0); }
+  return m;
+}
 function damagePlayer(dmg){
-  // ---- armor seam: plates multiply, helmet shaves. Global for now; a later pass can
-  // ---- route head-hits through the helmet only, and wake the medPort field.
-  if(equip.plates) dmg*=equip.plates.damageMult;
-  if(equip.helmet) dmg*=equip.helmet.reduce;
+  // ---- armor seam: plates multiply, helmet shaves. Enemy fire aims center-mass, so
+  // ---- there is no head channel to read on received fire yet — both pieces wear a
+  // ---- point per absorbed hit instead; medPort stays dormant.
   if(FLAGS.god||gameState!=='play') return;
+  if(equip.plates){ dmg*=equip.plates.damageMult; armorWear('plates'); }
+  if(equip.helmet){ dmg*=equip.helmet.reduce; armorWear('helmet'); }
   playerPos.health=Math.max(0,playerPos.health-dmg);
   playSound('hurt');
   const v=document.getElementById('vignette');
@@ -3993,9 +4289,11 @@ class Zealot{
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
+    this.status={burn:0,bleedT:0};
     this.muzzle=0; this.hurtFlash=0;
     this.targetPoint=this.newPatrolTarget();
     this.buildTool();
+    this.rollGear();
   }
   newPatrolTarget(){
     const a=runRng()*Math.PI*2, r=2+runRng()*6;
@@ -4021,9 +4319,10 @@ class Zealot{
     else if(roll<0.50) { put('suppressor'); put('boltCore'); }
     else if(roll<0.58) { put('autoSear');   put('boltCore'); }
     else               { put('boltCore'); }
-    // deeper rings chain a barrel with its own little sequence
-    if(depth>=2 && runRng()<0.35 && bi<t.base.slots.length){
-      const b=ITEM_DEFS[runRng()<0.7?'barrelC':'barrelU']();
+    // deeper rings chain a barrel with its own little sequence — Ring I tastes it
+    // rarely, and only ever the common one
+    if(runRng()<(depth>=2?0.35:0.12) && bi<t.base.slots.length){
+      const b=ITEM_DEFS[depth>=2&&runRng()>=0.7?'barrelU':'barrelC']();
       if(runRng()<0.6) b.slots[0]=ITEM_DEFS[['dmgPlus','velPlus','twin','splinter'][Math.floor(runRng()*4)]]();
       b.slots[1]=ITEM_DEFS[runRng()<0.75?'boltCore':'sparkCore']();
       t.base.slots[bi++]=b;
@@ -4033,8 +4332,26 @@ class Zealot{
     this.res=resolveTool(t);
     this.reserve=6+Math.floor(runRng()*10);
   }
-  hurt(dmg,by){
+  rollGear(){
+    // ---- ARMOR ROLL: deeper rings dress better. Pure random for now — a future
+    // ---- class pass would swap these two independent rolls for authored kits.
+    // ---- the helm is a REAL Armor item — it doubles as the crack/render token.
+    const q=clamp((legDepth()-1)/5,0,1);               // 0 at the door · 1 by ring VI — travel legs dress Ring I
+    this.helm   = runRng()<0.25+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'helmetSteel':'helmetCap']() : null;
+    this.plates = runRng()<0.20+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'platesH':'platesL']() : null;
+  }
+  resist(kind){                                        // status-resist read — applyStatus routes enemy doses here
+    let m=1;
+    for(const a of [this.helm,this.plates]) if(a&&a.resist) m*=1-(a.resist[kind]||0);
+    return m;
+  }
+  hurt(dmg,by,part){
     if(this.health<=0) return;
+    // worn plates eat body hits first — the helm's cut already landed in headshotDmg/crackHelm
+    if(part!=='head'&&this.plates){
+      dmg*=this.plates.damageMult;
+      if(this.plates.dur!==undefined&&--this.plates.dur<=0) this.plates=null; // cracked — gone before it can drop
+    }
     this.health-=dmg;
     this.hurtFlash=1;
     if(by==='player'&&this.state<2){ this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(playerPos.x,0,playerPos.z); this.state=1; }
@@ -4046,6 +4363,9 @@ class Zealot{
     worldNormalJS(this.position.x,this.position.y+0.1,this.position.z,_n);
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
     spawnWorldItem(this.tool,this.position.x,this.position.y+0.8,this.position.z,new Vec3((runRng()-0.5)*2,3,(runRng()-0.5)*2));
+    // loot follows gear: they drop exactly what they wore — same item, wear and all
+    if(this.helm){ spawnWorldItem(this.helm,this.position.x,this.position.y+0.9,this.position.z,new Vec3((runRng()-0.5)*2.5,3.2,(runRng()-0.5)*2.5)); this.helm=null; }
+    if(this.plates){ spawnWorldItem(this.plates,this.position.x,this.position.y+0.7,this.position.z,new Vec3((runRng()-0.5)*2.5,2.8,(runRng()-0.5)*2.5)); this.plates=null; }
     if(runRng()<0.6){ const a=ITEM_DEFS.ammo9(); a.count=4+Math.floor(runRng()*8);
       spawnWorldItem(a,this.position.x,this.position.y+0.6,this.position.z,new Vec3((runRng()-0.5)*3,3.5,(runRng()-0.5)*3)); }
     this.respawnT=45;
@@ -4058,6 +4378,14 @@ class Zealot{
       if(this.respawnT<=0) this.reinforce();
       return;
     }
+    // ---- statuses tick even mid-stagger (and dormant, if that ever lands) ----
+    if(this.status.burn>0){
+      const b=Math.min(this.status.burn,2*dt);       // 2 hp/s — a 12-burn runs ~6s
+      this.status.burn-=b; this.health-=b;
+      this.hurtFlash=Math.max(this.hurtFlash,0.35);  // the body shows the fire — free telegraph
+    }
+    if(this.status.bleedT>0){ this.status.bleedT-=dt; this.health-=dt/1.5; }
+    if(this.health<=0){ this.die(); return; }
     if(this.stagger>0){ this.stagger-=dt; this.position.addScaledVector(this.velocity,dt*0.4); this.settle(dt); return; }
 
     const px=playerPos.x, pz=playerPos.z;
@@ -4074,7 +4402,7 @@ class Zealot{
     let rate=0;
     if(seesLOS&&inCone){
       const motion=playerPos.isSprinting?1.35:(playerPos.noiseLevel>1.5?1.0:(playerPos.isCrouching?0.35:0.6));
-      rate=playerPos.exposure*(P('enemyVision')/Math.max(1,dist))*motion;
+      rate=playerPos.exposure*(P('enemyVision')/Math.max(1,dist))*motion;   // PHOTOMETER twin: spotDistance() inverts this line + the 0.12 gate below
     }
     if(dist<12){
       const heard=playerPos.noiseLevel/Math.max(1,dist)* (seesLOS?1:0.4);
@@ -4164,7 +4492,7 @@ class Zealot{
     }
   }
   tryShoot(dt,dist,seesLOS){
-    if(this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
+    if(this._dormant||this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
     const mag=toolMagazine(this.tool);
     const pool=this.res.shots.filter(sh=>!sh.pend.laser);   // continuous threads are a player verb
     if(!pool.length) return;
@@ -4195,7 +4523,10 @@ class Zealot{
     this.position.set(playerPos.x+Math.cos(a)*r,0,playerPos.z+Math.sin(a)*r);
     this.startPos=this.position.clone();
     this.health=34; this.detection=0; this.state=0; this.investigate=null;
+    this._helmT=0;
+    this.status.burn=0; this.status.bleedT=0;
     this.buildTool();
+    this.rollGear();
   }
 }
 const enemies=[];
@@ -4208,7 +4539,7 @@ function maybeSpawnCellLoot(){}
 
 function placeGate(){
   const rr=mulberry32((SEED.x*73856093)^(SEED.y*19349663));
-  const d=4+depth;
+  const d=4+legDepth();
   const dir=rr()<0.5?-1:1;                    // down-valley or up-valley
   GATE.cx=dir*(d+Math.floor(rr()*3));
   GATE.cz=Math.floor(rr()*3)-1;               // stays inside the valley strip
@@ -4224,7 +4555,7 @@ function resetLevel(){
   heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
   cameraYaw=Math.atan2(GATE.x,GATE.z);
-  PARAMS.maxEnemies.v=Math.min(14, 4+2*depth);
+  PARAMS.maxEnemies.v=Math.min(14, 4+2*legDepth());
   enemies.length=0;
   const _lo=Math.min(-34, GATE.x*1.1), _hi=Math.max(34, GATE.x*1.1);
   for(let i=0;i<P('maxEnemies');i++){
@@ -4233,7 +4564,7 @@ function resetLevel(){
     const ez=runRng()*76-38;                              // valley strip only
     enemies.push(new Zealot(ex,ez));
   }
-  playerPos.health=Math.min(playerPos.maxHealth, playerPos.health+25);
+  playerPos.health=Math.min(effMaxHP(), playerPos.health+25);
   buildCrateRegistry(LEVELS.valley);
   seedLevelSpawns(LEVELS.valley);
   document.getElementById('hudDepth').textContent=roman(depth);
@@ -4261,16 +4592,31 @@ function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
+  playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
   initLoadout();
   deployTo('hideout'); timeScale=1;
   refreshInvUI();
 }
 function onDeath(){
-  if(!_pillDeath && activeLevel&&activeLevel.id!=='hideout'){   // a lost raid, not a lost life
+  if(!_pillDeath && !(activeLevel&&activeLevel.id==='hideout')){   // a lost raid, not a lost life
     playSound('death');
-    playerPos.health=playerPos.maxHealth;
-    showBanner('DRAGGED YOURSELF HOME');
+    // THE TEETH: the bag you carried is the valley's now. The rig on your back,
+    // the pockets sewn to it (belt·holster·harness), and the tool in your grip keep.
+    // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
+    const rk=equip.rucksack;
+    if(rk&&rk.inv) for(const row of rk.inv) row.fill(null);
+    // a bag riding in a pocket is still a bag: pocketed containers come home GUTTED —
+    // no smuggling a second rucksack past the teeth (settings devices keep their dials)
+    for(const k of EQUIP_SLOTS){ const eq=equip[k];
+      if(k==='rucksack'||!eq||!eq.inv) continue;
+      for(const row of eq.inv) for(const ch of row)
+        if(ch&&ch.inv&&!ch.settingsDevice) for(const r2 of ch.inv) r2.fill(null);
+    }
+    if(!activeLevel) depth=1;                // the ring count died with the run — the next OPEN VALLEY starts at I
+    playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
+    playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
+    showBanner('THE VALLEY KEPT THE BAG');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
   _pillDeath=false;
@@ -4284,11 +4630,14 @@ function onDeath(){
 }
 function onBreach(){
   playSound('breach');
+  if(TRAVEL){ deployTo(TRAVEL.dest); return; }   // a leg ends at its destination, not a deeper ring
   depth++;
   showBanner('RING '+roman(depth-1)+' BREACHED');
   resetLevel();
 }
 // ---- RAID LOOP: level-agnostic deploy/teardown. Nothing here knows Area 1. --------
+let TRAVEL=null;                              // {dest:'area1'|'hideout'} — this valley visit is a leg of a trip, not the endless ring
+const legDepth=()=>TRAVEL?1:depth;            // travel legs walk Ring I weather; the endless loop keeps its own count
 let isTerminalOpen=false;
 function teardownWorld(){
   worldItems.length=0; enemies.length=0; projectiles.length=0;
@@ -4303,6 +4652,7 @@ function deployTo(levelId){
   const L=LEVELS[levelId];
   teardownWorld();
   if(L.kind==='authored'){
+    TRAVEL=null;                              // arrival ends the leg — stale legs never survive a death or a debug jump
     activeLevel=L;
     levelBake=bakeLevel(L);
     levelTexDirty=true;
@@ -4311,10 +4661,12 @@ function deployTo(levelId){
     playerPos.y=Math.max(0,levelGroundJS(_ins.x,_ins.z));
     cameraYaw=_ins.yaw; cameraPitch=0;
     playerPos.velY=0;
+    for(const ex of L.exfils) ex.y=Math.max(0,levelGroundJS(ex.x,ex.z));   // smoke column bases sit on the dirt
     buildCrateRegistry(L);
     seedLevelSpawns(L);
     if(L.lights) for(const li of L.lights)
       dynLights.push({pos:{x:li.x,y:li.y,z:li.z},col:li.col,intensity:li.intensity,ttl:Infinity});
+    if(levelId==='hideout'){ playerPos.status.burn=0; playerPos.status.bleedT=0; }  // home stanches open wounds — the burn scar still wants aloe
     gameState = levelId==='hideout' ? 'hideout' : 'play';
   }else{
     activeLevel=null; levelBake=null;
@@ -4325,15 +4677,32 @@ function deployTo(levelId){
   _exfilHold=0;
   const hl=document.getElementById('hudDepthLabel'), hv=document.getElementById('hudDepth');
   if(L.kind==='authored'){ hl.textContent='Site'; hv.textContent=L.id==='hideout'?'HOME':L.name.split('·')[0].trim(); }
+  else if(TRAVEL){ hl.textContent='Trek'; hv.textContent=TRAVEL.dest==='hideout'?'HOME':'OUT'; }
   else{ hl.textContent='Ring'; hv.textContent=roman(depth); }
   showBanner(L.name);
+  if(L.kind==='authored'&&L.exfils.length) toast('REACH AN EXFIL — HOLD E INSIDE THE SMOKE');   // once per arrival, travelTo-style
   refreshInvUI();
 }
+function travelTo(dest){                      // THE LOOP: the valley is the land between places
+  TRAVEL={dest};
+  deployTo('valley');
+  toast(dest==='hideout' ? 'HAUL IT · THE GATE LEADS HOME'
+                         : 'HOOF IT · THE GATE LEADS TO THE CAMP');
+}
+// THE STASH: the hideout's one box that remembers. Its grid lives at module
+// scope so it survives deploys; SAVE_VER 3 writes it into the slot blobs.
+const STASH_COLS=6, STASH_ROWS=4;
+const stashInv=Array(STASH_ROWS).fill(null).map(()=>Array(STASH_COLS).fill(null));
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
 let crateRegistry=[], lootCrate=null;
 function buildCrateRegistry(L){
   crateRegistry=[]; lootCrate=null;
   const add=(c,tiers)=>{
+    if(c[3]==='stash'){                                   // THE STASH: persistent grid, never seeded
+      crateRegistry.push({x:c[0], z:c[1], size:c[2], inv:stashInv,
+                          invCols:STASH_COLS, invRows:STASH_ROWS, tiers:[], stash:true});
+      return;
+    }
     const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
     crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3, tiers});
   };
@@ -4345,7 +4714,7 @@ function buildCrateRegistry(L){
   if(L.kind==='rings'){
     // VALLEY-CELL-CRATE twin of cellSDF's crate hash — same cells, same boxes, now openable
     const base=L.crateTiers||['common'];
-    const tiers=depth>=3?[...base,'rare','cores']:base;
+    const tiers=legDepth()>=3?[...base,'rare','cores']:base;
     for(let cy=-2;cy<=2;cy++) for(let cx=-10;cx<=10;cx++){
       if(cx===GATE.cx&&cy===GATE.cz) continue;
       const h=cellHash(cx+SEED.x, cy+SEED.y);
@@ -4401,6 +4770,7 @@ function seedLevelSpawns(L){
     for(let n=0;n<(L.spawn.lootN||0);n++){
       for(let a=0;a<10;a++){
         const cr=crateRegistry[Math.floor(rng()*crateRegistry.length)];
+        if(cr.stash) continue;                            // the stash is the player's — seed nothing
         const tn=cr.tiers[Math.floor(rng()*cr.tiers.length)];
         const list=TIERS[tn]||TIERS.common;
         const it=ITEM_DEFS[list[Math.floor(rng()*list.length)]]();
@@ -4408,6 +4778,15 @@ function seedLevelSpawns(L){
         if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break;
       }
     }
+  }
+  // guaranteed: the level promises these regardless of the roll — a promise KEPT,
+  // not re-given: one already in a crate, the stash, or on the rig satisfies it
+  for(const k of (L.spawn.guaranteed||[])){
+    if(!ITEM_DEFS[k]) continue;
+    const owns=g=>!!g&&g.flat().some(x=>x&&x.defKey===k);
+    if(crateRegistry.some(cr=>owns(cr.inv))||EQUIP_SLOTS.some(s=>equip[s]&&owns(equip[s].inv))) continue;
+    const it=ITEM_DEFS[k]();
+    for(const cr of crateRegistry){ if(cr.stash) continue; if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break; }
   }
 }
 // exfiltration: stand in the circle, hold the verb, go home with the bag
@@ -4418,7 +4797,7 @@ function updateExfil(dt){
     if(Math.hypot(playerPos.x-ex.x,playerPos.z-ex.z)<ex.r){
       if(down('interact')&&!heldWorld){
         _exfilHold+=dt;
-        if(_exfilHold>=3){ playSound('breach'); deployTo('hideout'); return null; }
+        if(_exfilHold>=3){ playSound('breach'); travelTo('hideout'); return null; }
       }else _exfilHold=Math.max(0,_exfilHold-dt*2);
       return ex;
     }
@@ -4446,8 +4825,8 @@ const TERM_SCREENS={
   ]}),
   deploy:()=>({title:'DESTINATIONS', rows:[
     ...Object.values(LEVELS).filter(L=>L.id!=='hideout').map(L=>({
-      label:L.name, meta:L.kind==='rings'?'endless':'raid',
-      action:()=>{ closeTerminal(); deployTo(L.id); }})),
+      label:L.name, meta:L.kind==='rings'?'endless':'raid · via the valley',
+      action:()=>{ closeTerminal(); if(L.kind==='authored') travelTo(L.id); else deployTo(L.id); }})),
     {label:'BACK', screen:'home'},
   ]}),
   saves:()=>({title:'MEMORY', rows:[
@@ -4465,10 +4844,12 @@ const TERM_SCREENS={
 };
 let _termSlot=0;
 function openTerminal(){ isTerminalOpen=true; termScreen='home'; termSel=0;
+  INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={};   // the opening press is spent
   document.getElementById('terminalUI').classList.remove('hidden');
   document.exitPointerLock&&document.exitPointerLock();
   playSound('click'); renderTerminal(); }
 function closeTerminal(){ isTerminalOpen=false;
+  INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={};   // E on CLOSE must not re-open via updateInteract the same frame
   document.getElementById('terminalUI').classList.add('hidden');
   if(isPlayable()) requestLock(); playSound('click'); }
 function renderTerminal(){
@@ -4492,10 +4873,11 @@ function termActivate(){
 }
 function termNav(){
   const sc=TERM_SCREENS[termScreen]();
-  if(INPUT.rawKey['ArrowUp']||INPUT.rawPad[12]){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
-  if(INPUT.rawKey['ArrowDown']||INPUT.rawPad[13]){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
-  if(INPUT.rawKey['KeyE']||INPUT.rawPad[0]) termActivate();
-  if(INPUT.rawKey['Escape']||INPUT.rawPad[1]){
+  const nav=navEdges();
+  if(nav.up){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
+  if(nav.down){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
+  if(nav.confirm||INPUT.rawPad[0]) termActivate();
+  if(nav.back||INPUT.rawPad[1]){
     if(termScreen!=='home'){ termScreen='home'; termSel=0; playSound('click'); renderTerminal(); }
     else closeTerminal();
   }
@@ -4503,7 +4885,8 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=2, SAVE_KEY=i=>'sotv_save_'+i;
+const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash. v2 blobs load as an empty stash.
+const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
   if(!it) return null;
@@ -4512,6 +4895,7 @@ function itemToJSON(it){
   if(it instanceof Ammunition) j.count=it.count;
   if(it instanceof Battery){ j.cap=it.cap; j.charge=it.charge; }
   if(it instanceof Gadget && it.on!==undefined) j.on=it.on;
+  if(it instanceof Armor && it.durMax){ j.dur=it.dur; j.rs=[it.resist.burn,it.resist.bleed]; }
   if(it instanceof Barrel){ j.slots=it.slots.map(itemToJSON); j.muzzle=itemToJSON(it.muzzle); }
   if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
   if(it instanceof Tool){ j.slots=it.base.slots.map(itemToJSON); j.muzzle=itemToJSON(it.base.muzzle);
@@ -4533,8 +4917,12 @@ function itemFromJSON(j){
   if(j.count!==undefined) it.count=j.count;
   if(j.cap!==undefined){ it.cap=j.cap; it.charge=Math.min(j.charge,j.cap); }
   if(j.on!==undefined) it.on=j.on;
-  if(it instanceof Barrel){ j.slots.forEach((c,i)=>it.slots[i]=itemFromJSON(c)); it.muzzle=itemFromJSON(j.muzzle); }
-  if(it instanceof Platform){ j.slots.forEach((c,i)=>it.slots[i]=itemFromJSON(c));
+  if(it instanceof Armor && it.durMax){
+    if(j.dur!==undefined) it.dur=Math.min(Math.max(1,j.dur|0),it.durMax);     // missing → full
+    if(j.rs){ it.resist.burn=Math.min(0.6,Math.max(0,+j.rs[0]||0)); it.resist.bleed=Math.min(0.6,Math.max(0,+j.rs[1]||0)); }
+  }
+  if(it instanceof Barrel){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } }); it.muzzle=itemFromJSON(j.muzzle); }   // pre-retune saves ran longer — tail mods salvage, never vanish
+  if(it instanceof Platform){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } });   // same clamp as the Barrel — overlong saves salvage, never overrun
     if(j.cycles) it.cycles=j.cycles.slice(); }
   if(it instanceof Tool){ j.slots.forEach((c,i)=>it.base.slots[i]=itemFromJSON(c));
     it.base.muzzle=itemFromJSON(j.muzzle); it.baseCycle=j.cycle||0; it._wield=!!j.wielded; }
@@ -4548,36 +4936,69 @@ function itemFromJSON(j){
   return it;
 }
 function saveGame(slot){
-  const ls=_ls(); if(!ls){ toast('NO MEMORY BANKS HERE'); return; }
+  const ls=_ls(); if(!ls){ toast('SAVE FAILED — NO MEMORY BANKS HERE'); playSound('empty'); return; }
   const eq={};
   for(const k of EQUIP_SLOTS) if(equip[k]) eq[k]=itemToJSON(equip[k]);   // containers carry their contents
+  const stash=[]; const seen=new Set();                   // top-left-anchored walk, same idiom as Armor inv
+  for(let r=0;r<STASH_ROWS;r++) for(let c=0;c<STASH_COLS;c++){
+    const ch=stashInv[r][c];
+    if(ch&&!seen.has(ch)&&ch.x===c&&ch.y===r){ seen.add(ch); stash.push(itemToJSON(ch)); }
+  }
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
-              equip:eq, wield:activeTool?itemToJSON(activeTool):null};
-  try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); toast('MEMORY WRITTEN · SLOT '+(slot+1)); playSound('place'); }
-  catch(e){ toast('THE TERMINAL REFUSES'); }
+              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash};
+  try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
+  catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
+  const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
+  if(m){ toast('SAVED · SLOT '+(slot+1)+' · '+m.items+' ITEMS'); playSound('place'); }
+  else { toast('SAVE FAILED — WRITE READ BACK BAD'); playSound('empty'); }
 }
 function saveMeta(slot){
   const ls=_ls(); if(!ls) return null;
   try{
     const raw=ls.getItem(SAVE_KEY(slot)); if(!raw) return null;
     const b=JSON.parse(raw);
-    if(b.version!==SAVE_VER||typeof b.equip!=='object') return null;
+    if((b.version!==2&&b.version!==SAVE_VER)||typeof b.equip!=='object') return null;   // v2 accepted: pre-stash
     let n=0; const walk=j=>{ if(!j) return; n++; (j.inv||[]).forEach(walk); (j.slots||[]).forEach(walk); walk(j.muzzle); };
     for(const k in b.equip) walk(b.equip[k]);
     walk(b.wield);
+    (b.stash||[]).forEach(walk);
     return {stamp:b.stamp, items:n};
   }catch(e){ return null; }
 }
 function loadGame(slot){
   const ls=_ls(); const meta=saveMeta(slot);
   if(!ls||!meta){ toast('EMPTY SLOT'); return; }
-  const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));
-  for(const k of EQUIP_SLOTS) equip[k]=null;
-  activeTool=null;
-  for(const k in b.equip){ const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }
-  syncBagAlias(); clampZone();
-  if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
+  _retuneOrphans.length=0;
+  try{                                                    // field-level rot can slip past saveMeta — a throw mid-rebuild
+    const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));       // must read as EMPTY, never crash over a half-wiped rig
+    for(const k of EQUIP_SLOTS) equip[k]=null;
+    activeTool=null;
+    for(const k in b.equip){ const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }
+    syncBagAlias(); clampZone();
+    if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
+    for(const row of stashInv) row.fill(null);            // in place — the crate registry holds this array. v2 reads empty.
+    for(const cj of (b.stash||[])){
+      const ch=itemFromJSON(cj); if(!ch) continue;        // unknown defKeys drop silently, as everywhere
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
+      else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
+    }
+  }catch(e){
+    for(const k of EQUIP_SLOTS) equip[k]=null;
+    activeTool=null;
+    for(const row of stashInv) row.fill(null);
+    _retuneOrphans.length=0;
+    syncBagAlias(); clampZone();
+    toast('SLOT '+(slot+1)+' CORRUPT — READ AS EMPTY'); playSound('empty');
+    refreshInvUI();
+    return;
+  }
   toast('MEMORY RESTORED · SLOT '+(slot+1)); playSound('pickup');
+  if(_retuneOrphans.length){                              // the retune unseated tail mods — pockets first, stash second
+    let lost=0;
+    for(const o of _retuneOrphans) if(!autoPlaceAny(o)&&!autoPlace(o,stashInv,STASH_COLS,STASH_ROWS)) lost++;
+    toast('RETUNE UNSEATED '+_retuneOrphans.length+' MODULES — '+(_retuneOrphans.length-lost)+' RECLAIMED'+(lost?' · '+lost+' LOST':''));
+    _retuneOrphans.length=0;
+  }
   refreshInvUI();
 }
 function placeIfFits(it,x,y){
@@ -4593,6 +5014,7 @@ function resetSaveData(){
 
 let introArmed=false;
 function anyKeyGate(){
+  if(!engineReady) return;                    // init aborted — gameState is TDZ
   audioInit();
   if(gameState==='intro'&&introArmed){
     document.getElementById('introScreen').classList.add('hidden');
@@ -4604,7 +5026,7 @@ function anyKeyGate(){
 }
 setTimeout(()=>{introArmed=true;
   const bs=document.getElementById('bootStatus');
-  if(bs) bs.textContent='— press any key or pad button —';
+  if(bs) bs.textContent='— press any key or pad button — ['+BUILD_TAG+']';   // the fault banner's tag style: no more which-build guessing
 },600);
 
 // ============================================================
@@ -4625,6 +5047,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.base) rows.push('⚡'+e.base+' base');
     if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
     if(e.kind==='bolt') rows.push('+1 round per shot');
+    if(e.kind==='decoy') rows.push('sticks · chirps every 1.5s for 12s · lures the unalarmed');
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
@@ -4634,6 +5057,8 @@ function tipBrief(it){                                  // the info square's row
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
     if(e.silenced||e.silent) rows.push('silenced');
     if(e.fuse) rows.push('fused '+e.fuse+'s');
+    if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
+    if(e.contact) rows.push('triggers on contact');
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.laser) rows.push('laser · ⚡+'+(e.surcharge||0));
     return {kind,rows};
@@ -5225,12 +5650,13 @@ function dbgNav(){
   const cols=8;
   let moved=false;
   const step=d=>{ dbgSel=clamp(dbgSel+d,0,DBG_KEYS.length-1); moved=true; };
-  if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1);
-  if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1);
-  if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(-cols);
-  if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(cols);
-  if(INPUT.rawPad[1]){ toggleDebug(); return; }                       // ○ backs out
-  if(INPUT.rawKey['KeyE']||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
+  const nav=navEdges();
+  if(nav.left)  step(-1);
+  if(nav.right) step(1);
+  if(nav.up)    step(-cols);
+  if(nav.down)  step(cols);
+  if(INPUT.rawPad[1]){ toggleDebug(); return; }                       // ○ backs out — Esc stays with frame()
+  if(nav.confirm||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
   if(moved){ playSound('click'); renderDebugItems(); }
 }
 function buildDebugPanel(){
@@ -5418,6 +5844,21 @@ function updatePlayer(dt){
     else { toast('NO LANTERN RACKED IN TOOL'); playSound('empty'); }
   }
   if(pressed('throwHeld')&&heldWorld&&!menus) releaseHeld(true);
+
+  // ---- statuses: BURN eats the ceiling down, BLEED runs a clock ----
+  if(gameState==='play'&&!FLAGS.god){
+    const st=playerPos.status; let dot=0;
+    if(st.burn>0){
+      const b=Math.min(st.burn,2*dt);                // 2 hp/s — a 12-burn runs ~6s
+      st.burn-=b; dot+=b;
+      playerPos.burnedMax=Math.min(playerPos.maxHealth-10, playerPos.burnedMax+b);
+    }
+    if(st.bleedT>0){ st.bleedT=Math.max(0,st.bleedT-dt); dot+=dt/1.5; }   // 1 hurt / 1.5s · 30s
+    if(dot>0){
+      playerPos.health=Math.max(0, Math.min(playerPos.health,effMaxHP())-dot);
+      if(playerPos.health<=0){ st.burn=0; st.bleedT=0; onDeath(); }
+    }
+  }
 }
 
 function updateWorldItems(dt){
@@ -5513,10 +5954,11 @@ function menuNav(){
       // ragged racks: clamp Y against the DESTINATION column's height
       cursorY=clamp(ny,0,(f.rack?f.rowsOf(cursorX):f.rows)-1); moved=true;
     };
-    if(INPUT.rawKey['ArrowLeft'] ||INPUT.rawPad[14]) step(-1,0);
-    if(INPUT.rawKey['ArrowRight']||INPUT.rawPad[15]) step(1,0);
-    if(INPUT.rawKey['ArrowUp']   ||INPUT.rawPad[12]) step(0,-1);
-    if(INPUT.rawKey['ArrowDown'] ||INPUT.rawPad[13]) step(0,1);
+    const nav=navEdges();
+    if(nav.left)  step(-1,0);
+    if(nav.right) step(1,0);
+    if(nav.up)    step(0,-1);
+    if(nav.down)  step(0,1);
     if(pressed('interact')||INPUT.rawKey['Enter']){ interactInventory(); moved=true; }   // E · □ · Enter — pick·place
     if(INPUT.rawKey['KeyX']||INPUT.rawPad[0]){ activateAtCursor(); moved=true; }         // X · ✕ — inspect·activate
     if(INPUT.rawKey['KeyF']||INPUT.rawPad[3]){ quickUse(); moved=true; }                 // F · △ — wield·feed
@@ -5527,7 +5969,7 @@ function menuNav(){
 // ============================================================
 // MAIN LOOP
 // ============================================================
-let lastT=performance.now(), fpsEma=60, hudT=0;
+let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
 
 const FRAME_MS=1000/60;
@@ -5545,7 +5987,7 @@ function frame(){
   // menu toggles — ○/Tab open the tool rack outside, back out of any menu inside
   if(isPlayable()&&!listeningBind){
     if(pressed('bag')&&!isManualOpen&&!isDebugOpen) toggleInventory();
-    if(pressed('tool')&&!isDebugOpen) toolMenuVerb();
+    if(pressed('tool')&&!isDebugOpen&&!isTerminalOpen) toolMenuVerb();   // terminal owns ○ while open — termNav's back, not the rack
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(isDebugOpen) dbgNav();
@@ -5650,12 +6092,19 @@ function frame(){
     for(const b of beamSegs) _top=Math.max(_top, b.a.y, b.b.y);
     for(const pr of projectiles) _top=Math.max(_top, pr.pos.y);
     for(const w of worldItems) if(!w.settled) _top=Math.max(_top, w.pos.y);
+    if(activeLevel) for(const ex of activeLevel.exfils) _top=Math.max(_top, (ex.y||0)+EXFIL_SMOKE_H);   // smoke pierces the authored slab
     gl.uniform1f(U.uWorldTop, _top+0.6);
   }
   { // valley gate cache — static per mode
     const vc=(!activeLevel)?LEVELS.valley.crates:[];
     gl.uniform1i(U.uVCrateCount, vc.length);
     for(let i=0;i<vc.length&&i<6;i++) gl.uniform4f(U.uVCrates[i], vc[i][0], vc[i][1], vc[i][2], 0);
+  }
+  { // exfil smoke columns — visual-only (walk-through); JS twin untouched by design
+    const exs=activeLevel?activeLevel.exfils:[];
+    const n=Math.min(3,exs.length);
+    gl.uniform1i(U.uExfilCount,n);
+    for(let i=0;i<n;i++) gl.uniform4f(U.uExfils[i], exs[i].x, exs[i].y||0, exs[i].z, 1);
   }
   gl.uniform1f(U.uFar, activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0);
   gl.uniform1i(U.uMaxSteps, P('rayQuality')|0);
@@ -5667,6 +6116,7 @@ function frame(){
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, 0);
+  gl.uniform1f(U.uExposure, playerPos.exposure);
 
   // items (nearest first)
   renderItemsBuf.length=0;
@@ -5692,12 +6142,18 @@ function frame(){
       return da-db;
     });
   for(const en of _liveEn){
-    if(ei>=RLIM.ENEMIES) break;
+    en._dormant = ei>=RLIM.ENEMIES;            // past the uniform cap: unrendered = dormant, can't shoot or be shot
+    if(en._dormant) continue;
+    en._slot=ei;
+    const wt=(en.stagger>0)?0:Math.min(1,Math.hypot(en.velocity.x,en.velocity.z)/1.6);
+    en._walk=(en._walk||0)+(wt-(en._walk||0))*Math.min(1,dt*10);
     gl.uniform3f(U.enemyPos[ei],en.position.x,en.position.y,en.position.z);
-    gl.uniform4f(U.enemyData[ei],en.yaw,en.state,en.muzzle,en.hurtFlash);
+    gl.uniform4f(U.enemyData[ei],en.yaw,en.state+en._walk*0.5,en.muzzle,
+                 en.hurtFlash+(en.helm?2:0)+(en.plates?4:0));
     ei++;
   }
   gl.uniform1i(U.uEnemyCount,ei);
+  gl.uniform2f(U.uEnemyEye, Math.cos(P('enemyFovDeg')*Math.PI/360), Math.min(spotDistance(),16));
 
   // tracers = live projectiles + beam segments
   let ti=0;
@@ -5712,7 +6168,8 @@ function frame(){
     if(ti>=RLIM.TRACERS) break;
     const vl=pr.vel.length()||1;
     gl.uniform3f(U.trA[ti],pr.pos.x,pr.pos.y,pr.pos.z);
-    gl.uniform3f(U.trB[ti],pr.pos.x-pr.vel.x/vl*0.8,pr.pos.y-pr.vel.y/vl*0.8,pr.pos.z-pr.vel.z/vl*0.8);
+    if(pr.stuck) gl.uniform3f(U.trB[ti],pr.pos.x,pr.pos.y-0.05,pr.pos.z);   // zero-vel segment NaNs sdCapsule
+    else gl.uniform3f(U.trB[ti],pr.pos.x-pr.vel.x/vl*0.8,pr.pos.y-pr.vel.y/vl*0.8,pr.pos.z-pr.vel.z/vl*0.8);
     gl.uniform3f(U.trC[ti],pr.col[0],pr.col[1],pr.col[2]);
     ti++;
   }
@@ -5775,6 +6232,8 @@ function frame(){
   if(hudT<=0){
     hudT=0.12;
     document.getElementById('healthFill').style.width=(playerPos.health/playerPos.maxHealth*100)+'%';
+    document.getElementById('burnMask').style.width=(playerPos.burnedMax/playerPos.maxHealth*100)+'%';
+    document.getElementById('bleedTick').classList.toggle('hidden',!(playerPos.status.bleedT>0));
     document.getElementById('suspicionFill').style.width=(highestDetection*100)+'%';
     // gadget rows exist only while the gadget is in the rucksack
     const wg=findGadget('watch');
@@ -5783,17 +6242,33 @@ function frame(){
     document.getElementById('fpsRow').style.display=hasO?'':'none';
     if(hasO) document.getElementById('hudFps').textContent=fpsEma.toFixed(0);
     if(hasW) document.getElementById('hudClock').textContent=dayNight.clock+(dayNight.sunUp?' ☀':' ☾');
+    // PHOTOMETER owns the whole exposure readout: no light meter, no eye, no SEEN.
+    // (the sim keeps running — enemies still read exposure; this gates HUD only)
+    const hasPM=hasGadget('photometer')&&gameState==='play';
+    document.getElementById('eyeWrap').classList.toggle('hidden',!hasPM);
     const e=playerPos.exposure;
     const eye=document.getElementById('eye');
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
     eye.style.filter='brightness('+(0.3+e*1.6).toFixed(2)+')';
     const comp=document.getElementById('compassStrip');
-    if(hasGadget('compass')&&gameState==='play'&&!activeLevel){
+    if(hasGadget('compass')&&gameState==='play'&&(!activeLevel||activeLevel.exfils.length)){
       comp.classList.remove('hidden');
-      const ddx=GATE.x-playerPos.x, ddz=GATE.z-playerPos.z;
+      // valley (travel legs included): the gate — the gate IS the way out on a leg.
+      // an authored raid steers to the nearest exfil instead.
+      let tgt=GATE, lbl='BEACON';
+      if(activeLevel){ lbl='EXFIL'; let bd=1e9;
+        for(const ex of activeLevel.exfils){ const d=Math.hypot(ex.x-playerPos.x,ex.z-playerPos.z); if(d<bd){ bd=d; tgt=ex; } }
+      }
+      const ddx=tgt.x-playerPos.x, ddz=tgt.z-playerPos.z;
       const ang=(Math.atan2(ddx,ddz)-cameraYaw)*180/Math.PI;
-      comp.innerHTML='<span style="display:inline-block;transform:rotate('+ang.toFixed(0)+'deg)">▲</span> BEACON '+Math.round(Math.hypot(ddx,ddz))+'m';
+      comp.innerHTML='<span style="display:inline-block;transform:rotate('+ang.toFixed(0)+'deg)">▲</span> '+lbl+' '+Math.round(Math.hypot(ddx,ddz))+'m';
     }else comp.classList.add('hidden');
+    // photometer: the true spot-distance, refreshed ~4Hz so the number doesn't shimmer
+    const pm=document.getElementById('photoStrip');
+    if(hasPM){
+      if(pm.classList.contains('hidden')){ pm.classList.remove('hidden'); photoTick=1; }
+      if((photoTick^=1)===0) pm.textContent='SEEN '+Math.round(spotDistance())+'m';
+    }else pm.classList.add('hidden');
     updateToolReadout();
   }
   if(toastT>0){ toastT-=dt; if(toastT<=0) document.getElementById('banner').style.opacity=0; }
@@ -5817,6 +6292,7 @@ function frame(){
 updateDayNight();
 initLoadout();          // so the intro backdrop has a tool readout
 updateToolReadout();
+engineReady=true;       // every top-level let/const is initialized past this point
 frame();
 </script>
 <script>
