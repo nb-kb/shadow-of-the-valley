@@ -4448,6 +4448,14 @@ function onDeath(){
     // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
     const rk=equip.rucksack;
     if(rk&&rk.inv) for(const row of rk.inv) row.fill(null);
+    // a bag riding in a pocket is still a bag: pocketed containers come home GUTTED —
+    // no smuggling a second rucksack past the teeth (settings devices keep their dials)
+    for(const k of EQUIP_SLOTS){ const eq=equip[k];
+      if(k==='rucksack'||!eq||!eq.inv) continue;
+      for(const row of eq.inv) for(const ch of row)
+        if(ch&&ch.inv&&!ch.settingsDevice) for(const r2 of ch.inv) r2.fill(null);
+    }
+    if(!activeLevel) depth=1;                // the ring count died with the run — the next OPEN VALLEY starts at I
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
     playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
