@@ -369,7 +369,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22c';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22d';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -3451,6 +3451,7 @@ function updateInteract(dt){
   if(activeLevel){
     const _pr=document.getElementById('interactPrompt');
     const ex=updateExfil(dt);
+    if(!activeLevel){ setPrompt(_pr,'',false); return; }  // exfil completed — travelTo tore the level down mid-frame
     if(ex){ setPrompt(_pr, _exfilHold>0
         ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
         : ex.label+' — hold <b>E</b> to extract', true); return; }
