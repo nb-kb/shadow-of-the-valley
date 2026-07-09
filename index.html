@@ -3778,7 +3778,7 @@ function runContinuousBeams(dt){
         if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
         else bdmg*=2;
       }
-      hitEn.hurt(bdmg,'player'); applyStatus(hitEn,sh.pend);
+      hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
     }
     if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
     if(sh.kind==='pick'&&st.acc>0.16){ st.acc=0; carveAt({pos:end,dmg:8,r:0.55}); }
@@ -3944,7 +3944,8 @@ function updateProjectiles(dt){
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
           const hd=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+1.62),pr.pos.z-en.position.z);
           if(d<0.55||hd<0.24){
-            en.hurt(headshotDmg(en,pr.dmg,hd<0.24),'player'); applyStatus(en,pr); playSound('hit');
+            const head=hd<0.24;
+            en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); applyStatus(en,pr); playSound('hit');
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
             dead=impactOrPierce(pr); break; }
         }
@@ -4048,9 +4049,9 @@ function explode(pr){
 function effMaxHP(){ return playerPos.maxHealth-playerPos.burnedMax; }   // burned health stays burned until treated
 function applyStatus(t,pr){
   if(!t.status) return;
-  const pl=t===playerPos;                              // worn resists shave the player's dose
-  if(pr.burn)  t.status.burn=Math.min(30, t.status.burn+pr.burn*(pl?playerResist('burn'):1));
-  if(pr.bleed) t.status.bleedT=Math.max(t.status.bleedT, 30*(pl?playerResist('bleed'):1));
+  const pl=t===playerPos;                              // worn resists shave the dose — both sides
+  if(pr.burn)  t.status.burn=Math.min(30, t.status.burn+pr.burn*(pl?playerResist('burn'):t.resist?t.resist('burn'):1));
+  if(pr.bleed) t.status.bleedT=Math.max(t.status.bleedT, 30*(pl?playerResist('bleed'):t.resist?t.resist('bleed'):1));
 }
 // ---- a worn piece absorbs a point per hit; at 0 it breaks off the rig for good
 function armorWear(slot){
@@ -4118,9 +4119,9 @@ class Zealot{
     this.reloadT=0; this.stagger=0;
     this.status={burn:0,bleedT:0};
     this.muzzle=0; this.hurtFlash=0;
-    this.helm=runRng()<0.55?{dur:3}:null;              // some skulls come pre-armored
     this.targetPoint=this.newPatrolTarget();
     this.buildTool();
+    this.rollGear();
   }
   newPatrolTarget(){
     const a=runRng()*Math.PI*2, r=2+runRng()*6;
@@ -4158,8 +4159,26 @@ class Zealot{
     this.res=resolveTool(t);
     this.reserve=6+Math.floor(runRng()*10);
   }
-  hurt(dmg,by){
+  rollGear(){
+    // ---- ARMOR ROLL: deeper rings dress better. Pure random for now — a future
+    // ---- class pass would swap these two independent rolls for authored kits.
+    // ---- the helm is a REAL Armor item — it doubles as the crack/render token.
+    const q=clamp((depth-1)/5,0,1);                    // 0 at the door · 1 by ring VI
+    this.helm   = runRng()<0.25+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'helmetSteel':'helmetCap']() : null;
+    this.plates = runRng()<0.20+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'platesH':'platesL']() : null;
+  }
+  resist(kind){                                        // status-resist read — applyStatus routes enemy doses here
+    let m=1;
+    for(const a of [this.helm,this.plates]) if(a&&a.resist) m*=1-(a.resist[kind]||0);
+    return m;
+  }
+  hurt(dmg,by,part){
     if(this.health<=0) return;
+    // worn plates eat body hits first — the helm's cut already landed in headshotDmg/crackHelm
+    if(part!=='head'&&this.plates){
+      dmg*=this.plates.damageMult;
+      if(this.plates.dur!==undefined&&--this.plates.dur<=0) this.plates=null; // cracked — gone before it can drop
+    }
     this.health-=dmg;
     this.hurtFlash=1;
     if(by==='player'&&this.state<2){ this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(playerPos.x,0,playerPos.z); this.state=1; }
@@ -4171,6 +4190,9 @@ class Zealot{
     worldNormalJS(this.position.x,this.position.y+0.1,this.position.z,_n);
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
     spawnWorldItem(this.tool,this.position.x,this.position.y+0.8,this.position.z,new Vec3((runRng()-0.5)*2,3,(runRng()-0.5)*2));
+    // loot follows gear: they drop exactly what they wore — same item, wear and all
+    if(this.helm){ spawnWorldItem(this.helm,this.position.x,this.position.y+0.9,this.position.z,new Vec3((runRng()-0.5)*2.5,3.2,(runRng()-0.5)*2.5)); this.helm=null; }
+    if(this.plates){ spawnWorldItem(this.plates,this.position.x,this.position.y+0.7,this.position.z,new Vec3((runRng()-0.5)*2.5,2.8,(runRng()-0.5)*2.5)); this.plates=null; }
     if(runRng()<0.6){ const a=ITEM_DEFS.ammo9(); a.count=4+Math.floor(runRng()*8);
       spawnWorldItem(a,this.position.x,this.position.y+0.6,this.position.z,new Vec3((runRng()-0.5)*3,3.5,(runRng()-0.5)*3)); }
     this.respawnT=45;
@@ -4328,9 +4350,10 @@ class Zealot{
     this.position.set(playerPos.x+Math.cos(a)*r,0,playerPos.z+Math.sin(a)*r);
     this.startPos=this.position.clone();
     this.health=34; this.detection=0; this.state=0; this.investigate=null;
-    this.helm=runRng()<0.55?{dur:3}:null; this._helmT=0;
+    this._helmT=0;
     this.status.burn=0; this.status.bleedT=0;
     this.buildTool();
+    this.rollGear();
   }
 }
 const enemies=[];
