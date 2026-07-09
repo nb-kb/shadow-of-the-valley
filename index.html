@@ -5816,7 +5816,7 @@ function frame(){
   // menu toggles — ○/Tab open the tool rack outside, back out of any menu inside
   if(isPlayable()&&!listeningBind){
     if(pressed('bag')&&!isManualOpen&&!isDebugOpen) toggleInventory();
-    if(pressed('tool')&&!isDebugOpen) toolMenuVerb();
+    if(pressed('tool')&&!isDebugOpen&&!isTerminalOpen) toolMenuVerb();   // terminal owns ○ while open — termNav's back, not the rack
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(isDebugOpen) dbgNav();
