@@ -4182,7 +4182,7 @@ class Zealot{
     // ---- ARMOR ROLL: deeper rings dress better. Pure random for now — a future
     // ---- class pass would swap these two independent rolls for authored kits.
     // ---- the helm is a REAL Armor item — it doubles as the crack/render token.
-    const q=clamp((depth-1)/5,0,1);                    // 0 at the door · 1 by ring VI
+    const q=clamp((legDepth()-1)/5,0,1);               // 0 at the door · 1 by ring VI — travel legs dress Ring I
     this.helm   = runRng()<0.25+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'helmetSteel':'helmetCap']() : null;
     this.plates = runRng()<0.20+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'platesH':'platesL']() : null;
   }
