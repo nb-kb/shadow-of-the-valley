@@ -71,6 +71,9 @@ GLSL). **There is no build step and no dependencies.** You play it by opening
 - **Never commit secrets** (API keys, `.env`). They belong in `.gitignore`.
 - **When unsure about game design intent, ask the human owner** — they are the
   creative director. Agents implement; the owner decides.
+- **Know the plan before you change the game.** [`docs/SCOPE.md`](docs/SCOPE.md)
+  is what we're building, in what order, and what we've explicitly cut. Its
+  "Open Decisions" are the owner's, not yours.
 
 ## The team (who does what)
 

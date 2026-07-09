@@ -29,4 +29,5 @@ and [`docs/AGENTS.md`](docs/AGENTS.md) for who does what and how to run the pipe
 
 - `index.html` — the game (this is the whole thing today)
 - `CLAUDE.md` — project brief / house rules for AI agents
+- `docs/SCOPE.md` — the scope & design plan: what we're building and what we're not
 - `docs/` — design notes and the agent playbook
