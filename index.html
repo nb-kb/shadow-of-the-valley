@@ -638,6 +638,7 @@ function beamAudio(on){
 // SHADERS
 // ============================================================
 const RLIM = { ITEMS:16, ENEMIES:10, TRACERS:12, DECALS:20, DYN:4 };
+const EXFIL_SMOKE_H=38.0;   // exfil smoke column height — folded into uWorldTop so the sky slab clears it
 
 const vertexShaderSource = `#version 300 es
 in vec4 a_position;
@@ -687,6 +688,8 @@ uniform vec4  worldItemData[${RLIM.ITEMS}];  // x:type y:yaw z:held w:pitch
 uniform float uWorldTop;                    // nothing exists above this; upward rays stop at the slab exit
 uniform vec4  uVCrates[6];                  // valley gate cache: x,z,size,unused
 uniform int   uVCrateCount;
+uniform int   uExfilCount;                  // authored-level exfil smoke columns
+uniform vec4  uExfils[3];                   // xyz column base · w live — VISUAL ONLY, no JS twin
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
 uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates)
@@ -1262,6 +1265,20 @@ vec2 map(vec3 p){
     if(d < res.x) res = vec2(d, 50.0 + float(i));
   }
 
+  // exfil smoke signals — VISUAL ONLY (like tracers): you walk THROUGH smoke, so no JS twin
+  for(int i=0;i<3;i++){
+    if(i>=uExfilCount) break;
+    vec4 ex=uExfils[i];
+    if(ex.w<0.5) continue;
+    float bd = length(p.xz-ex.xz) - 2.4;      // column reach: 0.8 sway + fat top + margin
+    if(bd > 0.1){ gBound=min(gBound,bd); continue; }
+    vec3 sp=p-ex.xyz;
+    sp.x-=sin(iTime*0.40+p.y*0.15)*0.8;       // the drift that says smoke, not pole
+    sp.z-=cos(iTime*0.31+p.y*0.12)*0.8;
+    float d = sdCapsule(sp, vec3(0.0,-2.0,0.0), vec3(0.0,${EXFIL_SMOKE_H.toFixed(1)},0.0), 0.35+max(sp.y,0.0)*0.008)*0.85;
+    if(d < res.x) res = vec2(d, 19.0);
+  }
+
   // first-person Tool + arm, or the raised menu prop
   vec3 vp=p-ro;
   if(dot(vp,vp)<2.6){
@@ -1428,6 +1445,7 @@ void main(){
     else if(m>15.5&&m<16.5){ matCol=vec3(0.36,0.26,0.16)*(0.8+0.4*vnoise(vec2(p.y*2.0,p.x+p.z))); } // timber
     else if(m>16.5&&m<17.5){ matCol=vec3(0.16,0.30,0.17)*(0.75+0.5*vnoise(p.xz*1.4)); }  // foliage
     else if(m>17.5&&m<18.5){ matCol=vec3(0.42,0.24,0.15)*(0.7+0.6*vnoise(p.xz*3.1+p.y)); }  // rust
+    else if(m>18.5&&m<19.5){ matCol=vec3(1.0,0.62,0.30)*(0.7+0.5*vnoise(vec2((p.x+p.z)*0.9, p.y*0.45-iTime*0.7))); emiss=1.0; }  // exfil smoke: warm flare, rising grain
     else if(m<3.5){   matCol=vec3(0.60,0.55,0.45)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*1.4));
                       matCol*=mix(0.55,1.0,smoothstep(0.0,1.3,p.y)); }             // stucco, grimy hem
     else if(m<4.5){   matCol=vec3(0.38,0.28,0.17)*(0.8+0.4*vnoise(vec2((p.x+p.z)*6.0,p.y*0.7))); } // timber
@@ -1629,7 +1647,7 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uWorldTop','uVCrateCount',
- 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye']
+ 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
 U.edits    = locArray('uEdits', 16);
@@ -1638,6 +1656,7 @@ U.itemPos  = locArray('worldItemPos', RLIM.ITEMS);
 U.itemData = locArray('worldItemData',RLIM.ITEMS);
 U.enemyPos = locArray('enemyPos',     RLIM.ENEMIES);
 U.uVCrates = locArray('uVCrates',     6);
+U.uExfils  = locArray('uExfils',      3);
 U.enemyData= locArray('enemyData',    RLIM.ENEMIES);
 U.trA      = locArray('tracerA',      RLIM.TRACERS);
 U.trB      = locArray('tracerB',      RLIM.TRACERS);
@@ -4641,6 +4660,7 @@ function deployTo(levelId){
     playerPos.y=Math.max(0,levelGroundJS(_ins.x,_ins.z));
     cameraYaw=_ins.yaw; cameraPitch=0;
     playerPos.velY=0;
+    for(const ex of L.exfils) ex.y=Math.max(0,levelGroundJS(ex.x,ex.z));   // smoke column bases sit on the dirt
     buildCrateRegistry(L);
     seedLevelSpawns(L);
     if(L.lights) for(const li of L.lights)
@@ -6070,12 +6090,19 @@ function frame(){
     for(const b of beamSegs) _top=Math.max(_top, b.a.y, b.b.y);
     for(const pr of projectiles) _top=Math.max(_top, pr.pos.y);
     for(const w of worldItems) if(!w.settled) _top=Math.max(_top, w.pos.y);
+    if(activeLevel) for(const ex of activeLevel.exfils) _top=Math.max(_top, (ex.y||0)+EXFIL_SMOKE_H);   // smoke pierces the authored slab
     gl.uniform1f(U.uWorldTop, _top+0.6);
   }
   { // valley gate cache — static per mode
     const vc=(!activeLevel)?LEVELS.valley.crates:[];
     gl.uniform1i(U.uVCrateCount, vc.length);
     for(let i=0;i<vc.length&&i<6;i++) gl.uniform4f(U.uVCrates[i], vc[i][0], vc[i][1], vc[i][2], 0);
+  }
+  { // exfil smoke columns — visual-only (walk-through); JS twin untouched by design
+    const exs=activeLevel?activeLevel.exfils:[];
+    const n=Math.min(3,exs.length);
+    gl.uniform1i(U.uExfilCount,n);
+    for(let i=0;i<n;i++) gl.uniform4f(U.uExfils[i], exs[i].x, exs[i].y||0, exs[i].z, 1);
   }
   gl.uniform1f(U.uFar, activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0);
   gl.uniform1i(U.uMaxSteps, P('rayQuality')|0);
