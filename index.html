@@ -989,6 +989,14 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
         if(td<d){ d=td; m=(td==trunk)?16.0:17.0; }
       }
     }
+    if(gNoGround){                          // LEVEL-PRIM tree-cell pacing: each cell only knows its
+      vec2 cf=fract((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell);         // own tree, so the distance lies
+      vec2 ce=min(cf,1.0-cf)*cell;                                // across borders. Cap the march at
+      float top=(B.w>0.5&&o.x>C.z+cell*1.5)?1.0:B.y;              // the border (+0.6 > hit eps) so a
+      d=min(d, max(min(ce.x,ce.y), p.y-top)+0.6);                 // ray can't leap the neighbor's
+    }                                       // trunk/canopy. Deep in the logged half nothing beats 1m
+                                            // (stumps+shrubs), so high rays run free. March-only:
+                                            // never a hit, never in JS — geometry is unchanged.
   }else if(kind==8){                                              // STUMPS field
     float cell=B.z;
     ivec2 g=ivec2(floor((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell));
@@ -996,6 +1004,11 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     vec2 o=vec2(c.x-hb.x,c.z-hb.z)+(vec2(g)+vec2(0.3)+vec2(hh,fract(hh*7.0))*0.4)*cell;
     float rr=length(p.xz-o);
     d=max(rr-0.42, p.y-(0.35+hh*0.3)); m=16.0;
+    if(gNoGround){                                                // tree-cell pacing, see TREES
+      vec2 cf=fract((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell);
+      vec2 ce=min(cf,1.0-cf)*cell;
+      d=min(d, max(min(ce.x,ce.y), p.y-0.65)+0.6);
+    }
   }else if(kind==10){                                             // PROPS crates
     for(int i=0;i<10;i++){ if(i>=ln) break; vec4 cr=lvPool(ls+i);
       float cd=sdBoxL(p, vec3(cr.x,cr.z*0.5,cr.y), vec3(cr.z*0.55,cr.z*0.5,cr.z*0.55));
