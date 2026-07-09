@@ -4219,7 +4219,7 @@ function maybeSpawnCellLoot(){}
 
 function placeGate(){
   const rr=mulberry32((SEED.x*73856093)^(SEED.y*19349663));
-  const d=4+depth;
+  const d=4+legDepth();
   const dir=rr()<0.5?-1:1;                    // down-valley or up-valley
   GATE.cx=dir*(d+Math.floor(rr()*3));
   GATE.cz=Math.floor(rr()*3)-1;               // stays inside the valley strip
@@ -4235,7 +4235,7 @@ function resetLevel(){
   heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
   cameraYaw=Math.atan2(GATE.x,GATE.z);
-  PARAMS.maxEnemies.v=Math.min(14, 4+2*depth);
+  PARAMS.maxEnemies.v=Math.min(14, 4+2*legDepth());
   enemies.length=0;
   const _lo=Math.min(-34, GATE.x*1.1), _hi=Math.max(34, GATE.x*1.1);
   for(let i=0;i<P('maxEnemies');i++){
@@ -4295,11 +4295,14 @@ function onDeath(){
 }
 function onBreach(){
   playSound('breach');
+  if(TRAVEL){ deployTo(TRAVEL.dest); return; }   // a leg ends at its destination, not a deeper ring
   depth++;
   showBanner('RING '+roman(depth-1)+' BREACHED');
   resetLevel();
 }
 // ---- RAID LOOP: level-agnostic deploy/teardown. Nothing here knows Area 1. --------
+let TRAVEL=null;                              // {dest:'area1'|'hideout'} — this valley visit is a leg of a trip, not the endless ring
+const legDepth=()=>TRAVEL?1:depth;            // travel legs walk Ring I weather; the endless loop keeps its own count
 let isTerminalOpen=false;
 function teardownWorld(){
   worldItems.length=0; enemies.length=0; projectiles.length=0;
@@ -4314,6 +4317,7 @@ function deployTo(levelId){
   const L=LEVELS[levelId];
   teardownWorld();
   if(L.kind==='authored'){
+    TRAVEL=null;                              // arrival ends the leg — stale legs never survive a death or a debug jump
     activeLevel=L;
     levelBake=bakeLevel(L);
     levelTexDirty=true;
@@ -4336,9 +4340,16 @@ function deployTo(levelId){
   _exfilHold=0;
   const hl=document.getElementById('hudDepthLabel'), hv=document.getElementById('hudDepth');
   if(L.kind==='authored'){ hl.textContent='Site'; hv.textContent=L.id==='hideout'?'HOME':L.name.split('·')[0].trim(); }
+  else if(TRAVEL){ hl.textContent='Trek'; hv.textContent=TRAVEL.dest==='hideout'?'HOME':'OUT'; }
   else{ hl.textContent='Ring'; hv.textContent=roman(depth); }
   showBanner(L.name);
   refreshInvUI();
+}
+function travelTo(dest){                      // THE LOOP: the valley is the land between places
+  TRAVEL={dest};
+  deployTo('valley');
+  toast(dest==='hideout' ? 'HAUL IT · THE GATE LEADS HOME'
+                         : 'HOOF IT · THE GATE LEADS TO THE CAMP');
 }
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
 let crateRegistry=[], lootCrate=null;
@@ -4356,7 +4367,7 @@ function buildCrateRegistry(L){
   if(L.kind==='rings'){
     // VALLEY-CELL-CRATE twin of cellSDF's crate hash — same cells, same boxes, now openable
     const base=L.crateTiers||['common'];
-    const tiers=depth>=3?[...base,'rare','cores']:base;
+    const tiers=legDepth()>=3?[...base,'rare','cores']:base;
     for(let cy=-2;cy<=2;cy++) for(let cx=-10;cx<=10;cx++){
       if(cx===GATE.cx&&cy===GATE.cz) continue;
       const h=cellHash(cx+SEED.x, cy+SEED.y);
@@ -4429,7 +4440,7 @@ function updateExfil(dt){
     if(Math.hypot(playerPos.x-ex.x,playerPos.z-ex.z)<ex.r){
       if(down('interact')&&!heldWorld){
         _exfilHold+=dt;
-        if(_exfilHold>=3){ playSound('breach'); deployTo('hideout'); return null; }
+        if(_exfilHold>=3){ playSound('breach'); travelTo('hideout'); return null; }
       }else _exfilHold=Math.max(0,_exfilHold-dt*2);
       return ex;
     }
@@ -4457,8 +4468,8 @@ const TERM_SCREENS={
   ]}),
   deploy:()=>({title:'DESTINATIONS', rows:[
     ...Object.values(LEVELS).filter(L=>L.id!=='hideout').map(L=>({
-      label:L.name, meta:L.kind==='rings'?'endless':'raid',
-      action:()=>{ closeTerminal(); deployTo(L.id); }})),
+      label:L.name, meta:L.kind==='rings'?'endless':'raid · via the valley',
+      action:()=>{ closeTerminal(); if(L.kind==='authored') travelTo(L.id); else deployTo(L.id); }})),
     {label:'BACK', screen:'home'},
   ]}),
   saves:()=>({title:'MEMORY', rows:[
