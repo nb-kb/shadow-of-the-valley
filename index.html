@@ -215,7 +215,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   <div class="row stencil" id="fpsRow"><span>FPS</span><span id="hudFps">--</span></div>
   <div class="row stencil hidden" id="gpStatus"><span>Pad</span><span id="gpName">linked</span></div>
 </div>
-<div id="eyeWrap"><div id="eye"></div><div id="eyeLbl">EXPOSURE</div></div>
+<div id="eyeWrap" class="hidden"><div id="eye"></div><div id="eyeLbl">EXPOSURE</div></div>
 <div id="compassStrip" class="hidden">▲ BEACON</div>
 <div id="photoStrip" class="hidden">SEEN --m</div>
 <div id="toolReadout" class="panel">
@@ -6074,6 +6074,10 @@ function frame(){
     document.getElementById('fpsRow').style.display=hasO?'':'none';
     if(hasO) document.getElementById('hudFps').textContent=fpsEma.toFixed(0);
     if(hasW) document.getElementById('hudClock').textContent=dayNight.clock+(dayNight.sunUp?' ☀':' ☾');
+    // PHOTOMETER owns the whole exposure readout: no light meter, no eye, no SEEN.
+    // (the sim keeps running — enemies still read exposure; this gates HUD only)
+    const hasPM=hasGadget('photometer')&&gameState==='play';
+    document.getElementById('eyeWrap').classList.toggle('hidden',!hasPM);
     const e=playerPos.exposure;
     const eye=document.getElementById('eye');
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
@@ -6093,7 +6097,7 @@ function frame(){
     }else comp.classList.add('hidden');
     // photometer: the true spot-distance, refreshed ~4Hz so the number doesn't shimmer
     const pm=document.getElementById('photoStrip');
-    if(hasGadget('photometer')&&gameState==='play'){
+    if(hasPM){
       if(pm.classList.contains('hidden')){ pm.classList.remove('hidden'); photoTick=1; }
       if((photoTick^=1)===0) pm.textContent='SEEN '+Math.round(spotDistance())+'m';
     }else pm.classList.add('hidden');
