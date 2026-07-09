@@ -4511,6 +4511,7 @@ function deployTo(levelId){
     seedLevelSpawns(L);
     if(L.lights) for(const li of L.lights)
       dynLights.push({pos:{x:li.x,y:li.y,z:li.z},col:li.col,intensity:li.intensity,ttl:Infinity});
+    if(levelId==='hideout'){ playerPos.status.burn=0; playerPos.status.bleedT=0; }  // home stanches open wounds — the burn scar still wants aloe
     gameState = levelId==='hideout' ? 'hideout' : 'play';
   }else{
     activeLevel=null; levelBake=null;
