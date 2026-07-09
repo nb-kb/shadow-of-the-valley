@@ -675,6 +675,7 @@ uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uHasTool;
 uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w unused
+uniform float uExposure;    // 0..1 player light exposure — dims the viewmodel in cover
 
 uniform int   worldItemCount;
 uniform vec3  worldItemPos[${RLIM.ITEMS}];
@@ -1460,6 +1461,7 @@ void main(){
       }
       col = lit + matCol*emiss;
     }
+    if(m>19.5 && m<21.5) col *= mix(0.35, 1.0, smoothstep(0.0, 0.8, uExposure)); // hands darken with the cover you stand in — viewmodel only
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
     col = mix(col, skyColor(rayDir), fogAmt);            // aerial perspective, one truth
   }else{
@@ -1529,7 +1531,7 @@ gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 const U={};
 ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
  'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uWorldTop','uVCrateCount',
- 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount']
+ 'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure']
  .forEach(n=>U[n]=gl.getUniformLocation(program,n));
 function locArray(name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(program,name+'['+i+']')); return a; }
 U.edits    = locArray('uEdits', 16);
@@ -5897,6 +5899,7 @@ function frame(){
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, 0);
+  gl.uniform1f(U.uExposure, playerPos.exposure);
 
   // items (nearest first)
   renderItemsBuf.length=0;
