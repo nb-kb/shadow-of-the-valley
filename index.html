@@ -1886,7 +1886,7 @@ LEVELS.area1={
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
               'barrelC','heavyBarrel','serrated'],
-      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore'],
+      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore'],
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
               'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
               'platesH','helmetSteel','helmetRig','autoSear','burstCam','rucksack',
@@ -2592,6 +2592,7 @@ const ITEM_DEFS={
   emberCore:  ()=>new ToolMod('EMBER','#e64a19','proj',{kind:'spark',base:16,burn:12},'Core · fire that keeps eating · 12 burn · 16⚡'),
   beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: the shot becomes a held, continuous thread (less hurt) · alone atop a column: tactical laser'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
+  decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands, sings to the camp for 12s · 10⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
   velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:1.6,surcharge:4},'Next core ×1.6 speed · +4⚡'),
@@ -3622,18 +3623,18 @@ function emitProjectile(owner,origin,dir,shot,base){
     const spr=base.spread*(count>1?1.8:1.0)*(playerPos.isAiming&&owner==='player'?0.45:1);
     const d=new Vec3(dir.x+(runRng()-0.5)*spr*2, dir.y+(runRng()-0.5)*spr*2, dir.z+(runRng()-0.5)*spr*2).normalize();
     const kind=shot.kind;
-    const speed=(kind==='spark'?34:kind==='pick'?60:82)*p.vel;
+    const speed=(kind==='spark'?34:kind==='pick'?60:kind==='decoy'?22:82)*p.vel;
     const rel=(i===0&&shot.relayNext)||null;          // only the first TWIN copy carries the chain — no 3^n fireworks
     projectiles.push({
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:2.2, owner, kind,
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything
-      dmg:(kind==='spark'||kind==='pick'?12:base.dmg)+p.dmg,
-      bounces:p.bounce, pierce:p.pierce, grav:p.grav*12,
-      fuse:p.fuse||0, split:p.split||0, contact:!!p.contact, stuck:false, push:!!(base&&base.pulse),
+      dmg:(kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg,
+      bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:0),
+      fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
       burn:p.burn||0, bleed:!!p.bleed,
-      col:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:[1.0,0.75,0.25],
+      col:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.85,0.9,0.4]:[1.0,0.75,0.25],
       silent:p.silent||base.silenced,
     });
   }
@@ -3865,6 +3866,10 @@ function updateProjectiles(dt){
     const pr=projectiles[i];
     if(pr.stuck){                                        // FUSEd: sit, count, blow
       pr.fuseT-=dt;
+      if(pr.kind==='decoy'&&pr.fuseT>0){                 // LURE: sing to the camp
+        pr.pingT-=dt;
+        if(pr.pingT<=0){ pr.pingT=1.5; addNoise(pr.pos.x,pr.pos.y,pr.pos.z,14); addDyn(pr.pos.x,pr.pos.y,pr.pos.z,pr.col,1.4,0.12); playSound('click'); }
+      }
       if(pr.fuseT<=0){ triggerPayload(pr); projectiles.splice(i,1); }
       continue;
     }
@@ -4729,6 +4734,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.base) rows.push('⚡'+e.base+' base');
     if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
     if(e.kind==='bolt') rows.push('+1 round per shot');
+    if(e.kind==='decoy') rows.push('sticks · chirps every 1.5s for 12s · lures the unalarmed');
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
@@ -5836,7 +5842,8 @@ function frame(){
     if(ti>=RLIM.TRACERS) break;
     const vl=pr.vel.length()||1;
     gl.uniform3f(U.trA[ti],pr.pos.x,pr.pos.y,pr.pos.z);
-    gl.uniform3f(U.trB[ti],pr.pos.x-pr.vel.x/vl*0.8,pr.pos.y-pr.vel.y/vl*0.8,pr.pos.z-pr.vel.z/vl*0.8);
+    if(pr.stuck) gl.uniform3f(U.trB[ti],pr.pos.x,pr.pos.y-0.05,pr.pos.z);   // zero-vel segment NaNs sdCapsule
+    else gl.uniform3f(U.trB[ti],pr.pos.x-pr.vel.x/vl*0.8,pr.pos.y-pr.vel.y/vl*0.8,pr.pos.z-pr.vel.z/vl*0.8);
     gl.uniform3f(U.trC[ti],pr.col[0],pr.col[1],pr.col[2]);
     ti++;
   }
