@@ -59,7 +59,9 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `heavy` | MASS | `{grav:1, dmg:6}` | 5 | `pr.vel.y-=grav*12*dt` (3838) | cheap |
 | `twin` | TWIN | `{twin:2}` | 12 | shot count `round(twin)`, **cap 3** | cheap |
 | `silentMod` | HUSH | `{silent:true}` | 3 | suppresses shot noise (3654) | cheap |
-| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s (3873) | cheap |
+| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane from the blast point (`relayNext`; TWIN copies don't chain — only the first carries it) | cheap |
+| `contactMod` | CONTACT | `{contact:true}` | 5 | `pr.contact` — arrival IS the trigger: the payload fires on first touch, world or flesh; no stick, no wait | cheap |
+| `slowFuse` | TIMER | `{fuseAdd:1.5}` | 3 | `pend.fuse += 1.5` — more patience on the same fuse; stacks, and extends FUSE's 1.2s | cheap |
 | `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (3889) | cheap |
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
 | `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. | cheap |
@@ -137,9 +139,9 @@ Status vs. current code:
 
 | proposal | cat | proposed effect | ⚡ | behavior | status |
 |---|---|---|---|---|---|
-| **FUSE → relay** | mod | extend `fuse` | 4+ | on impact/death, **re-cast the next core in the sequence from the impact point** (not just blow) | **extends** current FUSE (fixed delay+blow) |
-| **TIMER** (tunable) | mod | `{delay:t}` | ? | generalize FUSE's fixed 1.2 s into an authored delay | extends FUSE |
-| **CONTACT** | mod | `{trigger:'impact'}` | ? | fire the pending charge on first contact / proximity | **new** (positional) |
+| **FUSE → relay** | mod | extend `fuse` | 4+ | on impact/death, **re-cast the next core in the sequence from the impact point** (not just blow) | **done** = FUSE relay (`relayNext`) |
+| **TIMER** (tunable) | mod | `{delay:t}` | ? | generalize FUSE's fixed 1.2 s into an authored delay | **done** = TIMER (`slowFuse`, `{fuseAdd:1.5}`) |
+| **CONTACT** | mod | `{trigger:'impact'}` | ? | fire the pending charge on first contact / proximity | **done** = CONTACT (`contactMod`, `{contact:true}`) |
 | **LOOP / WRAP** | mod | `{loop:n}` | ? | sequence/path re-emits or wraps N times | **new** (positional) |
 | **SPLITTER** | mod | `{split:n}` | 7 | shatter into N on impact | **done** = SPLINTER (`split:3`) |
 | **CARVE / SHAPER** | proj/util | `{kind:'carve'}` (SDF edit) | ? | deform/carve terrain | partial (PICK eats stone; BASTION build stubbed, index.html:1673) |
@@ -157,7 +159,7 @@ Verbatim design notes worth keeping:
 - "Grip mod should be a Grip core… glob of glue that sticks to near-by globs… works with the tactical laser as a physics gun beam"
 - "Include 1–2 utility mods that exploit the SDF world (carve/deform terrain, tunnel, scan through walls)"
 
-**Biggest unbuilt wins:** FUSE-relay (turns the sequencer recursive — huge combo depth), the positional trio (CONTACT / LOOP / TIMER), and the defensive-role gap. The SDF-utility mods (TUNNEL especially) are the ones to watch on GPU cost.
+**Biggest unbuilt wins** (FUSE-relay, CONTACT and TIMER have since shipped): LOOP/WRAP (the last positional), the defensive-role gap (shield, smoke, reactive-armor mods — LURE covers decoy), and the SDF-utility mods (RECON scan; TUNNEL is the one to watch on GPU cost).
 
 ## Rework scratch space
 
@@ -281,9 +283,11 @@ inert, as before.
 
 ## Zealot availability
 
-`MOD_KEYS` += `waveCore`, `chaoticMod` only (enemy WAVE: 10 m/s, flat 16 dmg,
-dodgeable area-denial — intended; CHAOS wobble telegraphed by the white-blue
-tracer). EXCLUDED, with reasons: `warpCore` (never teleports the zealot —
+`MOD_KEYS` += `waveCore`, `chaoticMod`, `boomerangMod`, `homingMod` (enemy
+WAVE: 10 m/s, flat 16 dmg, dodgeable area-denial — intended; CHAOS wobble,
+SEEKER acid-green and RETURN are all telegraphed by tracer tint; enemy
+boomerangs return to their zealot, enemy seekers hunt the player — cone+range
+only, no LOS, cover still beats them). EXCLUDED, with reasons: `warpCore` (never teleports the zealot —
 decided; double-guarded by the `pr.owner!=='player'` check in `warpArrive`,
 and never rolled), `sawCore` (their fixed shootCooldown ignores fireRate —
 dead stat on them), `slugCore` (their tryShoot consumes 1 round flat — would

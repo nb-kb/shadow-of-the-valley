@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-09 (build v22e).
+Last reviewed: 2026-07-10 (build v22h).
 
 ## Open
 
@@ -35,6 +35,13 @@ Last reviewed: 2026-07-09 (build v22e).
   crate/loot system so they can be looted.
 - **Loot tables** should offer the full suite of available items — audit
   `lootTable` / `lootRegions` for coverage.
+- **Enemy-sourced burn WATCHED** (mod wave v1, deferred knob): the zealot spark
+  roll doses the player 15 burn ≈ up to 15 hp over 7.5s — real early-game bump.
+  If playtests say too hot, the one-liner is halving enemy-sourced doses in
+  `applyStatus`. See docs/MODS.md balance ledger.
+- **ORB tracer-slot hoarding** — a live orb holds a tracer slot for its full 6s
+  aloft (cap 4 orbs). Capped, flagged "monitor" in MODS.md; revisit if tracers
+  starve during orb play.
 
 ## Recently fixed
 
