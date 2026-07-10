@@ -2117,10 +2117,10 @@ function regionSdfJS(r,px,py,pz){
     const inner=_sdBox3(px,py,pz,cx,r.h/2,cz,hx-0.5,r.h/2+0.2,hz-0.5);
     d=Math.max(outer,-inner);
     const g=r.gate;                                          // gate gap on one face
-    if(g){ const gw=g[2];
+    if(g){ const gw=g[2];                                    // carve centered at y=1.5 — GLSL lvHole hh
       const gd=(g[0]==='E'||g[0]==='W')
-        ? _sdBox3(px,py,pz,(g[0]==='E'?bx[2]:bx[0]),1.4,cz+g[1],1.2,1.5,gw)
-        : _sdBox3(px,py,pz,cx+g[1],1.4,(g[0]==='N'?bx[3]:bx[1]),gw,1.5,1.2);
+        ? _sdBox3(px,py,pz,(g[0]==='E'?bx[2]:bx[0]),1.5,cz+g[1],1.2,1.5,gw)
+        : _sdBox3(px,py,pz,cx+g[1],1.5,(g[0]==='N'?bx[3]:bx[1]),gw,1.5,1.2);
       d=Math.max(d,-gd); }
     m=3.0;
     if(r.bldg){                                              // the compound's building
