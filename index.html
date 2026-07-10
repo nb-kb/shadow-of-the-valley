@@ -4303,6 +4303,22 @@ function chaosBias(o,f){
   }
   return best<45?new Vec3(f.x+bx,f.y+by,f.z+bz).normalize():f;
 }
+// SEEKER ON THE THREAD — nearest live, non-dormant warmth within 45m and ~12°
+// of the aim (cos 0.978, no LOS — cover still beats it): the thread BENDS fully
+// onto it. The cone is the clamp: the bend can never exceed the gate that
+// admitted the mark, so it reads as aim-assist, not a turret. Wider marks stay
+// unread — walk the aim onto them. Twin-split strands share the ONE mark.
+function seekBias(o,f){
+  let bx=0,by=0,bz=0,best=45;
+  for(const en of enemies){
+    if(en.health<=0||en._dormant) continue;
+    const dx=en.position.x-o.x, dy=(en.position.y+0.95)-o.y, dz=en.position.z-o.z;
+    const d=Math.hypot(dx,dy,dz);
+    if(d>=best||d<0.001||(dx*f.x+dy*f.y+dz*f.z)/d<0.978) continue;
+    best=d; bx=dx/d; by=dy/d; bz=dz/d;
+  }
+  return best<45?new Vec3(bx,by,bz):f;
+}
 // CHAOS FLASH — one strand drawn as J=3 jointed one-frame segs (lightning) when the
 // pool allows (flashHeadroom>=3 per strand), else one straight flash. Joints starve
 // before strands, strands before the aim thread — never breaches RLIM.TRACERS.
@@ -4355,10 +4371,14 @@ function runContinuousBeams(dt){
     // CHAOS: damage threads arc like lightning — grip/pick stay straight BY RULE
     // (a jittering physgun is nausea). With SEEKER: CHAIN LIGHTNING — the arc
     // leans at the nearest warm thing, scanned once per lane-frame.
-    const chaos=(sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw')?(sh.pend.chaos||0):0;
-    const fb=(chaos&&sh.pend.homing>0)?chaosBias(o,f):f;
+    const dmgKind=sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw';
+    const chaos=dmgKind?(sh.pend.chaos||0):0;
+    // SEEKER bends the damage thread (12° lock — priced by its 7⚡ already in the
+    // rate); with CHAOS it becomes chain lightning instead (40° arc bias). GRIP/
+    // PICK stay true BY RULE; wave/orb trains seek as PROJECTILES, never as aim.
+    const fb=(chaos&&sh.pend.homing>0)?chaosBias(o,f):(dmgKind&&sh.pend.homing>0?seekBias(o,f):f);
     for(let k=0;k<K;k++){
-      const dir=chaos?jitterDir(fb,_jDir,1+0.6*chaos):(K>1?jitterDir(f,_jDir):f);   // chaos: the aim WANDERS even at K===1 — that is the price
+      const dir=chaos?jitterDir(fb,_jDir,1+0.6*chaos):(K>1?jitterDir(fb,_jDir):fb);   // chaos: the aim WANDERS even at K===1 — that is the price; strands wander around the (possibly bent) aim
       let t=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);
       if(sh.kind==='saw') t=Math.min(t,4.0);          // CHAINSAW: the teeth die at arm's length
       // enemies intercept the thread — head tested above the body, same ray foot
@@ -5750,7 +5770,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
-    if(e.homing) rows.push('seeks the warm ahead of it · can still be dodged');
+    if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
     if(e.laser) rows.push('laser · ⚡+'+(e.surcharge||0));
     return {kind,rows};
   }

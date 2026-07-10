@@ -64,7 +64,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `slowFuse` | TIMER | `{fuseAdd:1.5}` | 3 | `pend.fuse += 1.5` — more patience on the same fuse; stacks, and extends FUSE's 1.2s | cheap |
 | `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (3889) | cheap |
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
-| `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. | cheap |
+| `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. BEAM-fed (v22i): the damage thread BENDS fully onto the nearest mark within a ~12° cone of the aim (`seekBias`, 45m, no LOS — the cone is the clamp); twin strands share the one mark; grip/pick never bend; its 7⚡ prices through the thread's per-second rate. | cheap |
 | `beamCore` | BEAM | `{laser:true}` | 8 | shot → continuous thread; alone → tac laser | cheap |
 | `refundMod` | REFUND | `{refund:true, surcharge:10}` | 10 (never waived) | `pend.refund` → resolveLane cost formula (waives next core's base ⚡) + `roundsFor()` (waives lead). Its own 10⚡ rides `pend.surchargeHard` — the one no core forgives, POWDER included. Idempotent flag: REFUND+REFUND = 20⚡ of nothing. | cheap |
 | `chaoticMod` | CHAOS | `{chaos:1, surcharge:6}` | 6 | `pend.chaos` → `pr.chaos` steer wobble (2.4·chaos rad/s, return leg immune); threads arc like lightning (endpoint wander ×(1+0.6·chaos) + 3-joint strand render); pulses jitter. With SEEKER on threads: arcs bite the nearest warm thing (chain lightning). Stacks: wider wander. GRIP/PICK threads stay straight BY RULE. Zealots CAN roll it — white-blue tracer telegraphs the wobble. | 3 one-frame flash segs per strand, gated on `flashHeadroom()>=3` (degrades to 1 straight) |
@@ -239,7 +239,8 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   zealots excluded.
 - **CHAOS**: projectiles F (wobble) · SEEKER F (drunken missile — both steers
   run) · BEAM C-P5 lightning · BEAM+SEEKER C-P5 **CHAIN LIGHTNING** (the
-  owner's ask, verbatim; newly consumes homing on threads) · burstCam pulses
+  owner's ask, verbatim; on a shared thread CHAOS's 40° arc bias replaces
+  SEEKER's 12° bend) · burstCam pulses
   C-P5 · GRIP/PICK threads S (stay straight) · RETURN F (return leg immune —
   the way home flies true) · WARP F (drunken blink, self-priced) · everything
   else F.
@@ -267,10 +268,16 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   6 m/s pearl fast — paying to worsen it) · burstCam laser-burst S, plain
   burst F.
 
-**SEEKER×BEAM resolution:** bare SEEKER×BEAM was already inert (homing unread
-on threads) — CHAOS is now its home: `pend.homing` is consumed on threads only
-when `pend.chaos>0` (chain-lightning bias scan, 45m/40° cone). Bare stays
-inert, as before.
+**SEEKER×BEAM resolution (superseded v22i):** bare SEEKER×BEAM is no longer
+inert — the owner asked for it: "beam should home with seeker." `pend.homing`
+on a damage thread (bolt/spark/boom/saw) now bends the aim onto the nearest
+live, non-dormant mark within a **12° cone** (cos 0.978, 45m, no LOS —
+`seekBias`, full lock, the cone gate IS the bend clamp; twin strands share the
+one mark, grip/pick stay true, wave/orb trains keep seeking as projectiles).
+With CHAOS the wider 40° chain-lightning bias (`chaosBias`) takes over instead
+— both consume homing on threads; the 7⚡ prices through the beam's
+per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
+10.25⚡/s).
 
 ## The named traps (deliberate, all kept)
 
@@ -370,3 +377,11 @@ boom there either).
   per-second formula: 2+(26+8)·0.55 = **20.7⚡/s** — vs regen 16 it runs a
   −4.7⚡/s deficit, a battery-limited siege verb (SPARK-thread, for scale:
   16.3⚡/s). Self-damage applies inside 1.8m — point-blank thread work stings.
+- **SEEKER bends the thread** (owner ask: "beam should home with seeker") —
+  bare SEEKER×BEAM graduates from inert to a 12° aim-lock (`seekBias`; full
+  lock inside the cone, the gate is the clamp — no turret sweeps). Costed by
+  SEEKER's 7⚡ through the beam rate: SEEKER+BEAM+BOLT = **10.25⚡/s** (bolt
+  thread alone: 6.4). CHAOS still outranks it on a shared thread (chain
+  lightning, 40°). Twin strands bend to the SAME mark by design — readable
+  over lethal. Grip/pick threads never bend; wave/orb trains already seek as
+  projectiles.
