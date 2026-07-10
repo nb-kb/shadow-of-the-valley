@@ -1108,12 +1108,18 @@ vec2 levelSDF(vec3 p){
   if(all(greaterThanEqual(t,ivec2(0))) && all(lessThanEqual(t,ivec2(15)))){
     vec4 ids=lvTexel(t.x,t.y)*255.0;
     float cut=1e5;
+    vec2 best=vec2(1e5,1.0);
     for(int k=0;k<2;k++){
       int ri=int((k==0?ids.x:ids.y)+0.5); if(ri>200) continue;
       vec2 rr=lvRegion(ri,p,cut);
-      if(rr.x<res.x) res=rr;
+      if(rr.x<best.x) best=rr;
     }
+    // the cut carves GROUND only, then prims stand in it (pits sandbag lines cross
+    // the trench) — the primary march (gNoGround) never saw prims cut, and neither
+    // does JS collision: this keeps normals/shadow/AO on the same field. LEVEL-PRIM
+    // twin: levelSdfJS applies the identical order.
     if(!gNoGround && cut<1e4) res.x=max(res.x,-cut);
+    if(best.x<res.x) res=best;
     if(gNoGround){
       vec2 fr=fract((p.xz-uLevelBounds.xy)*vec2(uLevelBounds.z,uLevelBounds.w));
       vec2 edge=min(fr,1.0-fr)/vec2(uLevelBounds.z,uLevelBounds.w);
@@ -2488,12 +2494,18 @@ function levelSdfJS(px,py,pz){
   const tx=Math.floor((px-b.x0)/levelBake.tw), tz=Math.floor((pz-b.z0)/levelBake.th);
   if(tx>=0&&tx<LVL.TILES&&tz>=0&&tz<LVL.TILES){
     const ids=levelBake.tiles[tz*LVL.TILES+tx];
+    let cut=1e5, bd=1e5, bm=1.0;
     for(let k=0;k<2;k++){
       const ri=ids[k]; if(ri===255) continue;
-      const [d,m,cut]=regionSdfJS(activeLevel.regions[ri],px,py,pz);
-      if(cut<1e4) res=Math.max(res,-cut);
-      if(d<res){ res=d; mat=m; }
+      const [d,m,c]=regionSdfJS(activeLevel.regions[ri],px,py,pz);
+      if(c<cut) cut=c;
+      if(d<bd){ bd=d; bm=m; }
     }
+    // cut carves GROUND only, then prims stand in it — same order as the shader's
+    // levelSDF (LEVEL-PRIM twin), so no slot-order dependence: a region's cut never
+    // eats its own or its neighbor's prims in either field.
+    if(cut<1e4) res=Math.max(res,-cut);
+    if(bd<res){ res=bd; mat=bm; }
   }
   return res;
 }
