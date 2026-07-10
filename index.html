@@ -273,7 +273,9 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
     Pads pair through your system's Bluetooth, then press any button here — the engine listens for it.<br>
     Settings live as objects: the <b>Pocket Watch</b> tells time on your HUD while carried · the <b>Compass</b> points to the beacon ·
     the <b>Optics Dial</b> cycles render fidelity · the <b>Volume Knob</b> cycles sound. Lose them, lose the setting.<br>
-    Bindings hold for this session only. Close with the same key that opened this.
+    Bindings hold for this session only. Close with the same key that opened this.<br>
+    With <b>GRIP fed by a BEAM</b> the triggers trade jobs — <b>LT/LMB</b> casts the thread and carries,
+    <b>RT/RMB</b> pins the carried load mid-air until gripped again. Other Tools keep the standard layout.
   </div>
 </div></div>
 
@@ -3566,7 +3568,7 @@ function grabWorld(idx,dist,mode){
   const m=Math.hypot(l.x,l.y,l.z), cap=0.26;
   if(m>cap){ l.x*=cap/m; l.y*=cap/m; l.z*=cap/m; }
   heldWorld={w, holdDist:dist, mode, lx:l.x, ly:l.y, lz:l.z};
-  w.held=true;
+  w.held=true; w.frozen=false;                   // the grip takes it back: pinned no more
   document.getElementById('crosshair').classList.add('carrying');
   playSound('grab');
 }
@@ -3587,6 +3589,13 @@ function releaseHeld(hurl){
 // its off-centre pull becomes torque, so the item swings on the hinge
 function updateHeldPhysics(dt){
   if(!heldWorld) return;
+  if(_pgFreezeEdge&&!uiMenusOpen()){               // physgun freeze: PIN the load mid-air
+    const w=heldWorld.w;
+    w.frozen=true; w.vel.set(0,0,0); w.rotVel=0; w.rotVelP=0; w.settled=false;
+    _pgRegrabLock=true;                            // a still-held trigger must not re-grab what it just pinned
+    releaseHeld(false); playSound('click'); toast('PINNED');
+    return;
+  }
   if(INPUT.wheel!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+INPUT.wheel*0.35,1.1,heldWorld.mode==='beam'?16:3.2);
   const o=camPos(), f=camForward();
   const w=heldWorld.w;
@@ -3607,7 +3616,7 @@ function updateHeldPhysics(dt){
   w.rotVelP=clamp((w.rotVelP||0)*Math.max(0,1-6*dt) + (tqX*right.x+tqY*right.y+tqZ*right.z)*invI*dt, -8, 8);
   const stretch=Math.hypot(tx-gx,ty-gy,tz-gz);
   if(stretch>4.5) releaseHeld(false);              // yanked through a wall — let go
-  if(pressed('fire')&&heldWorld&&heldWorld.mode==='hands'&&!uiMenusOpen()) releaseHeld(true);
+  if(firePressedEff()&&heldWorld&&heldWorld.mode==='hands'&&!uiMenusOpen()) releaseHeld(true);
 }
 
 // ============================================================
@@ -3855,7 +3864,7 @@ function bareRes(){ return BARE_RES||(BARE_RES=resolveTool(null)); }
 function tryFirePlayer(dt){
   const res=activeTool?activeTool._res:bareRes();
   if(fireCooldown>0) return;
-  const clicked = res.auto ? down('fire') : pressed('fire');
+  const clicked = res.auto ? fireDownEff() : firePressedEff();
   if(!clicked || !activeTool || heldWorld) return;
 
   const o=camPos(), f=camForward();
@@ -3914,11 +3923,29 @@ function tryFirePlayer(dt){
 // and the core's payload becomes a gossamer thread: bolts stream damage, sparks
 // bloom at the tip, picks pour a carving stream, GRIP pins the world. Less hurt
 // per second than pulling the trigger would give — the price of never letting go.
+// PHYSGUN GRIP — a BEAM-fed GRIP flips the triggers: the aim trigger (LT) casts
+// and carries, the fire trigger (RT) PINS the carried load mid-air. Keyboard
+// keeps fire to grab; the aim key freezes. Normal tools keep their layout —
+// the swap lives entirely in these helpers.
+function physgunRes(){
+  const res=activeTool?activeTool._res:null;
+  return res&&!res.bare&&res.shots.some(sh=>sh.kind==='grip'&&sh.pend.laser)?res:null;
+}
+let _pgFire=false,_pgFireEdge=false,_pgFreezeEdge=false,_pgFirePrev=false,_pgFreezePrev=false,_pgRegrabLock=false;
+function physgunInputTick(){                // once per frame, right after the pad poll
+  const pg=!!physgunRes();
+  _pgFire=pg&&(isDownRaw(BIND.fire.kb)||isDownRaw(BIND.aim.pad));
+  const fz=pg&&(isDownRaw(BIND.aim.kb)||isDownRaw(BIND.fire.pad));
+  _pgFireEdge=_pgFire&&!_pgFirePrev; _pgFreezeEdge=fz&&!_pgFreezePrev;
+  _pgFirePrev=_pgFire; _pgFreezePrev=fz;
+}
+function fireDownEff(){ return physgunRes()?_pgFire:down('fire'); }
+function firePressedEff(){ return physgunRes()?_pgFireEdge:pressed('fire'); }
 const _beamLanes=new Map();               // laneIdx -> {acc, engaged}
 function runContinuousBeams(dt){
   const res=activeTool?activeTool._res:null;
   if(!res||res.bare){ _endBeams(); return; }
-  const firing=down('fire')&&!heldWorld||down('fire')&&heldWorld&&heldWorld.mode==='beam';
+  const firing=fireDownEff()&&(!heldWorld||heldWorld.mode==='beam');
   if(!firing||uiOpen()){ _endBeams(); return; }
   const o=camPos(), f=camForward();
   let any=false;
@@ -3961,7 +3988,7 @@ function runContinuousBeams(dt){
     if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
     if(sh.kind==='pick'&&st.acc>0.16){ st.acc=0; carveAt({pos:end,dmg:8,r:0.55}); }
     if(sh.kind==='grip'){
-      if(!heldWorld){ const pick=itemUnderCrosshair(40); if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam'); }
+      if(!heldWorld&&!_pgRegrabLock){ const pick=itemUnderCrosshair(40); if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam'); }
     }
     const col=sh.kind==='grip'?[0.35,1.6,1.9]:sh.kind==='spark'?[1.9,0.7,1.6]:sh.kind==='pick'?[0.7,1.9,1.6]:[1.9,0.5,0.6];
     beamSegs.push({a:muzzleWorld(),b:heldWorld&&sh.kind==='grip'?heldWorld.w.pos:end,col,ttl:0.05});
@@ -3970,6 +3997,7 @@ function runContinuousBeams(dt){
   if(!any) _endBeams();
 }
 function _endBeams(){
+  _pgRegrabLock=false;                      // trigger came up — the next thread may grab afresh
   if(_beamLanes.size===0) return;
   const res=activeTool?activeTool._res:null;
   if(res&&!res.bare) for(const [li] of _beamLanes){
@@ -4020,8 +4048,10 @@ function fireHitscan_DEAD(owner,origin,dir,shot,res){
 // builds. 2 charge/s only while the ray is lit.
 function runTacLaser(dt){
   const res=activeTool?activeTool._res:null;
-  if(!res||!res.hasTacLaser||!playerPos.isAiming||heldWorld&&heldWorld.mode!=='beam'){ 
-    if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false);
+  // beam-mode holds belong to runContinuousBeams (_endBeams owns the release).
+  // This early-out used to drop them every frame — isAiming is forced false
+  // while holding, so the grip beam locked on but could never carry.
+  if(!res||!res.hasTacLaser||!playerPos.isAiming||heldWorld){
     const lr=document.getElementById('laserRange'); if(lr) lr.style.opacity=0;
     return;
   }
@@ -5781,7 +5811,7 @@ function updatePlayer(dt){
     cameraYaw+=lx;
     cameraPitch=clamp(cameraPitch-ly,-1.5,1.5);
   }
-  playerPos.isAiming=down('aim')&&!menus&&!heldWorld;
+  playerPos.isAiming=down('aim')&&!menus&&!heldWorld&&!physgunRes();   // the physgun repurposes aim: it freezes
   playerPos.aimAmt+=((playerPos.isAiming?1:0)-playerPos.aimAmt)*Math.min(1,12*dt);
   if(pressed('crouch')&&!menus){ playerPos.isCrouching=!playerPos.isCrouching; }
 
@@ -5914,6 +5944,12 @@ function updatePlayer(dt){
 
 function updateWorldItems(dt){
   for(const w of worldItems){
+    if(w.frozen&&!w.held){                         // PINNED mid-air: no gravity, no settle —
+      beamSegs.push({a:new Vec3(w.pos.x,w.pos.y+0.30,w.pos.z),   // a faint steady needle
+                     b:new Vec3(w.pos.x,w.pos.y-0.06,w.pos.z),   // marks the pin
+                     col:[0.2,0.75,0.9],ttl:0.03});
+      continue;
+    }
     if(w.settled && !w.held){
       if(Math.abs(w.vel.x)+Math.abs(w.vel.y)+Math.abs(w.vel.z)>0.05) w.settled=false;  // something shoved it
       else continue;                                                 // asleep: zero cost, zero jitter
@@ -6034,6 +6070,7 @@ function frame(){
   const dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
   fpsEma=lerp(fpsEma,1/Math.max(dt,1e-4),0.04);
   pollGamepad();
+  physgunInputTick();
 
   // menu toggles — ○/Tab open the tool rack outside, back out of any menu inside
   if(isPlayable()&&!listeningBind){
