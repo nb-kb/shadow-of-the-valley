@@ -5273,60 +5273,49 @@ function resetLevel(){
   seedLevelSpawns(LEVELS.valley);
   document.getElementById('hudDepth').textContent=roman(depth);
 }
-function initLoadout(){
-  equip={helmet:null,goggles:null,headphones:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
-  equip.rucksack=ITEM_DEFS.rucksack();
-  syncBagAlias(); zoneIdx=1;
-  const t=ITEM_DEFS.tool(); t.name='Foundling Tool';
-  autoPlace(ITEM_DEFS.cyanide(),bagGrid,BAG_COLS,BAG_ROWS);
-  const mag=ITEM_DEFS.magStd(); mag.loaded=8;
-  t.base.slots[0]=mag;                                  // slots are agnostic — the mag just sits there
-  t.base.slots[1]=ITEM_DEFS.barrelC();                  // starting barrel extends the main column
-  t.base.slots[2]=ITEM_DEFS.battS();                    // and a small battery to drink from
-  activeTool=t;
-  autoPlace(ITEM_DEFS.ammo9(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.watch(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.compass(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.manual(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.opticsDial(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.volumeKnob(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.lantern(),bagGrid,BAG_COLS,BAG_ROWS);
+function seedStashKit(){                       // the kit waits in the STASH now, not on the body. NEW GAME and first
+  if(stashInv.flat().some(Boolean)) return;    // boot seed it; a stash that still holds ANYTHING is never stomped
+  const kit=[ITEM_DEFS.rucksack()];            // (so a hard-death restart keeps whatever home kept)
+  for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.name='Foundling Tool'; kit.push(t); }   // bare frames — no rack
+  const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // ONE mag is all 6x4 affords: the fixed kit takes 22 of 24 cells
+  kit.push(ITEM_DEFS.goggles(),ITEM_DEFS.headphones(),        // every settings utility, exactly once
+           ITEM_DEFS.watch(),ITEM_DEFS.compass(),ITEM_DEFS.photometer(),
+           ITEM_DEFS.opticsDial(),ITEM_DEFS.volumeKnob(),ITEM_DEFS.manual());
+  for(const it of kit) autoPlace(it,stashInv,STASH_COLS,STASH_ROWS);   // this order packs 24/24 — reorder and it spills
 }
 function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
   playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
-  initLoadout();
+  for(const k of EQUIP_SLOTS) equip[k]=null;   // you start with NOTHING on the body — the stash holds the kit
+  activeTool=null; holsterCur=-1;
+  syncBagAlias(); clampZone();
+  seedStashKit();                              // BEFORE deployTo — the hideout's guaranteed-spawn check reads the stash
   deployTo('hideout'); timeScale=1;
   refreshInvUI();
 }
 function newGame(){                            // the terminal's START OVER — a fresh run; the memory slots keep
   for(const row of stashInv) row.fill(null);   // the stash forgets, in place — the crate registry holds this array
   worldClock=0;                                // day one, dawn again — the only clock rewind outside boot
-  startRun();                                  // the boot path: starter kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
-  toast('NEW RUN — THE MEMORY SLOTS KEEP');
+  startRun();                                  // the boot path: empty hands, stash kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
+  toast('NEW RUN — THE KIT WAITS IN THE STASH');
 }
 function onDeath(){
   if(!_pillDeath && !(activeLevel&&activeLevel.id==='hideout')){   // a lost raid, not a lost life
     playSound('death');
-    // THE TEETH: the bag you carried is the valley's now. The rig on your back,
-    // the pockets sewn to it (belt·holster·harness), and the tool in your grip keep.
+    endBeam();                               // a mid-beam death: kill the hum and the beam-mode grip while the world still stands
+    // THE TEETH v2: everything is the valley's now — the rig, every pocket sewn to
+    // it, the tool in your grip. Only the stash at home remembers.
     // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
-    const rk=equip.rucksack;
-    if(rk&&rk.inv) for(const row of rk.inv) row.fill(null);
-    // a bag riding in a pocket is still a bag: pocketed containers come home GUTTED —
-    // no smuggling a second rucksack past the teeth (settings devices keep their dials)
-    for(const k of EQUIP_SLOTS){ const eq=equip[k];
-      if(k==='rucksack'||!eq||!eq.inv) continue;
-      for(const row of eq.inv) for(const ch of row)
-        if(ch&&ch.inv&&!ch.settingsDevice) for(const r2 of ch.inv) r2.fill(null);
-    }
+    for(const k of EQUIP_SLOTS) equip[k]=null;
+    activeTool=null; holsterCur=-1; reloadTimer=0;   // no wield, no draw memory, no reload landing on empty hands
+    syncBagAlias(); clampZone();             // bagGrid falls back to the 1x1 stub; the cursor keeps a legal zone
     if(!activeLevel) depth=1;                // the ring count died with the run — the next OPEN VALLEY starts at I
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
     playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
-    showBanner('THE VALLEY KEPT THE BAG');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
+    showBanner('THE VALLEY KEPT EVERYTHING');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
   _pillDeath=false;
@@ -5566,7 +5555,7 @@ const TERM_SCREENS={
     {label:'BACK', screen:'saves'},
   ]}),
   newgame:()=>({title:'NEW GAME', rows:[            // the confirm gate — a stray press lands here, not on the wipe
-    {label:'YES — START OVER', meta:'memory slots keep', action:()=>{ closeTerminal(); newGame(); }},
+    {label:'YES — START OVER', meta:'memory slots keep · the kit waits in the stash', action:()=>{ closeTerminal(); newGame(); }},
     {label:'BACK', screen:'home'},
   ]}),
 };
