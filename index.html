@@ -398,6 +398,7 @@ const PARAMS = {
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
   fogDensity:  {v:0.014,min:0,  max:0.1,  step:0.002,label:'fog density'},
   fogWeather:  {v:-1,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
+  nightFloor:  {v:0.012,min:0.002,max:0.06,step:0.002,label:'night ambient'},
 };
 const P = k => PARAMS[k].v;
 
@@ -2444,7 +2445,13 @@ function updateDayNight(){
   const dAmb=lerp(0.09,0.34,clamp(sd.y*1.5,0,1));
   const dHi=[lerp(0.35,0.16,warm),lerp(0.55,0.22,warm),lerp(0.85,0.35,warm)];
   const dLo=[lerp(0.75,0.85,warm),lerp(0.72,0.45,warm),lerp(0.65,0.30,warm)];
-  const nCol=[0.16,0.20,0.30], nAmb=0.055, nHi=[0.02,0.03,0.06], nLo=[0.05,0.06,0.10];
+  // MOONLESS-DARK floor — live-tunable; the old fixed 0.055 read as dusk forever.
+  // The moon (the flipped sun, already modeled) lifts it toward 2× when it rides
+  // high at midnight; the dusk/dawn shoulders are the true black. Lamps, campfires
+  // and the LANTERN mod earn their keep. Stars key off uAmbient<0.14 — lower floor
+  // only makes them burn brighter, the threshold holds.
+  const moonHi=clamp(-sd.y,0,1);
+  const nCol=[0.16,0.20,0.30], nAmb=P('nightFloor')*(1+moonHi), nHi=[0.02,0.03,0.06], nLo=[0.05,0.06,0.10];
   const mixV=(a,b)=>[lerp(a[0],b[0],k),lerp(a[1],b[1],k),lerp(a[2],b[2],k)];
   // horizon dip: directional light fades to zero right at the sun/moon swap,
   // so the direction flip never moves a visible shadow
