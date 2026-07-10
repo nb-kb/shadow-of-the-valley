@@ -5567,7 +5567,12 @@ function itemFromJSON(j){
   if(it instanceof Armor && j.inv && it.inv){
     for(const cj of j.inv){
       const ch=itemFromJSON(cj); if(!ch) continue;
-      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,it.inv,it.invCols,it.invRows)) placeInGrid(ch,cj.x,cj.y,it.inv);
+      if(it.slotMode){                                    // slot-racks (belt/holster): one item per cell, ANY footprint —
+        // gridFits below would refuse a 2×2 tool in a 1-row rack and the gun would vanish on load
+        if(cj.x!==undefined && it.inv[cj.y] && it.inv[cj.y][cj.x]===null){ it.inv[cj.y][cj.x]=ch; ch.x=cj.x; ch.y=cj.y; }
+        else if(!slotPlace(ch,{grid:it.inv,cols:it.invCols,rows:it.invRows})) _retuneOrphans.push(ch);   // rack shrank: salvage, never vanish
+      }
+      else if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,it.inv,it.invCols,it.invRows)) placeInGrid(ch,cj.x,cj.y,it.inv);
       else autoPlace(ch,it.inv,it.invCols,it.invRows);
     }
   }
