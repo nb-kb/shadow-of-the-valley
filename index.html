@@ -4745,7 +4745,10 @@ function warpArrive(pr){
   worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
   const x=pr.pos.x+_n.x*0.45, z=pr.pos.z+_n.z*0.45;    // step off the face before standing up
   playerPos.x=x; playerPos.z=z;
-  playerPos.y=restOnSurface(x, pr.pos.y+1.2, z);       // Zealot-ctor idiom — land ON the surface
+  // Zealot-ctor idiom — land ON the surface. Ceiling hit (_n.y<-0.5): seed the
+  // probe BELOW the face, room side — arriving +1.2 above a thin roof rests you
+  // ON TOP of it, an exit through solid the matrix never sold.
+  playerPos.y=restOnSurface(x, _n.y<-0.5?pr.pos.y-0.2:pr.pos.y+1.2, z);
   playerPos.velY=0; playerPos.ySm=playerPos.y;         // snap the camera smoother: no lag-streak (v21q)
   addDyn(x,playerPos.y+1.0,z,[0.4,0.95,1.0],2.4,0.18);
   playSound('spark');
