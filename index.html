@@ -3533,7 +3533,7 @@ function quickUse(){
   clampCursor(f);
   const cell=cellAt(f);
   if(!cell && !f.rack) return;            // rack verbs (unchain/strip) work on empty cells
-  if(cell instanceof Tool && currentFocus===0){ wieldTool(cell); return; }
+  if(cell instanceof Tool && currentFocus===0){ wieldTool(cell,f); return; }
   if(cell instanceof Magazine && cell.loaded>0 && !heldWorld){   // F: shake the rounds out into your hand
     const rounds=new Ammunition(cell.acceptedType+' rounds','#a07c2c',cell.acceptedType,cell.loaded);
     cell.loaded=0;
@@ -3553,11 +3553,23 @@ function quickUse(){
   if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
   playSound('click');
 }
-function wieldTool(tool){
-  removeFromGrid(tool,bagGrid);
+function wieldTool(tool,src){
+  // src = the zone the tool is drawn from. Stripping bagGrid alone left a holstered
+  // tool racked AND wielded — one object, two homes; every save then minted a copy.
+  // ATOMIC now, cycleHolster's idiom: out of ITS grid, the old wield takes the spot.
+  const sx=tool.x, sy=tool.y;
+  removeFromGrid(tool,src&&src.grid?src.grid:bagGrid);
+  _endBeams();                                       // mid-beam swap: same teardown as cycleHolster
+  reloadTimer=0;                                     // the half-fed reload dies with the swap
   const old=activeTool;
   activeTool=tool;
-  if(old){ if(!autoPlaceAny(old)) dropItemToWorld(old,1.0,1.5); }
+  if(src&&src.id==='holster') holsterCur=sy*src.cols+sx;   // d-pad cycling resumes from the drawn slot
+  if(old){
+    const back=src&&src.grid&&!src.external;         // never stow into a take-only crate
+    if(back&&src.slotMode&&!src.grid[sy][sx]){ src.grid[sy][sx]=old; old.x=sx; old.y=sy; }
+    else if(back&&!src.slotMode&&gridFits(old,sx,sy,src.grid,src.cols,src.rows)) placeInGrid(old,sx,sy,src.grid);
+    else if(!autoPlaceAny(old)) dropItemToWorld(old,1.0,1.5);
+  }
   playSound('pickup'); refreshInvUI();
 }
 // HOLSTER CYCLE — d-pad ◀▶ / [T] swaps the wield through the holster slot-rack
