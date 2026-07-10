@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-10 (build v22h).
+Last reviewed: 2026-07-10 (build v22l).
 
 ## Open
 
@@ -37,8 +37,6 @@ Last reviewed: 2026-07-10 (build v22h).
   perception, gear, and the vision-cone contract are in place. Design with
   the owner before building; no pathfinding/navmesh (waypoint discipline
   stands).
-- Endless-valley crates are currently **decorative** — wire them into the real
-  crate/loot system so they can be looted.
 - **Loot tables** should offer the full suite of available items — audit
   `lootTable` / `lootRegions` for coverage.
 - **Enemy-sourced burn WATCHED** (mod wave v1, deferred knob): the zealot spark
@@ -51,6 +49,17 @@ Last reviewed: 2026-07-10 (build v22h).
 
 ## Recently fixed
 
+- **v22l** — Endless-valley crates were **decorative**: only the 6 authored
+  origin crates were registered as lootable — the hash-scattered cell crates
+  existed solely in the GLSL/JS SDF twins, with no registry entry to loot. A
+  third fround-faithful copy of the cell-crate hash math now feeds the crate
+  registry (gate-scaled window, token-identical `fractJS(fr(h*(13+7*k)))`
+  draws), verified bit-exact against both twins across 240 rings.
+- **v22l** — Barracks and walled-yard doorways in the valley shoved you back
+  out: the door carves left sub-player-radius clearance troughs (0.34 m radius
+  vs ~0.20/0.35 m clearance). Deepened both carves in lockstep (GLSL cellSDF +
+  JS mapWorldBase, 5.4→5.8 and 7.2→7.4) → 0.40/0.45 m troughs; every drawn
+  opening is now enterable (0 failures across 2,451 structures swept).
 - **v22a** — Crate opened and instantly grabbed the top item: the
   `pressed('interact')` edge that opened the crate survived into the same
   frame's `menuNav()` and ran the take. Menu transitions now SPEND the edge —
