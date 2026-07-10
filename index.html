@@ -2041,11 +2041,11 @@ LEVELS.area1={
               'magStd','magStd','watch','compass','gummies','bandAid','barrelC','barrelC'],
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
               'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies','photometer',
-              'platS','platS'],
+              'platS','platS','beltFeeder'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
-              'barrelC','heavyBarrel','serrated','boomerangMod','homingMod'],
-      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore','boomCore'],
+              'barrelC','heavyBarrel','serrated','boomerangMod','homingMod','refundMod'],
+      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore','boomCore','powderCore'],
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
               'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
               'platesH','helmetSteel','helmetRig','autoSear','burstCam','rucksack',
@@ -2811,6 +2811,7 @@ const ITEM_DEFS={
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands, sings to the camp for 12s · 10⚡'),
   boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · a lobbed charge — arcs heavy, blows BIG wherever it lands. No friends in the blast · 26⚡'),
+  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · a slug that pays in lead — its feeders ride free. Threads refuse the discount'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
   velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:1.6,surcharge:4},'Next core ×1.6 speed · +4⚡'),
@@ -2847,10 +2848,12 @@ const ITEM_DEFS={
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core hunts the nearest warm thing ahead of it — hard turns, honest ones. Cover still works · +7⚡'),
+  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:10},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +10⚡, never waived'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
   lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'A light of your own. It sees you back. [F]'),
+  beltFeeder: ()=>new ToolMod('BELT-FEEDER','#6d4c41','util',{beltFeed:true},'Chambers one round every 0.9s from your pockets. It ticks while it works — a suppressed tool hushes it'),
   // --- analog settings, as objects ---
   watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','While carried, the HUD keeps time.'),
   compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon — or the nearest exfil in a raid.'),
@@ -3704,7 +3707,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
 function foldFrame(out,m){
   const e=m.effect;
@@ -3719,6 +3722,7 @@ function foldFrame(out,m){
   }else{
     if(e.pulse) out.pulse=true;
     if(e.flashlight) out.flashlight=true;
+    if(e.beltFeed) out.beltFeed=true;
   }
 }
 // one column, bottom-to-top: the EXACT old pend/feeder/vent/flow logic, plus:
@@ -3760,14 +3764,17 @@ function resolveLane(col,out){
       if(e.bleed) pend.bleed=true;
       if(e.boomerang) pend.boomerang=true;
       if(e.homing) pend.homing+=e.homing;              // stacked SEEKERs turn harder
+      if(e.refund){ pend.refund=true; pend.surchargeHard+=e.surcharge||0; }   // REFUND's own ⚡ is the one no core forgives
       pend.surcharge+=e.surcharge||0;
       feeders.push(m);
     }else if(m.cat==='proj'){
       if(pend.twin>3) pend.twin=3;                  // TWIN cap: no shotgun accidents
       if(m.effect.burn) pend.burn+=m.effect.burn;   // FIRE cores carry their own ember
-      const shot={kind:m.effect.kind,pend:{...pend},
-                  cost:(m.effect.base||0)+pend.surcharge,core:m,
-                  spreadAdd:col.spreadAdd,lane};
+      const e=m.effect;
+      // THE PRICE: REFUND waives the core's base; POWDER waives the feeders' surcharges —
+      // except REFUND's own (surchargeHard), and never under a thread (laser keeps full price).
+      const cost=(pend.refund?0:(e.base||0)) + ((e.powder&&!pend.laser)?pend.surchargeHard:pend.surcharge);
+      const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane};
       lane.shots.push(shot);
       const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY: a fused core casts the NEXT core from its point of death
       if(prev&&prev.pend.fuse>0&&!shot.pend.laser) prev.relayNext=shot;
@@ -3811,7 +3818,7 @@ function describeSequence(res){
       if(m.cat==='proj'){
         const sh=lane.shots[shotIdx++];
         return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
-          +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&sh.kind==='bolt'&&!sh.pend.laser?'+1rd':'')+'</span></span>';
+          +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&!sh.pend.laser&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';
       }
       if(m.cat==='util') return '<span class="seqChip" style="border-color:#2f8f9f">'+m.name+'</span>';
       if(m.cat==='muzzle') return '<span class="seqChip" style="border-color:#c9a45a">'+m.name+'</span>';
@@ -3969,6 +3976,7 @@ function emitProjectile(owner,origin,dir,shot,base,src){
   }
 }
 function toolNoise(silent){ return silent?4:22; }
+function roundsFor(sh){ return sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0; }
 
 const _colsBuf=new Float32Array(32);
 let fireCooldown=0, reloadTimer=0;
@@ -4004,9 +4012,9 @@ function tryFirePlayer(dt){
       const bl=burstLaser(res,sh);                       // burst cam: a fed damage beam volleys pulses instead of flowing
       if(sh.pend.laser&&!bl) continue;                   // continuous shots belong to the held-fire path
       if(bl&&_laserBursts.some(q=>q.lane===lane)) continue;   // volley still walking: the lane holds
-      const needsAmmo=sh.kind==='bolt'&&!bl;             // pulses are light, not lead
+      const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
       const okCharge=activeTool.charge>=(bl?Math.ceil((sh.cost||0)/3):(sh.cost||0));
-      const okAmmo=!needsAmmo||(mag&&mag.loaded>0);
+      const okAmmo=rds===0||(mag&&mag.loaded>=rds);
       if(okCharge&&okAmmo){ pick=i; if(k>0) skippedAny=true; break; }
     }
     if(pick<0) continue;                                 // starved column: cycle HOLDS
@@ -4018,10 +4026,8 @@ function tryFirePlayer(dt){
     }
     wearRoll(spendCharge(activeTool,sh.cost||0));        // price the shot, not the copies — and roll the dice
     for(let b=0;b<res.burst;b++){
-      if(sh.kind==='bolt'){
-        if(!mag||mag.loaded<=0) break;
-        mag.loaded--;
-      }
+      const rds=roundsFor(sh);
+      if(rds>0){ if(!mag||mag.loaded<rds) break; mag.loaded-=rds; }
       emitProjectile('player',origin,fireDir,sh,res);
       const silent=sh.pend.silent||res.silenced||lane.silenced;
       playSound(sh.pend.laser?'spark':sh.kind==='spark'?'spark':(silent?'silenced':'shoot'));
@@ -4556,6 +4562,19 @@ function damagePlayer(dmg){
   v.style.opacity=Math.min(1,0.35+ (1-playerPos.health/playerPos.maxHealth)*0.6);
   setTimeout(()=>{v.style.opacity=Math.max(0,(1-playerPos.health/playerPos.maxHealth)*0.45);},120);
   if(playerPos.health<=0) onDeath();
+}
+let _beltT=0;
+function tickBeltFeed(dt){
+  _beltT-=dt; if(_beltT>0) return;
+  _beltT=0.9;
+  let mag=null;                                        // the hungriest racked mag drinks first
+  for(const col of toolColumns(activeTool)) for(const r of col.refs){
+    const it=readRef(r);
+    if(it instanceof Magazine&&it.loaded<it.maxCapacity&&(!mag||it.loaded/it.maxCapacity<mag.loaded/mag.maxCapacity)) mag=it;
+  }
+  if(!mag||takeBagAmmo(mag.acceptedType,1)<1) return;
+  mag.loaded++; playSound('click');
+  if(!activeTool._res.silenced) addNoise(playerPos.x,playerPos.y,playerPos.z,3);   // the belt ticks — a suppressed tool feeds silent
 }
 function tryReload(){
   if(!activeTool||reloadTimer>0) return;
@@ -5377,6 +5396,9 @@ function tipBrief(it){                                  // the info square's row
     if(e.kind==='bolt') rows.push('+1 round per shot');
     if(e.kind==='decoy') rows.push('sticks · chirps every 1.5s for 12s · lures the unalarmed');
     if(e.kind==='boom') rows.push('arcs heavy · blows BIG on any impact · no friends in the blast');
+    if(e.powder) rows.push('feeders ride free — their ⚡ surcharges are waived · threads refuse: full price under BEAM');
+    if(e.refund) rows.push('next core: base ⚡ waived · mag-fed cores fire without lead · this +10⚡ is never waived');
+    if(e.beltFeed) rows.push('chambers 1 round / 0.9s from your pockets · ticks softly — a suppressed tool feeds silent');
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
@@ -5894,7 +5916,7 @@ function updateToolReadout(){
   nm.textContent=activeTool.name.toUpperCase();
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
-    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN');
+    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.refund)tags.push('FREE');
     if(p.bounce)tags.push('RIC'); if(p.pierce)tags.push('DRILL'); if(p.grav)tags.push('MASS'); if(p.vel>1)tags.push('SWIFT');
     return (tags.length?tags.join('·')+' ':'')+s.kind.toUpperCase();
   }).join(' / ');
@@ -6362,6 +6384,7 @@ function frame(){
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
     if(fireCooldown>0) fireCooldown-=dt;
     if(activeTool&&!beamActive) regenBatteries(activeTool,dt);
+    if(activeTool&&activeTool._res&&activeTool._res.beltFeed) tickBeltFeed(dt);
 
     updateProjectiles(dt);
     updateWorldItems(dt);
