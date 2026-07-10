@@ -1116,8 +1116,7 @@ vec2 traceGround(vec3 o, vec3 dir, float maxT){
   return vec2(-1.0,0.0);
 }
 
-vec2 mapStatic(vec3 p){
-  if(uLevelOn==1) return levelSDF(p);
+vec2 mapProc(vec3 p){
   float tH=terrainH(p.xz);
   vec2 res = gNoGround ? vec2(1e5,1.0) : vec2((p.y-tH)*0.62, tH>1.5?2.0:1.0);   // ground: dirt floor, rock slopes
   float cellSize=20.0;
@@ -1141,6 +1140,12 @@ vec2 mapStatic(vec3 p){
   for(int i=0;i<6;i++){ if(i>=uVCrateCount) break; vec4 vc=uVCrates[i];   // VALLEY-CRATE twin
     float vcd=sdBoxL(p, vec3(vc.x,vc.z*0.5,vc.y), vec3(vc.z*0.55,vc.z*0.5,vc.z*0.55));
     if(vcd<res.x) res=vec2(vcd,4.0); }
+  return res;
+}
+vec2 mapStatic(vec3 p){
+  // AUTHORED AND VALLEY BOTH FEED THE EDIT/GLOB PASS — base, then carve/add,
+  // then glob smin, exactly mapWorldJS = applyGlobsJS(applySdfEditsJS(base)).
+  vec2 res = (uLevelOn==1) ? levelSDF(p) : mapProc(p);
   for(int i=0;i<16;i++){                          // world edits — keep in lockstep with applySdfEditsJS
     if(i>=uEditCount) break;
     vec4 ed=uEdits[i];
