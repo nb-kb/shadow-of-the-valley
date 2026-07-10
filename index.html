@@ -371,7 +371,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22h';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22i';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -2966,7 +2966,7 @@ const ITEM_DEFS={
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it from the blast · +4⚡'),
-  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core triggers the instant it touches anything — no stick, no wait · +5⚡'),
+  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core casts the core ABOVE it from its first touch — world or flesh, no stick, no wait. Nothing above: it just impacts. FUSE outranks it on the same core · +5⚡'),
   slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{fuseAdd:1.5,surcharge:3},'Next core waits +1.5s more on the fuse · +3⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
@@ -3943,8 +3943,8 @@ function resolveLane(col,out){
       const cost=(pend.refund?0:(e.base||0)) + ((e.powder&&!pend.laser)?pend.surchargeHard:pend.surcharge);
       const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane};
       lane.shots.push(shot);
-      const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY: a fused core casts the NEXT core from its point of death
-      if(prev&&prev.pend.fuse>0&&!shot.pend.laser) prev.relayNext=shot;
+      const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY / CONTACT-RELAY: a fused core casts the NEXT core from its point of death; a contact core casts it from its FIRST TOUCH — no timer, no stick
+      if(prev&&(prev.pend.fuse>0||prev.pend.contact)&&!shot.pend.laser) prev.relayNext=shot;
       for(const f of feeders) lane.flow.push({from:f,to:m});
       pend=freshPend(); feeders=[];
     }
@@ -4699,7 +4699,7 @@ function updateProjectiles(dt){
       // world
       const wd=mapWorldJS(pr.pos.x,pr.pos.y,pr.pos.z);
       if(wd<(pr.kind==='slug'?0.30:pr.kind==='orb'?0.12:0.04)){   // increased projectile size for fat ordnance
-        if(pr.contact){                                // CONTACT: no patience — arrival IS the trigger
+        if(pr.contact&&!(pr.fuse>0)){                  // CONTACT: no patience — first touch triggers, the relay casts from here (on the same core FUSE governs: stick+timer; contact vents)
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           pr.pos.addScaledVector(_n,0.06);
           addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
@@ -4731,7 +4731,7 @@ function updateProjectiles(dt){
   }
 }
 function impactOrPierce(pr){
-  if(pr.contact){ triggerPayload(pr); return true; }   // CONTACT: flesh counts as arrival
+  if(pr.contact&&!(pr.fuse>0)){ triggerPayload(pr); return true; }   // CONTACT: flesh counts as arrival — the relay casts from the wound (FUSE on the same core governs)
   if(pr.kind==='spark'||pr.kind==='boom'||pr.kind==='warp'){ triggerPayload(pr); return true; }   // WARP+SEEKER = blink onto the mark
   if(pr.split>0){ splinterBurst(pr); return true; }
   if(pr.pierce>0){ pr.pierce--; return false; }
@@ -5728,7 +5728,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.silenced||e.silent) rows.push('silenced');
     if(e.fuse) rows.push('fused '+e.fuse+'s');
     if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
-    if(e.contact) rows.push('triggers on contact');
+    if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
     if(e.homing) rows.push('seeks the warm ahead of it · can still be dodged');

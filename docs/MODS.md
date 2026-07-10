@@ -59,8 +59,8 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `heavy` | MASS | `{grav:1, dmg:6}` | 5 | `pr.vel.y-=grav*12*dt` (3838) | cheap |
 | `twin` | TWIN | `{twin:2}` | 12 | shot count `round(twin)`, **cap 3** | cheap |
 | `silentMod` | HUSH | `{silent:true}` | 3 | suppresses shot noise (3654) | cheap |
-| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane from the blast point (`relayNext`; TWIN copies don't chain — only the first carries it) | cheap |
-| `contactMod` | CONTACT | `{contact:true}` | 5 | `pr.contact` — arrival IS the trigger: the payload fires on first touch, world or flesh; no stick, no wait | cheap |
+| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane from the blast point (`relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT | cheap |
+| `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's FIRST TOUCH (world or flesh) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. TWIN first-copy rule applies (copies don't chain) | cheap |
 | `slowFuse` | TIMER | `{fuseAdd:1.5}` | 3 | `pend.fuse += 1.5` — more patience on the same fuse; stacks, and extends FUSE's 1.2s | cheap |
 | `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (3889) | cheap |
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
@@ -110,6 +110,10 @@ surcharge:0, laser:false, refund:false, surchargeHard:0, chaos:0}`. Each modifie
 adds/multiplies its field; a proj core copies `pend`, then it resets.
 **All fields are consumed downstream — no dead stats** (re-verified, mod wave v1):
 
+- `contact` — consumed at (a) resolveLane's relay wiring (`relayNext`, the
+  instant sibling of FUSE's), (b) the flight first-touch branches
+  (`updateProjectiles` world hit + `impactOrPierce` flesh hit), both guarded
+  `&&!(pr.fuse>0)` — FUSE governs on a shared core.
 - `refund` — consumed at (a) the resolveLane cost formula (waives the core's
   base ⚡), (b) `roundsFor()` (waives lead).
 - `surchargeHard` — consumed at the resolveLane cost formula: the un-waivable
@@ -141,7 +145,7 @@ Status vs. current code:
 |---|---|---|---|---|---|
 | **FUSE → relay** | mod | extend `fuse` | 4+ | on impact/death, **re-cast the next core in the sequence from the impact point** (not just blow) | **done** = FUSE relay (`relayNext`) |
 | **TIMER** (tunable) | mod | `{delay:t}` | ? | generalize FUSE's fixed 1.2 s into an authored delay | **done** = TIMER (`slowFuse`, `{fuseAdd:1.5}`) |
-| **CONTACT** | mod | `{trigger:'impact'}` | ? | fire the pending charge on first contact / proximity | **done** = CONTACT (`contactMod`, `{contact:true}`) |
+| **CONTACT** | mod | `{trigger:'impact'}` | ? | fire the pending charge on first contact / proximity | **done, reworked v22i** = CONTACT (`contactMod`): now the instant relay — first touch casts the next core from the hit point |
 | **LOOP / WRAP** | mod | `{loop:n}` | ? | sequence/path re-emits or wraps N times | **new** (positional) |
 | **SPLITTER** | mod | `{split:n}` | 7 | shatter into N on impact | **done** = SPLINTER (`split:3`) |
 | **CARVE / SHAPER** | proj/util | `{kind:'carve'}` (SDF edit) | ? | deform/carve terrain | partial (PICK eats stone; BASTION build stubbed, index.html:1673) |
@@ -184,7 +188,8 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
 ## Interaction matrix (F=composes-free · C=needs-code, cited package · S=nonsense-suppressed · T=TRAP, deliberate · I=inert-by-design, surcharge still real · –=can't meet)
 
 - **WAVE**: FUSE-relay F (wall sticks, casts; or carrier chain) · CONTACT F
-  (redundant-ish) · TIMER F · TWIN F (2-3 walls, 1 tracer slot each) · BEAM
+  (the wall casts onward where it dies on the WORLD — flesh never triggers it,
+  the wave washes through by design) · TIMER F · TWIN F (2-3 walls, 1 tracer slot each) · BEAM
   C-P3 wave train · burstCam F (3 stacked walls) · RETURN F (the tide comes
   back) · SEEKER F (homing wall) · DRILL I (wave never impact-dies on flesh —
   pierce unread on it) · RICOCHET F (sweeps back off the wall) · SPLINTER F
@@ -201,7 +206,8 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   true saw) · SAW+hairTrigger I.
 - **WARP**: FUSE-relay F, both seats ([FUSE,WARP]=delayed door;
   [FUSE,X,WARP]=cast onward from X's death; [FUSE,WARP,X]=you arrive as X
-  casts) · CONTACT F (the standard blink) · TIMER F · TWIN T-soft
+  casts) · CONTACT F ([CONTACT,WARP,X]: you blink to the impact AND X casts
+  from it, instantly) · TIMER F · TWIN T-soft
   (double-blink, 12⚡ to be yanked twice) · BEAM S (laser stripped; BEAM vents
   its 8 into the chip) · burstCam F (triple-blink, self-punishing, allowed) ·
   RETURN **T "THE LASSO"** — the named headline trap: looks like a recall
@@ -313,3 +319,17 @@ filler from a random pool).
   unfed (identical) and better when fed; gated only by loot rarity (cores tier
   vs common). Accepted as upgrade path; if it feels bad, the knob is powder
   dmg −2, not a mechanic change.
+
+## Balance ledger (v22i combat-semantics rework)
+
+- **CONTACT redefined** (owner ask: "should fire the NEXT core from its
+  collision") — now the instant sibling of FUSE-relay: wires `relayNext`, casts
+  the next core from the first touch, world or flesh; the carrier's own impact
+  stays normal. Same 5⚡. Precedence: FUSE governs on a shared core (chosen
+  over the reverse because a fused BOOM needs its flight back — CONTACT-governs
+  would deadlock the instant blast), CONTACT vents, surcharge still real.
+  CONTACT now also relay-houses a SLUG ([CONTACT,X,SLUG] dodges the +0.45s
+  cycle penalty, same as FUSE housing — the `relayNext` check is shared).
+  Old behavior (trigger-payload-on-first-impact with no next core) collapses
+  into "plain impact" — nothing lost: bare payload-kinds already trigger on
+  impact.
