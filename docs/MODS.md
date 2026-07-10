@@ -53,6 +53,8 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `silentMod` | HUSH | `{silent:true}` | 3 | suppresses shot noise (3654) |
 | `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s (3873) |
 | `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (3889) |
+| `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). |
+| `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. |
 | `beamCore` | BEAM | `{laser:true}` | 8 | shot → continuous thread; alone → tac laser |
 
 ## Stat mods (`cat: stat`) — order-free, whole-tool
@@ -90,9 +92,10 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 ## Pending-charge fields (the `pend` object, `index.html:3400`)
 
 `freshPend()` = `{dmg:0, vel:1, bounce:0, pierce:0, grav:0, twin:1, silent:false,
-fuse:0, split:0, surcharge:0, laser:false}`. Each modifier adds/multiplies its
-field; a proj core copies `pend`, then it resets. **All fields are consumed
-downstream — no dead stats** (verified).
+fuse:0, split:0, contact:false, burn:0, bleed:false, boomerang:false, homing:0,
+surcharge:0, laser:false}`. Each modifier adds/multiplies its field; a proj core
+copies `pend`, then it resets. **All fields are consumed downstream — no dead
+stats** (verified).
 
 ---
 
