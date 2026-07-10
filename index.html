@@ -2900,7 +2900,7 @@ class Armor extends Item{
 // ---- Widgets are BOLTED IN: the inventory cursor adjusts them, never lifts them.
 function mkWidget(def){
   return {widget:true, w:1,h:1, id:def.id, label:def.label, kind:def.kind,
-          options:def.options, min:def.min, max:def.max, step:def.step,
+          options:def.options, min:def.min, max:def.max, step:def.step, tip:def.tip,
           get:def.get, set:def.set, functional:!!def.functional,
           _stub:def.functional?undefined:(def.init!==undefined?def.init:0)};
 }
@@ -2914,7 +2914,11 @@ const SETTINGS_REGISTRY=[
    options:['FAST','MED','FULL'],
    get:()=>['FAST','MED','FULL'][Math.max(0,[80,120,150].findIndex(v=>Math.abs(v-P('rayQuality'))<6))],
    set:v=>{ PARAMS.rayQuality.v=[80,120,150][['FAST','MED','FULL'].indexOf(v)]; }},
-  {container:'goggles', id:'brightness', label:'BRIGHT', kind:'range', min:0.5,max:1.5,step:0.1, functional:false},
+  {container:'goggles', id:'brightness', label:'BRIGHT', kind:'range', functional:true,
+   min:0.002,max:0.06,step:0.002,                     // mirrors PARAMS.nightFloor — one source of truth
+   tip:'night floor — how dark the dark gets',
+   get:()=>P('nightFloor'),
+   set:v=>{ PARAMS.nightFloor.v=v; }},                // updateDayNight reads it per frame — applies live, no resize
   {container:'goggles', id:'resolution', label:'RES', kind:'enum', options:['LOW','MATCH'], functional:false, init:'LOW'},
   // headphones — the ears (per-category buses are a later seam: route each to its own gain node)
   {container:'headphones', id:'master', label:'MASTER', kind:'enum', functional:true,
@@ -2940,7 +2944,7 @@ function widgetValue(wd){
 }
 function widgetValueText(wd){
   const v=widgetValue(wd);
-  return wd.kind==='range' ? (typeof v==='number'?v.toFixed(1):String(v)) : String(v);
+  return wd.kind==='range' ? (typeof v==='number'?v.toFixed(wd.step<0.1?3:1):String(v)) : String(v);   // fine dials keep their decimals
 }
 function adjustWidget(wd,dir){
   if(wd.kind==='enum'){
@@ -5277,7 +5281,8 @@ function tipBrief(it){                                  // the info square's row
     rows:[it.slots.length+' side slots','each fires alone']};
   if(it instanceof Armor) return {kind:'ARMOR · '+it.armorType.toUpperCase(),
     rows:[it.desc(), equip[it.armorType]===it ? (zoneFolds(it)?'equipped · [X] opens / closes it':'equipped') : 'equip it in the rig column']};
-  if(it&&it.widget) return {kind:'SETTING', rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired yet — turns freely']};
+  if(it&&it.widget) return {kind:'SETTING',
+    rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired yet — turns freely'].concat(it.tip?[it.tip]:[])};
   if(it.ration) return {kind:'RATION', rows:['+14 vitality','tastes like the war']};
   if(it.pill) return {kind:'LAST RESORT',
     rows:['every zealot carries one. now you do.','hold it · press [F] twice · the run ends']};
