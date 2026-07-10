@@ -4,9 +4,20 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-08 (build v22a).
+Last reviewed: 2026-07-10 (build v22h).
 
 ## Open
+
+### 0. Carve-height twin drift family
+- **Found by the v22e hideout probe.** Same pattern as the fixed gate lintel:
+  FENCE gate carve JS y-center 1.2 vs GLSL 1.3, FACADE door recess JS 1.2 vs
+  GLSL 1.25 (area1) — sub-10cm invisible ledges, imperceptible today.
+- ~~**Latent landmine:** GLSL `mapStatic` early-returns `levelSDF` for authored
+  levels, skipping the `uEdits`/`uGlobs` loops JS still applies.~~ **RESOLVED**
+  (scope wave): `mapStatic` now branches `levelSDF`/`mapProc` for the base and
+  BOTH feed the shared uEdits→uGlobs pass, matching
+  `mapWorldJS = applyGlobsJS(applySdfEditsJS(base))` exactly — PICK carves
+  render indoors. The authored-primitive height drifts above stay open.
 
 ### 1. Chrome load crash — "cannot access gameState before initialization"
 - **Where:** initial top-level script exec (TDZ). Not the earlier `Menus`
@@ -20,10 +31,23 @@ Last reviewed: 2026-07-08 (build v22a).
 
 ## Backlog (future — low priority)
 
+- **ENEMY AI REWORK** (owner-requested, v22i): the zealot brain is still
+  direct-steer patrol/suspicious/alarm. Wants a real pass — behaviors worthy
+  of the new body/telegraphs (flanking, cover use, coordination) now that
+  perception, gear, and the vision-cone contract are in place. Design with
+  the owner before building; no pathfinding/navmesh (waypoint discipline
+  stands).
 - Endless-valley crates are currently **decorative** — wire them into the real
   crate/loot system so they can be looted.
 - **Loot tables** should offer the full suite of available items — audit
   `lootTable` / `lootRegions` for coverage.
+- **Enemy-sourced burn WATCHED** (mod wave v1, deferred knob): the zealot spark
+  roll doses the player 15 burn ≈ up to 15 hp over 7.5s — real early-game bump.
+  If playtests say too hot, the one-liner is halving enemy-sourced doses in
+  `applyStatus`. See docs/MODS.md balance ledger.
+- **ORB tracer-slot hoarding** — a live orb holds a tracer slot for its full 6s
+  aloft (cap 4 orbs). Capped, flagged "monitor" in MODS.md; revisit if tracers
+  starve during orb play.
 
 ## Recently fixed
 
