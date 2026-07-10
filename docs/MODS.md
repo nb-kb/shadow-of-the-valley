@@ -19,6 +19,19 @@ Legend: **cat** = category, drives resolver semantics. **⚡** = `surcharge`
   proj core** consumes, then the charge resets. Multiple modifiers stack onto
   one core.
 - **proj** cores emit a shot using the pending charge.
+- **The relay convention (v22j):** FUSE/CONTACT wire the next proj core as their
+  relay payload (`relayNext`). Under a **non-laser carrier** that payload is
+  **housed** (`shot.housed`, recursive down the chain): the fire cycle passes
+  over it entirely (carrier→carrier — a housed BOOM can never bare-fire in your
+  face), enemy `tryShoot` and the continuous-beam head pick skip it too, and the
+  CARRIER's pull pre-pays the whole chain — each housed shot's assembled cost
+  (base + its own feeders' ⚡) plus its rounds (`roundsFor` recurses). REFUND on
+  the carrier waives the carrier's own base/lead only — the housed addition
+  stands (feed REFUND to the housed core itself to waive that link). POWDER
+  waives mod surcharges only, never housed core bases. **BEAM carriers are
+  exempt**: threads never cast `relayNext` (only wave/orb trains do), so under
+  a laser the old cycle-gate stands — the payload keeps its cycle seat and pays
+  at its own turn.
 - A lane whose trailing feeders end in a lone **BEAM** becomes a tactical laser;
   anything under it "vents" (wasted).
 
@@ -59,8 +72,8 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `heavy` | MASS | `{grav:1, dmg:6}` | 5 | `pr.vel.y-=grav*12*dt` (3838) | cheap |
 | `twin` | TWIN | `{twin:2}` | 12 | shot count `round(twin)`, **cap 3** | cheap |
 | `silentMod` | HUSH | `{silent:true}` | 3 | suppresses shot noise (3654) | cheap |
-| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane from the blast point (`relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT | cheap |
-| `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's FIRST TOUCH (world or flesh) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. TWIN first-copy rule applies (copies don't chain) | cheap |
+| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane from the blast point (`relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT. v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
+| `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's FIRST TOUCH (world or flesh) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. TWIN first-copy rule applies (copies don't chain). v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
 | `slowFuse` | TIMER | `{fuseAdd:1.5}` | 3 | `pend.fuse += 1.5` — more patience on the same fuse; stacks, and extends FUSE's 1.2s | cheap |
 | `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (3889) | cheap |
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
@@ -279,6 +292,47 @@ With CHAOS the wider 40° chain-lightning bias (`chaosBias`) takes over instead
 per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
 10.25⚡/s).
 
+## Balance ledger (v22j housed payloads)
+
+- **HOUSED-SKIP** (owner ask, verbatim: "Contact should skip the next core in
+  the chain when it's the payload, to prevent mis-firing payloads outside the
+  trigger") — every FUSE/CONTACT relay target under a **non-laser carrier** is
+  `housed` (`shot.housed`, recursive down the chain — a housed shot's own relay
+  is housed too, same rationale for FUSE as for CONTACT). The volley walk, the
+  continuous-beam head pick, the rack ▶/pips and zealot `tryShoot` all pass
+  over housed shots — a housed BOOM can never bare-fire in your face; it fires
+  ONLY from its carrier's impact/death. A lane with nothing live simply holds
+  (dry click, no hang); a lane's FIRST shot can never be housed, so all-housed
+  lanes are structurally unauthorable anyway.
+- **CARRIER-PAYS pricing** (powerful-but-paid): the old cycle gate — "the
+  relay'd core must be paid at its own turn or the column starves" — is gone
+  for housed shots, so the CARRIER's pull now pre-pays the whole chain: each
+  housed shot's assembled cost (base + its own feeders' ⚡, so a mid-chain
+  CONTACT's 5 is not a free mod) rides the root carrier's `cost`, and housed
+  ballistic payloads bill their rounds through `roundsFor` (recursive). Worked
+  prices: **[CONTACT,BOLT,BOOM] = 31⚡ + 1rd** per pull (explosive rounds — the
+  boom casts at the wound) · **[FUSE,BOLT,SPARK] = 22⚡ + 1rd** ·
+  **[CONTACT,SLUG,BOOM] = 31⚡ + 3rd** (slug is the CARRIER — keeps the +0.45s
+  cycle) · chained [CONTACT,BOLT,CONTACT,BOOM,SPARK] = 54⚡ + 1rd ·
+  [CONTACT,BOOM] leaves BOOM the carrier (26+5 = 31⚡, relay empty → vents) ·
+  [FUSE,BOLT,SLUG] = 4⚡ + 4rd, housed slug still dodges the cycle penalty.
+- **Waiver edges, decided:** REFUND on the carrier waives the carrier's OWN
+  base/lead only — the housed chain's addition stands (rack REFUND as the
+  housed core's feeder to waive that link instead: [CONTACT,BOLT,REFUND,BOOM]
+  = 15⚡). POWDER as carrier still waives only MOD surcharges, never housed
+  core bases ([CONTACT,POWDER,BOOM] = 26⚡ + 1rd). burstCam casts the chain per
+  burst copy at one ⚡ price — the same accepted T-soft as its stacked blasts.
+- **BEAM carriers exempt, deliberately:** threads never cast `relayNext` (only
+  wave/orb thread-trains do, per emitted copy), so under a laser carrier the
+  old cycle-gate stands — the payload keeps its cycle seat and its own price.
+  Housing it would either bill a never-cast payload into the thread rate (bolt
+  threads: a 26⚡ trap) or underprice a train's repeated casts (free lunch).
+- **HUD honesty:** housed chips read '⌂ housed' (their ⚡/lead already on the
+  carrier chip), tipBrief marks a racked housed core, the FREE tag hides on a
+  carrier billing a chain, and pips/rack ▶ never rest on a housed entry. No
+  new pend fields — `housed`/`housedRoot` live on the resolved shot, consumed
+  by the walk, `roundsFor`, and the readout. ZERO GLSL touched.
+
 ## The named traps (deliberate, all kept)
 
 | trap | build | what it looks like | what it is |
@@ -295,10 +349,12 @@ per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
    → floor 10⚡/0rd. CLOSED.
 2. REFUND+TWIN → refund waives BASE only; TWIN's 12 stands → twin BOOM = 22⚡
    not 12. CLOSED.
-3. POWDER feeding a relay chain → relay casts stay free (pre-existing design)
-   but the CYCLE GATE holds: the relay'd core sits in the lane cycle and must
-   be paid at its own turn or the column starves. Powder saves only its
-   feeders' sur. CLOSED, documented.
+3. POWDER feeding a relay chain → relay casts stay free at cast time, and
+   (superseded v22j) the cycle gate is GONE for housed payloads — the carrier
+   now pre-pays the chain's bases/rounds instead, and POWDER's waiver never
+   touches that addition (it trims only its feeders' mod surcharges). Same
+   money, collected at the pull instead of the payload's turn. CLOSED, re-shut
+   under the housed model.
 4. BELT-FEEDER+SLUG → trickle 1.1 rd/s < 3 rd/shot; the belt moves lead,
    never mints it. CLOSED.
 5. POWDER+BEAM → waiver disabled under `pend.laser` (else 2⚡/s lead-free

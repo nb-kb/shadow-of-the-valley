@@ -371,7 +371,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22i';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22l';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -694,7 +694,7 @@ uniform vec4  worldItemData[${RLIM.ITEMS}];  // x:type y:yaw z:held w:pitch
 uniform float uWorldTop;                    // nothing exists above this; upward rays stop at the slab exit
 uniform vec4  uVCrates[6];                  // valley gate cache: x,z,size,unused
 uniform int   uVCrateCount;
-uniform int   uExfilCount;                  // authored-level exfil smoke columns
+uniform int   uExfilCount;                  // exfil smoke columns — authored levels + the endless ring
 uniform vec4  uExfils[3];                   // xyz column base · w live — VISUAL ONLY, no JS twin
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
@@ -828,7 +828,7 @@ vec2 cellSDF(vec3 q, float h, bool isGate){
     float bx=fract(h*11.7)*4.0-2.0, bz=fract(h*19.3)*4.0-2.0;
     float shell=sdBox(q-vec3(bx,1.8,bz), vec3(5.0,1.8,3.6));
     shell=max(shell, -sdBox(q-vec3(bx,1.70,bz), vec3(4.6,1.68,3.2)));
-    shell=max(shell, -sdBox(q-vec3(bx,1.05,bz), vec3(5.4,1.05,0.75)));
+    shell=max(shell, -sdBox(q-vec3(bx,1.05,bz), vec3(5.8,1.05,0.75))); // door carve 0.8 past face: SDF trough must clear 0.34 player radius (v21q)
     if(shell<res.x) res=vec2(shell,3.0);
     float roof=sdBox(q-vec3(bx,3.75,bz), vec3(5.35,0.12,3.95));
     if(roof<res.x) res=vec2(roof,6.0);
@@ -856,7 +856,7 @@ vec2 cellSDF(vec3 q, float h, bool isGate){
     float gx=fract(h*23.9)*6.0-3.0;
     float ring=max(sdBox(q-vec3(0.0,1.6,0.0), vec3(6.5,1.6,6.5)),
                   -sdBox(q-vec3(0.0,1.7,0.0), vec3(5.9,1.8,5.9)));
-    ring=max(ring, -sdBox(q-vec3(gx,1.5,0.0), vec3(1.4,1.8,7.2)));
+    ring=max(ring, -sdBox(q-vec3(gx,1.5,0.0), vec3(1.4,1.8,7.4))); // gate carve 0.9 past face: SDF trough must clear 0.34 player radius (v21q)
     if(ring<res.x) res=vec2(ring,5.0);
   }else if(type>3.5){                                       // ruin
     float wx=fract(h*11.7)*6.0-3.0, wz=fract(h*19.3)*6.0-3.0;
@@ -1881,7 +1881,7 @@ function mapWorldBase(px,py,pz){
     const bx=fractJS(fr(h*11.7))*4-2, bz=fractJS(fr(h*19.3))*4-2;
     let shell=sdBoxJS(qx-bx,qy-1.8,qz-bz,5.0,1.8,3.6);
     shell=Math.max(shell,-sdBoxJS(qx-bx,qy-1.70,qz-bz,4.6,1.68,3.2));
-    shell=Math.max(shell,-sdBoxJS(qx-bx,qy-1.05,qz-bz,5.4,1.05,0.75));
+    shell=Math.max(shell,-sdBoxJS(qx-bx,qy-1.05,qz-bz,5.8,1.05,0.75)); // door carve 0.8 past face: SDF trough must clear 0.34 player radius (v21q)
     d=Math.min(d,shell);
     d=Math.min(d, sdBoxJS(qx-bx,qy-3.75,qz-bz,5.35,0.12,3.95));
   }else if(type===2){                                      // watchtower
@@ -1898,7 +1898,7 @@ function mapWorldBase(px,py,pz){
   }else if(type===3){                                      // walled yard
     const gx=fractJS(fr(h*23.9))*6-3;
     let ring=Math.max(sdBoxJS(qx,qy-1.6,qz,6.5,1.6,6.5), -sdBoxJS(qx,qy-1.7,qz,5.9,1.8,5.9));
-    ring=Math.max(ring, -sdBoxJS(qx-gx,qy-1.5,qz,1.4,1.8,7.2));
+    ring=Math.max(ring, -sdBoxJS(qx-gx,qy-1.5,qz,1.4,1.8,7.4)); // gate carve 0.9 past face: SDF trough must clear 0.34 player radius (v21q)
     d=Math.min(d,ring);
   }else if(type===4){                                      // ruin
     const wx=fractJS(fr(h*11.7))*6-3, wz=fractJS(fr(h*19.3))*6-3;
@@ -3726,13 +3726,14 @@ function setPrompt(prompt,html,show){
   else prompt.classList.remove('show');
 }
 function updateInteract(dt){
+  const _pr=document.getElementById('interactPrompt');
+  const _lvl=activeLevel;                                 // the exfil verb runs in EVERY world now — liveExfils gates it
+  const ex=updateExfil(dt);
+  if(activeLevel!==_lvl){ setPrompt(_pr,'',false); return; }  // exfil completed — extraction tore the world down mid-frame
+  if(ex){ setPrompt(_pr, _exfilHold>0
+      ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
+      : ex.label+' — hold <b>E</b> to extract', true); return; }
   if(activeLevel){
-    const _pr=document.getElementById('interactPrompt');
-    const ex=updateExfil(dt);
-    if(!activeLevel){ setPrompt(_pr,'',false); return; }  // exfil completed — travelTo tore the level down mid-frame
-    if(ex){ setPrompt(_pr, _exfilHold>0
-        ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
-        : ex.label+' — hold <b>E</b> to extract', true); return; }
     const cr = isPlayable() ? nearestCrate(0.9) : null;   // arm's reach of a box FACE — home boxes open too, the stash lives there
     if(cr && !uiOpen()){
       setPrompt(_pr, cr.stash?'THE STASH — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
@@ -3946,7 +3947,24 @@ function resolveLane(col,out){
       const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane};
       lane.shots.push(shot);
       const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY / CONTACT-RELAY: a fused core casts the NEXT core from its point of death; a contact core casts it from its FIRST TOUCH — no timer, no stick
-      if(prev&&(prev.pend.fuse>0||prev.pend.contact)&&!shot.pend.laser) prev.relayNext=shot;
+      if(prev&&(prev.pend.fuse>0||prev.pend.contact)&&!shot.pend.laser){
+        prev.relayNext=shot;
+        // HOUSED PAYLOAD (v22j): the relay target lives INSIDE its trigger — the
+        // fire cycle passes over it (carrier→carrier, no bare-fired BOOMs in your
+        // face) and the CARRIER's pull pre-pays the whole chain: each housed
+        // shot's assembled cost (base + its own feeders' ⚡ — REFUND/POWDER
+        // already folded per shot above) rides the chain root. Chains recurse:
+        // a housed shot's own relay is housed too, billed to the same root.
+        // BEAM carriers are EXEMPT — threads never cast relayNext (only wave/orb
+        // trains do, per emitted copy), so under a laser the old cycle-gate
+        // stands: the payload keeps its cycle seat and pays at its own turn.
+        if(!prev.pend.laser){
+          shot.housed=true;
+          const root=prev.housed?prev.housedRoot:prev;
+          shot.housedRoot=root;
+          root.cost+=shot.cost;
+        }
+      }
       for(const f of feeders) lane.flow.push({from:f,to:m});
       pend=freshPend(); feeders=[];
     }
@@ -3990,6 +4008,8 @@ function describeSequence(res){
     const chips=lane.seq.map(m=>{
       if(m.cat==='proj'){
         const sh=lane.shots[shotIdx++];
+        if(sh&&sh.housed) return '<span class="seqChip" style="border-color:#8e24aa;opacity:.75">'+m.name
+          +'<span class="seqCost">⌂ housed</span></span>';   // fires from the carrier's impact — its ⚡/lead already ride the carrier chip
         return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
           +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&!sh.pend.laser&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';
       }
@@ -4173,7 +4193,20 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
   }
 }
 function toolNoise(silent){ return silent?4:22; }
-function roundsFor(sh){ return sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0; }
+// CARRIER PAYS THE LEAD TOO: a housed ballistic payload (bolt/slug) bills its
+// rounds to the trigger pull. REFUND waives its OWN core's lead only — on the
+// carrier it never covers the housed chain; feeding REFUND to the housed core
+// itself is the way to waive that link.
+function roundsFor(sh){
+  const own=sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0;
+  return own+(sh.relayNext&&sh.relayNext.housed?roundsFor(sh.relayNext):0);
+}
+// the fire cycle never rests on a housed payload — first live entry at/after cyc
+function cycleShotIdx(lane,cyc){
+  const n=lane.shots.length;
+  for(let k=0;k<n;k++){ const i=(cyc+k)%n; if(!lane.shots[i].housed) return i; }
+  return -1;                                          // degenerate all-housed lane: nothing to fire
+}
 
 const _colsBuf=new Float32Array(32);
 let fireCooldown=0, reloadTimer=0;
@@ -4203,16 +4236,18 @@ function tryFirePlayer(dt){
     const n=lane.shots.length; if(!n) continue;
     const cyc=res.bare?0:lane.cycleRef.get();
     const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true);   // bare bolt still drinks from the rack's mag
-    let pick=-1;
+    let pick=-1, passed=false;                           // passed = a LIVE entry was walked over (housed ones are invisible, no click)
     for(let k=0;k<n;k++){
       const i=(cyc+k)%n, sh=lane.shots[i];
+      if(sh.housed) continue;                            // HOUSED: never a cycle entry — it fires from its carrier's impact, already paid there
       const bl=burstLaser(res,sh);                       // burst cam: a fed damage beam volleys pulses instead of flowing
-      if(sh.pend.laser&&!bl) continue;                   // continuous shots belong to the held-fire path
-      if(bl&&_laserBursts.some(q=>q.lane===lane)) continue;   // volley still walking: the lane holds
+      if(sh.pend.laser&&!bl){ passed=true; continue; }   // continuous shots belong to the held-fire path
+      if(bl&&_laserBursts.some(q=>q.lane===lane)){ passed=true; continue; }   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
       const okCharge=activeTool.charge>=(bl?Math.ceil((sh.cost||0)/3):(sh.cost||0));
       const okAmmo=rds===0||(mag&&mag.loaded>=rds);
-      if(okCharge&&okAmmo){ pick=i; if(k>0) skippedAny=true; break; }
+      if(okCharge&&okAmmo){ pick=i; if(passed) skippedAny=true; break; }
+      passed=true;
     }
     if(pick<0) continue;                                 // starved column: cycle HOLDS
     const sh=lane.shots[pick];
@@ -4347,7 +4382,9 @@ function runContinuousBeams(dt){
   for(let li=0;li<res.columns.length;li++){
     const lane=res.columns[li];
     const n=lane.shots.length; if(!n) continue;
-    const sh=lane.shots[lane.cycleRef.get()%n];
+    const hi=cycleShotIdx(lane,lane.cycleRef.get()%n);  // the cycle skips housed payloads here too — a pull can park cycleRef on one
+    if(hi<0) continue;
+    const sh=lane.shots[hi];
     if(!sh.pend.laser) continue;
     if(burstLaser(res,sh)) continue;                  // burst cam owns that lane: pulses, not a thread
     const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
@@ -5161,7 +5198,7 @@ class Zealot{
   tryShoot(dt,dist,seesLOS){
     if(this._dormant||this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
     const mag=toolMagazine(this.tool);
-    const pool=this.res.shots.filter(sh=>!sh.pend.laser);   // continuous threads are a player verb
+    const pool=this.res.shots.filter(sh=>!sh.pend.laser&&!sh.housed);   // continuous threads are a player verb; housed payloads fire only from their carrier's impact — zealots included
     if(!pool.length) return;
     const shot=pool[Math.floor(runRng()*pool.length)];
     if(shot.kind==='bolt'){
@@ -5212,6 +5249,23 @@ function placeGate(){
   GATE.cz=Math.floor(rr()*3)-1;               // stays inside the valley strip
   GATE.x=GATE.cx*20; GATE.z=GATE.cz*20;
 }
+let VALLEY_EXFIL=null;                        // the true endless ring's ONE door home — null on travel legs (their gate IS the exit)
+function placeValleyExfil(){
+  VALLEY_EXFIL=null;
+  if(TRAVEL) return;                          // a trek keeps no smoke — the gate leads where you're going
+  const rr=mulberry32((SEED.x*83492791)^(SEED.y*52915579));   // hashed off the ring seed, decorrelated from placeGate's stream
+  let x=90,z=0;
+  for(let t=0;t<16;t++){
+    const dist=60+rr()*60, ang=rr()*Math.PI*2;                // 60–120m out on a hashed bearing
+    let zz=Math.cos(ang)*dist;
+    if(Math.abs(zz)>38) zz=38*Math.sign(zz);                  // stay on the valley floor, off the wall roots
+    const xx=(Math.sin(ang)<0?-1:1)*Math.sqrt(dist*dist-zz*zz);   // the clamp keeps the drawn distance
+    if(Math.hypot(xx-GATE.x,zz-GATE.z)<40) continue;          // never in the gate's lap
+    x=xx; z=zz; break;
+  }
+  if(Math.hypot(x-GATE.x,z-GATE.z)<40){ x=-Math.sign(GATE.x||1)*90; z=0; }   // seeded refuge: dead opposite the gate
+  VALLEY_EXFIL={id:'exValley', x, z, y:Math.max(0,restOnSurface(x,30,z)), r:4.5, label:'THE WAY HOME'};   // base snapped to the dirt, same idiom as deployTo's authored snap
+}
 function resetLevel(){
   SEED.x=Math.floor(runRng()*900)+17;
   SEED.y=Math.floor(runRng()*900)+13;
@@ -5222,6 +5276,7 @@ function resetLevel(){
   decals.length=0; dynLights.length=0; noisePings.length=0;
   heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
+  placeValleyExfil();                         // after the edit wipe AND the spawn reset — the ground snap reads the fresh ring (mapWorldJS culls cell props by player cell)
   cameraYaw=Math.atan2(GATE.x,GATE.z);
   PARAMS.maxEnemies.v=Math.min(14, 4+2*legDepth());
   enemies.length=0;
@@ -5237,60 +5292,52 @@ function resetLevel(){
   seedLevelSpawns(LEVELS.valley);
   document.getElementById('hudDepth').textContent=roman(depth);
 }
-function initLoadout(){
-  equip={helmet:null,goggles:null,headphones:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
-  equip.rucksack=ITEM_DEFS.rucksack();
-  syncBagAlias(); zoneIdx=1;
-  const t=ITEM_DEFS.tool(); t.name='Foundling Tool';
-  autoPlace(ITEM_DEFS.cyanide(),bagGrid,BAG_COLS,BAG_ROWS);
-  const mag=ITEM_DEFS.magStd(); mag.loaded=8;
-  t.base.slots[0]=mag;                                  // slots are agnostic — the mag just sits there
-  t.base.slots[1]=ITEM_DEFS.barrelC();                  // starting barrel extends the main column
-  t.base.slots[2]=ITEM_DEFS.battS();                    // and a small battery to drink from
-  activeTool=t;
-  autoPlace(ITEM_DEFS.ammo9(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.watch(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.compass(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.manual(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.opticsDial(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.volumeKnob(),bagGrid,BAG_COLS,BAG_ROWS);
-  autoPlace(ITEM_DEFS.lantern(),bagGrid,BAG_COLS,BAG_ROWS);
+function seedStashKit(){                       // the kit waits in the STASH now, not on the body. NEW GAME and first
+  if(stashInv.flat().some(Boolean)) return;    // boot seed it; a stash that still holds ANYTHING is never stomped
+  const rk=ITEM_DEFS.rucksack();               // (so a hard-death restart keeps whatever home kept)
+  for(let i=0;i<2;i++){ const m=ITEM_DEFS.magStd(); m.loaded=8;
+    autoPlace(m,rk.inv,rk.invCols,rk.invRows); }   // two more mags ride INSIDE the bag — grab it, find them
+  const kit=[rk];
+  for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.name='Foundling Tool'; kit.push(t); }   // bare frames — no rack
+  const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // ONE mag flat is all 6x4 affords: the fixed kit takes 22 of 24 cells
+  kit.push(ITEM_DEFS.goggles(),ITEM_DEFS.headphones(),        // every settings utility, exactly once
+           ITEM_DEFS.watch(),ITEM_DEFS.compass(),ITEM_DEFS.photometer(),
+           ITEM_DEFS.opticsDial(),ITEM_DEFS.volumeKnob(),ITEM_DEFS.manual());
+  for(const it of kit) autoPlace(it,stashInv,STASH_COLS,STASH_ROWS);   // this order packs 24/24 — reorder and it spills
 }
 function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
   playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
-  initLoadout();
+  for(const k of EQUIP_SLOTS) equip[k]=null;   // you start with NOTHING on the body — the stash holds the kit
+  activeTool=null; holsterCur=-1;
+  syncBagAlias(); clampZone();
+  seedStashKit();                              // BEFORE deployTo — the hideout's guaranteed-spawn check reads the stash
   deployTo('hideout'); timeScale=1;
   refreshInvUI();
 }
 function newGame(){                            // the terminal's START OVER — a fresh run; the memory slots keep
   for(const row of stashInv) row.fill(null);   // the stash forgets, in place — the crate registry holds this array
   worldClock=0;                                // day one, dawn again — the only clock rewind outside boot
-  startRun();                                  // the boot path: starter kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
-  toast('NEW RUN — THE MEMORY SLOTS KEEP');
+  startRun();                                  // the boot path: empty hands, stash kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
+  toast('NEW RUN — THE KIT WAITS IN THE STASH');
 }
 function onDeath(){
   if(!_pillDeath && !(activeLevel&&activeLevel.id==='hideout')){   // a lost raid, not a lost life
     playSound('death');
-    // THE TEETH: the bag you carried is the valley's now. The rig on your back,
-    // the pockets sewn to it (belt·holster·harness), and the tool in your grip keep.
+    endBeam();                               // a mid-beam death: kill the hum and the beam-mode grip while the world still stands
+    // THE TEETH v2: everything is the valley's now — the rig, every pocket sewn to
+    // it, the tool in your grip. Only the stash at home remembers.
     // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
-    const rk=equip.rucksack;
-    if(rk&&rk.inv) for(const row of rk.inv) row.fill(null);
-    // a bag riding in a pocket is still a bag: pocketed containers come home GUTTED —
-    // no smuggling a second rucksack past the teeth (settings devices keep their dials)
-    for(const k of EQUIP_SLOTS){ const eq=equip[k];
-      if(k==='rucksack'||!eq||!eq.inv) continue;
-      for(const row of eq.inv) for(const ch of row)
-        if(ch&&ch.inv&&!ch.settingsDevice) for(const r2 of ch.inv) r2.fill(null);
-    }
+    for(const k of EQUIP_SLOTS) equip[k]=null;
+    activeTool=null; holsterCur=-1; reloadTimer=0;   // no wield, no draw memory, no reload landing on empty hands
+    syncBagAlias(); clampZone();             // bagGrid falls back to the 1x1 stub; the cursor keeps a legal zone
     if(!activeLevel) depth=1;                // the ring count died with the run — the next OPEN VALLEY starts at I
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
     playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
-    showBanner('THE VALLEY KEPT THE BAG');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
+    showBanner('THE VALLEY KEPT EVERYTHING');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
   _pillDeath=false;
@@ -5355,6 +5402,7 @@ function deployTo(levelId){
   else{ hl.textContent='Ring'; hv.textContent=roman(depth); }
   showBanner(L.name);
   if(L.kind==='authored'&&L.exfils.length) toast('REACH AN EXFIL — HOLD E INSIDE THE SMOKE');   // once per arrival, travelTo-style
+  else if(L.kind==='rings'&&!TRAVEL) toast('SMOKE MARKS THE WAY HOME — HOLD E INSIDE IT');      // the endless ring's own door out (legs get travelTo's toast)
   refreshInvUI();
 }
 function travelTo(dest){                      // THE LOOP: the valley is the land between places
@@ -5389,14 +5437,16 @@ function buildCrateRegistry(L){
     // VALLEY-CELL-CRATE twin of cellSDF's crate hash — same cells, same boxes, now openable
     const base=L.crateTiers||['common'];
     const tiers=legDepth()>=3?[...base,'rare','cores']:base;
-    for(let cy=-2;cy<=2;cy++) for(let cx=-10;cx<=10;cx++){
+    const fr=Math.fround;                       // GPU multiplies in f32 — mirror it (same rule as mapWorldBase)
+    const xw=Math.abs(GATE.cx)+14;              // gate walk + draw ring (10) + collide ring (4): every crate you can see or touch on the leg
+    for(let cy=-2;cy<=2;cy++) for(let cx=-xw;cx<=xw;cx++){
       if(cx===GATE.cx&&cy===GATE.cz) continue;
       const h=cellHash(cx+SEED.x, cy+SEED.y);
-      const type=Math.floor(h*5);
-      if(!(type<0.5||type>2.5)) continue;
+      const type=Math.floor(fr(h*5));
+      if(!(type===0||type>2)) continue;
       for(let k=0;k<3;k++){
-        if(((h*(13+7*k))%1)>=0.6) continue;
-        const cx0=((h*(29+11*k))%1)*14-7, cz0=((h*(53+17*k))%1)*14-7;
+        if(fractJS(fr(h*(13+7*k)))>=0.6) continue;
+        const cx0=fractJS(fr(h*(29+11*k)))*14-7, cz0=fractJS(fr(h*(53+17*k)))*14-7;
         add([cx*20+cx0, cy*20+cz0, 1.1], tiers);
       }
     }
@@ -5477,14 +5527,24 @@ function seedLevelSpawns(L){
   }
 }
 // exfiltration: stand in the circle, hold the verb, go home with the bag
+// THE ONE LIST: every exfil consumer (the verb, the smoke upload, the compass,
+// the sky-slab fold) reads liveExfils — never activeLevel.exfils directly.
+function liveExfils(){
+  if(activeLevel) return activeLevel.exfils;           // authored levels own theirs
+  return (!TRAVEL&&VALLEY_EXFIL)?[VALLEY_EXFIL]:[];    // the true endless ring keeps ONE; a travel leg keeps none
+}
 let _exfilHold=0;
 function updateExfil(dt){
-  if(!activeLevel||gameState!=='play'||!activeLevel.exfils.length) return null;
-  for(const ex of activeLevel.exfils){
+  const exs=liveExfils();
+  if(gameState!=='play'||!exs.length) return null;
+  for(const ex of exs){
     if(Math.hypot(playerPos.x-ex.x,playerPos.z-ex.z)<ex.r){
       if(down('interact')&&!heldWorld){
         _exfilHold+=dt;
-        if(_exfilHold>=3){ playSound('breach'); travelTo('hideout'); return null; }
+        if(_exfilHold>=3){ playSound('breach');
+          if(activeLevel) travelTo('hideout');         // a raid extraction treks home through the valley
+          else deployTo('hideout');                    // the endless ring extracts STRAIGHT home — a leg from here would only re-enter the loop
+          return null; }
       }else _exfilHold=Math.max(0,_exfilHold-dt*2);
       return ex;
     }
@@ -5530,7 +5590,7 @@ const TERM_SCREENS={
     {label:'BACK', screen:'saves'},
   ]}),
   newgame:()=>({title:'NEW GAME', rows:[            // the confirm gate — a stray press lands here, not on the wipe
-    {label:'YES — START OVER', meta:'memory slots keep', action:()=>{ closeTerminal(); newGame(); }},
+    {label:'YES — START OVER', meta:'memory slots keep · the kit waits in the stash', action:()=>{ closeTerminal(); newGame(); }},
     {label:'BACK', screen:'home'},
   ]}),
 };
@@ -5741,6 +5801,9 @@ function tipBrief(it){                                  // the info square's row
       :it.cat==='muzzle'?'MUZZLE PART'
       :it.cat==='util'?'UTILITY — whole tool':'STAT — whole tool';
     const rows=[];
+    // racked above a FUSE/CONTACT carrier? the resolved shot knows — read it honestly
+    if(it.cat==='proj'&&activeTool&&activeTool._res&&activeTool._res.shots.some(sh=>sh.core===it&&sh.housed))
+      rows.push('⌂ housed — fires from the carrier\'s impact; its ⚡ and lead ride the carrier\'s pull');
     if(e.base) rows.push('⚡'+e.base+' base');
     if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
     if(e.kind==='bolt') rows.push('+1 round per shot');
@@ -5765,9 +5828,9 @@ function tipBrief(it){                                  // the info square's row
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
     if(e.burst) rows.push(e.burst+'-round burst · beam lanes: '+e.burst+'-pulse laser burst');
     if(e.silenced||e.silent) rows.push('silenced');
-    if(e.fuse) rows.push('fused '+e.fuse+'s');
+    if(e.fuse){ rows.push('fused '+e.fuse+'s — the death casts the next core in the lane from the blast point'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); }
     if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
-    if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
+    if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
     if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
@@ -6177,7 +6240,7 @@ function renderRack(containerId,tool,focusIdx){
     const lane=laneByIdx[c.colIdx]||{};
     const it=c.ref?readRef(c.ref):null;
     const n=lane.shots?lane.shots.length:0;
-    const cyc=n&&lane.cycleRef?lane.cycleRef.get()%n:0;
+    const cyc=n&&lane.cycleRef?Math.max(0,cycleShotIdx(lane,lane.cycleRef.get()%n)):0;   // ▶ never rests on a housed payload
     const opts={muz:!!c.muzzle,
       structural:c.structural,
       vent: it&&lane.vented&&lane.vented.includes(it),
@@ -6272,18 +6335,20 @@ function updateToolReadout(){
   nm.textContent=activeTool.name.toUpperCase();
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
-    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS'); if(p.refund)tags.push('FREE');
+    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS');
+    if(p.refund&&!(s.relayNext&&s.relayNext.housed))tags.push('FREE');   // a carrier billing a housed chain is NOT free — refund waived its own base only
     if(p.bounce)tags.push('RIC'); if(p.pierce)tags.push('DRILL'); if(p.grav)tags.push('MASS'); if(p.vel>1)tags.push('SWIFT');
-    return (tags.length?tags.join('·')+' ':'')+s.kind.toUpperCase();
+    return (tags.length?tags.join('·')+' ':'')+(s.housed?'⌂':'')+s.kind.toUpperCase();
   }).join(' / ');
   md.textContent=(res.silenced?'SUPPRESSED ':'')+(res.auto?'AUTO ':'')+(res.burst>1?'BURST'+res.burst+' ':'')+kinds
     +(res.grip?' +GRIP':'')+(res.pulse?' +PUSH':'');
   // the fire cycle, visible: per COLUMN — the volley is one shot from each
   document.getElementById('trPips').innerHTML=res.columns.filter(l=>l.shots.length).map(lane=>{
     const n=lane.shots.length;
-    const cyc=res.bare?0:lane.cycleRef.get()%n;
+    const cyc=res.bare?0:cycleShotIdx(lane,lane.cycleRef.get()%n);   // ▶ marks the next LIVE entry — housed payloads never head the lane
     return lane.shots.map((sh,i)=>
-      '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
+      sh.housed?'<span class="off" style="opacity:.6">⌂'+sh.kind.toUpperCase()+'</span>'
+      :'<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
       +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
   }).join(' <span style="opacity:.4">‖</span> ');
   const cm=toolChargeMax(activeTool);
@@ -6824,7 +6889,7 @@ function frame(){
     for(const b of beamSegs) _top=Math.max(_top, b.a.y, b.b.y);
     for(const pr of projectiles) _top=Math.max(_top, pr.pos.y);
     for(const w of worldItems) if(!w.settled) _top=Math.max(_top, w.pos.y);
-    if(activeLevel) for(const ex of activeLevel.exfils) _top=Math.max(_top, (ex.y||0)+EXFIL_SMOKE_H);   // smoke pierces the authored slab
+    for(const ex of liveExfils()) _top=Math.max(_top, (ex.y||0)+EXFIL_SMOKE_H);   // smoke pierces the sky slab — authored or endless
     gl.uniform1f(U.uWorldTop, _top+0.6);
   }
   { // valley gate cache — static per mode
@@ -6833,7 +6898,7 @@ function frame(){
     for(let i=0;i<vc.length&&i<6;i++) gl.uniform4f(U.uVCrates[i], vc[i][0], vc[i][1], vc[i][2], 0);
   }
   { // exfil smoke columns — visual-only (walk-through); JS twin untouched by design
-    const exs=activeLevel?activeLevel.exfils:[];
+    const exs=liveExfils();
     const n=Math.min(3,exs.length);
     gl.uniform1i(U.uExfilCount,n);
     for(let i=0;i<n;i++) gl.uniform4f(U.uExfils[i], exs[i].x, exs[i].y||0, exs[i].z, 1);
@@ -6990,13 +7055,13 @@ function frame(){
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
     eye.style.filter='brightness('+(0.3+e*1.6).toFixed(2)+')';
     const comp=document.getElementById('compassStrip');
-    if(hasGadget('compass')&&gameState==='play'&&(!activeLevel||activeLevel.exfils.length)){
+    if(hasGadget('compass')&&gameState==='play'&&(!activeLevel||liveExfils().length)){
       comp.classList.remove('hidden');
-      // valley (travel legs included): the gate — the gate IS the way out on a leg.
-      // an authored raid steers to the nearest exfil instead.
+      // valley (endless AND travel legs): the gate — descending is the quest, and the
+      // endless exfil's own smoke is its finder. An authored raid steers to the nearest exfil.
       let tgt=GATE, lbl='BEACON';
       if(activeLevel){ lbl='EXFIL'; let bd=1e9;
-        for(const ex of activeLevel.exfils){ const d=Math.hypot(ex.x-playerPos.x,ex.z-playerPos.z); if(d<bd){ bd=d; tgt=ex; } }
+        for(const ex of liveExfils()){ const d=Math.hypot(ex.x-playerPos.x,ex.z-playerPos.z); if(d<bd){ bd=d; tgt=ex; } }
       }
       const ddx=tgt.x-playerPos.x, ddz=tgt.z-playerPos.z;
       const ang=(Math.atan2(ddx,ddz)-cameraYaw)*180/Math.PI;
@@ -7029,8 +7094,7 @@ function frame(){
 // BOOT
 // ============================================================
 updateDayNight();
-initLoadout();          // so the intro backdrop has a tool readout
-updateToolReadout();
+updateToolReadout();    // EMPTY HANDS on the intro backdrop — the kit waits in the stash now
 engineReady=true;       // every top-level let/const is initialized past this point
 frame();
 </script>
