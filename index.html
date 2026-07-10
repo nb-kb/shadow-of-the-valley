@@ -805,6 +805,25 @@ vec2 cellSDF(vec3 q, float h, bool isGate){
       }
     }
   }
+  if(type<0.5){                                             // open ground: cover dressing
+    float v=fract(h*43.0);
+    float px0=fract(h*37.0)*10.0-5.0, pz0=fract(h*47.0)*10.0-5.0;
+    if(v<0.35){                                             // jersey barrier L
+      float b1=sdBox(q-vec3(px0,0.55,pz0), vec3(2.2,0.55,0.35));
+      float b2=sdBox(q-vec3(px0+2.55,0.55,pz0+1.85), vec3(0.35,0.55,2.2));
+      float bar=min(b1,b2);
+      if(bar<res.x) res=vec2(bar,5.0);
+    }else if(v>0.72){                                       // truck wreck
+      bool fx=fract(h*61.0)<0.5;
+      vec3 tq=q-vec3(px0,0.0,pz0);
+      vec2 r2=fx? tq.xz : tq.zx;
+      float cont=max(abs(r2.x-0.7)-1.9, max(abs(tq.y-1.62)-1.05, abs(r2.y)-1.0));
+      float cab =max(abs(r2.x+2.55)-0.85, max(abs(tq.y-0.95)-0.75, abs(r2.y)-0.85));
+      float chas=max(abs(r2.x-0.2)-2.9, max(abs(tq.y-0.42)-0.18, abs(r2.y)-0.9));
+      float trk=min(cont,min(cab,chas));
+      if(trk<res.x) res=vec2(trk,18.0);
+    }
+  }
   if(type>0.5 && type<1.5){                                 // barracks
     float bx=fract(h*11.7)*4.0-2.0, bz=fract(h*19.3)*4.0-2.0;
     float shell=sdBox(q-vec3(bx,1.8,bz), vec3(5.0,1.8,3.6));
@@ -1835,6 +1854,21 @@ function mapWorldBase(px,py,pz){
         const cx0=fractJS(fr(h*(29+11*k)))*14-7, cz0=fractJS(fr(h*(53+17*k)))*14-7;
         d=Math.min(d, sdBoxJS(qx-cx0,qy-0.55,qz-cz0,0.55,0.55,0.55));
       }
+    }
+  }
+  if(type===0){                                            // open ground: cover dressing
+    const v=fractJS(fr(h*43));
+    const px0=fractJS(fr(h*37))*10-5, pz0=fractJS(fr(h*47))*10-5;
+    if(v<0.35){                                            // jersey barrier L
+      d=Math.min(d, sdBoxJS(qx-px0,qy-0.55,qz-pz0,2.2,0.55,0.35));
+      d=Math.min(d, sdBoxJS(qx-px0-2.55,qy-0.55,qz-pz0-1.85,0.35,0.55,2.2));
+    }else if(v>0.72){                                      // truck wreck
+      const fx2=fractJS(fr(h*61))<0.5;
+      const ax2=qx-px0, az2=qz-pz0;
+      const rX=fx2?ax2:az2, rZ=fx2?az2:ax2;
+      d=Math.min(d, Math.max(Math.abs(rX-0.7)-1.9, Math.max(Math.abs(qy-1.62)-1.05, Math.abs(rZ)-1.0)));
+      d=Math.min(d, Math.max(Math.abs(rX+2.55)-0.85, Math.max(Math.abs(qy-0.95)-0.75, Math.abs(rZ)-0.85)));
+      d=Math.min(d, Math.max(Math.abs(rX-0.2)-2.9, Math.max(Math.abs(qy-0.42)-0.18, Math.abs(rZ)-0.9)));
     }
   }
   if(type===1){                                            // barracks
