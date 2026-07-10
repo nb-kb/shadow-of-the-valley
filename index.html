@@ -3481,14 +3481,15 @@ function hasGadget(kind){
 // FOG EYES — a bank blinds the zealots too. ONE scale, shared by the AI rate,
 // the hard sight gate, and the photometer, so the drawn number never lies.
 function fogEye(){ return 1-0.65*fogW; }
-function effVision(){ return P('enemyVision')*fogEye(); }
+function dayEye(){ return 1+0.5*Math.max(0,-Math.cos(dayNight.t01*Math.PI*2)); } // sun eyes: 1.0 twilight/night … 1.5 noon — twin of updateDayNight's elev
+function effVision(){ return P('enemyVision')*fogEye()*dayEye(); }
 // PHOTOMETER MATH — inverts the zealot perception line (Zealot.update):
 //   rate = exposure * (effVision/dist) * motion, accumulating only while rate > 0.12.
 // Standing+quiet motion is 0.6 → dist = exposure*effVision*5. Floor 2m; cap at the
-// 34m sight gate (fog-scaled, same as the AI's). Assumes the zealot is LOOKING —
+// 34m sight gate (fog·dayEye-scaled, same as the AI's). Assumes the zealot is LOOKING —
 // the cone is their problem, not the light's.
 function spotDistance(){
-  return clamp(playerPos.exposure*effVision()*0.6/0.12, 2, 34*fogEye());
+  return clamp(playerPos.exposure*effVision()*0.6/0.12, 2, 34*fogEye()*dayEye());
 }
 
 // ============================================================
@@ -4831,7 +4832,7 @@ class Zealot{
     const dx=px-this.position.x, dz=pz-this.position.z;
     const dist=Math.hypot(dx,dz);
     const eyeY=this.position.y+1.55;
-    const seesLOS = dist<34*fogEye() && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz));
+    const seesLOS = dist<34*fogEye()*dayEye() && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz));
     const fwdX=Math.sin(this.yaw), fwdZ=Math.cos(this.yaw);
     const cone=(fwdX*dx+fwdZ*dz)/Math.max(0.001,dist);
     const fovCos=Math.cos((P('enemyFovDeg')*Math.PI/180)/2);
