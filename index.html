@@ -2044,7 +2044,7 @@ LEVELS.area1={
               'platS','platS','beltFeeder'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
-              'barrelC','heavyBarrel','serrated','boomerangMod','homingMod','refundMod'],
+              'barrelC','heavyBarrel','serrated','boomerangMod','homingMod','refundMod','chaoticMod'],
       cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore','boomCore','powderCore','sawCore','slugCore','waveCore','orbCore'],
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
               'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
@@ -2854,6 +2854,7 @@ const ITEM_DEFS={
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core hunts the nearest warm thing ahead of it — hard turns, honest ones. Cover still works · +7⚡'),
   refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:10},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +10⚡, never waived'),
+  chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core forgets the straight line. Threads arc like lightning; with SEEKER the arcs bite the nearest warm thing · +6⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
@@ -2872,7 +2873,7 @@ for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
 const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
                 'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter','contactMod','slowFuse','boomerangMod','homingMod',
                 'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
-                'barrelC','barrelU','barrelR','platS','platM','battS','battM','scope2x','scope3x','waveCore'];
+                'barrelC','barrelU','barrelR','platS','platM','battS','battM','scope2x','scope3x','waveCore','chaoticMod'];
 
 // ============================================================
 // INVENTORY GRIDS (Tarkov-style, mouse + cursor driven)
@@ -3712,7 +3713,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0,chaos:0}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
 function foldFrame(out,m){
   const e=m.effect;
@@ -3770,6 +3771,7 @@ function resolveLane(col,out){
       if(e.boomerang) pend.boomerang=true;
       if(e.homing) pend.homing+=e.homing;              // stacked SEEKERs turn harder
       if(e.refund){ pend.refund=true; pend.surchargeHard+=e.surcharge||0; }   // REFUND's own ⚡ is the one no core forgives
+      if(e.chaos) pend.chaos+=e.chaos;                 // stacked CHAOS wanders wider
       pend.surcharge+=e.surcharge||0;
       feeders.push(m);
     }else if(m.cat==='proj'){
@@ -3979,8 +3981,8 @@ function emitProjectile(owner,origin,dir,shot,base,src){
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
-      burn:p.burn||0, bleed:!!p.bleed,
-      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[1.2,1.2,0.9]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[1.6,1.2,0.4]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; saw hot steel, slug hot brass sum >2.8 — heavy draws thick
+      burn:p.burn||0, bleed:!!p.bleed, chaos:p.chaos||0,
+      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[1.2,1.2,0.9]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[1.6,1.2,0.4]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; saw hot steel, slug hot brass sum >2.8 — heavy draws thick
       silent:p.silent||base.silenced,
     });
   }
@@ -4089,9 +4091,9 @@ function fireDownEff(){ return physgunRes()?_pgFire:down('fire'); }
 function firePressedEff(){ return physgunRes()?_pgFireEdge:pressed('fire'); }
 const _beamLanes=new Map();               // laneIdx -> {acc, engaged}
 const _jDir=new Vec3(0,0,0);
-// dir tilted 0.04–0.08 rad at a random azimuth — the unstable-beam wander
-function jitterDir(f,out){
-  const th=0.04+runRng()*0.04, ph=runRng()*6.2831853;
+// dir tilted th rad at a random azimuth — the unstable-beam wander
+function tiltDir(f,th,out){
+  const ph=runRng()*6.2831853;
   let ux=f.z, uz=-f.x, ul=Math.hypot(ux,uz);          // ⊥ f, lying flat
   if(ul<0.001){ ux=1; uz=0; ul=1; }
   ux/=ul; uz/=ul;
@@ -4099,6 +4101,8 @@ function jitterDir(f,out){
   const s=Math.sin(th), c=Math.cos(th), cp=Math.cos(ph), sp=Math.sin(ph);
   return out.set(f.x*c+(ux*cp+vx*sp)*s, f.y*c+vy*sp*s, f.z*c+(uz*cp+vz*sp)*s);
 }
+// 0.04–0.08 rad, scaled ×sc — CHAOS widens the wander (×(1+0.6·chaos))
+function jitterDir(f,out,sc){ return tiltDir(f,(0.04+runRng()*0.04)*(sc||1),out); }
 // one-frame beam flashes (twin strands, laser pulses) budget themselves against the
 // tracer pool: 12 slots minus a 2-slot floor kept for projectile tracers minus every
 // seg still uploading this frame. A flash carries its frame's clock (lastT): stale
@@ -4107,6 +4111,37 @@ function flashHeadroom(){
   let n=RLIM.TRACERS-2;
   for(const s of beamSegs) if(!s.flash||s.flash===lastT) n--;
   return n;
+}
+// CHAIN LIGHTNING SCAN — nearest live warmth within 45m / ~40° of f (SEEKER's cone,
+// no LOS); returns the biased dir (f + unit-to-mark, normalized) or f untouched.
+function chaosBias(o,f){
+  let bx=0,by=0,bz=0,best=45;
+  for(const en of enemies){
+    if(en.health<=0||en._dormant) continue;
+    const dx=en.position.x-o.x, dy=(en.position.y+0.95)-o.y, dz=en.position.z-o.z;
+    const d=Math.hypot(dx,dy,dz);
+    if(d>=best||d<0.001||(dx*f.x+dy*f.y+dz*f.z)/d<0.766) continue;
+    best=d; bx=dx/d; by=dy/d; bz=dz/d;
+  }
+  return best<45?new Vec3(f.x+bx,f.y+by,f.z+bz).normalize():f;
+}
+// CHAOS FLASH — one strand drawn as J=3 jointed one-frame segs (lightning) when the
+// pool allows (flashHeadroom>=3 per strand), else one straight flash. Joints starve
+// before strands, strands before the aim thread — never breaches RLIM.TRACERS.
+function pushJaggedSeg(a,b,col,chaos,dt){
+  if(flashHeadroom()<3){ beamSegs.push({a,b,col,ttl:dt+0.001,flash:lastT}); return; }
+  const jx=b.x-a.x, jy=b.y-a.y, jz=b.z-a.z, jl=Math.hypot(jx,jy,jz)||1;
+  let ux=jz, uz=-jx, ul=Math.hypot(ux,uz); if(ul<0.001){ ux=1; uz=0; ul=1; } ux/=ul; uz/=ul;
+  const vx=jy/jl*uz, vy=(jz*ux-jx*uz)/jl, vz=-jy/jl*ux;   // seg × u — the climbing lateral
+  const amp=0.35+0.35*chaos;
+  let p=a;
+  for(let j=1;j<=3;j++){
+    let q=b;
+    if(j<3){ const o1=(runRng()-0.5)*amp, o2=(runRng()-0.5)*amp;
+      q=new Vec3(a.x+jx*j/3+ux*o1+vx*o2, a.y+jy*j/3+vy*o2, a.z+jz*j/3+uz*o1+vz*o2); }
+    beamSegs.push({a:p,b:q,col,ttl:dt+0.001,flash:lastT});
+    p=q;
+  }
 }
 function runContinuousBeams(dt){
   const res=activeTool?activeTool._res:null;
@@ -4136,8 +4171,13 @@ function runContinuousBeams(dt){
     let K=(sh.kind==='grip'||sh.kind==='pick')?1:Math.max(1,Math.round(sh.pend.twin));
     if(K>1) K=Math.max(1,Math.min(K,flashHeadroom()));
     const mul=K>1?0.65:1;
+    // CHAOS: damage threads arc like lightning — grip/pick stay straight BY RULE
+    // (a jittering physgun is nausea). With SEEKER: CHAIN LIGHTNING — the arc
+    // leans at the nearest warm thing, scanned once per lane-frame.
+    const chaos=(sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw')?(sh.pend.chaos||0):0;
+    const fb=(chaos&&sh.pend.homing>0)?chaosBias(o,f):f;
     for(let k=0;k<K;k++){
-      const dir=K>1?jitterDir(f,_jDir):f;
+      const dir=chaos?jitterDir(fb,_jDir,1+0.6*chaos):(K>1?jitterDir(f,_jDir):f);   // chaos: the aim WANDERS even at K===1 — that is the price
       let t=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);
       if(sh.kind==='saw') t=Math.min(t,4.0);          // CHAINSAW: the teeth die at arm's length
       // enemies intercept the thread — head tested above the body, same ray foot
@@ -4202,7 +4242,8 @@ function runContinuousBeams(dt){
       let bEnd=end;
       if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
         else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z); }
-      if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
+      if(chaos) pushJaggedSeg(muzzleWorld(),bEnd,col,chaos,dt);   // lightning: jointed one-frame strand, joints starve first
+      else if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
       else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
       if(k===0) addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
     }
@@ -4254,9 +4295,10 @@ function fireHitscan(owner,origin,dir,shot,res,dt){
     pierceLeft--;
   }
   const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
-  beamSegs.push({a:origin.clone?origin.clone():new Vec3(origin.x,origin.y,origin.z),b:end,
-                 col:shot.kind==='spark'?[3.0,1.1,2.6]:shot.kind==='boom'?[3.2,1.0,0.5]:[3.2,0.9,1.1],
-                 ttl:dt+0.001,flash:lastT});
+  const fa=origin.clone?origin.clone():new Vec3(origin.x,origin.y,origin.z);
+  const fcol=shot.kind==='spark'?[3.0,1.1,2.6]:shot.kind==='boom'?[3.2,1.0,0.5]:[3.2,0.9,1.1];
+  if(p.chaos) pushJaggedSeg(fa,end,fcol,p.chaos,dt);    // CHAOS pulse flashes jagged — same headroom gate
+  else beamSegs.push({a:fa,b:end,col:fcol,ttl:dt+0.001,flash:lastT});
   if(shot.kind==='spark'){                              // remote detonation at the dot
     explode({pos:end,dmg,owner,burn:p.burn,bleed:p.bleed});
   }else if(shot.kind==='boom'){
@@ -4287,7 +4329,12 @@ function runBurstLasers(dt){
       const cost=Math.ceil((q.sh.cost||0)/3);
       if(activeTool.charge<cost){ q.left=0; playSound('click'); break; }              // browned out mid-volley
       wearRoll(spendCharge(activeTool,cost));
-      const f=camForward(), origin=muzzleWorld();       // each pulse re-reads the aim — the burst walks with the crosshair
+      let f=camForward(); const origin=muzzleWorld();   // each pulse re-reads the aim — the burst walks with the crosshair
+      const ch=q.sh.pend.chaos||0;
+      if(ch){
+        if(q.sh.pend.homing>0) f=chaosBias(camPos(),f);            // CHAIN LIGHTNING: the pulse leans at the warm first
+        f=tiltDir(f,(runRng()-0.5)*0.06*ch,new Vec3(0,0,0));       // then forgets the straight line
+      }
       let rays=Math.max(1,Math.round(q.sh.pend.twin));
       if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
       for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f,_jDir):f,q.sh,q.res,dt);
@@ -4435,6 +4482,12 @@ function updateProjectiles(dt){
         }
         if(best<45) steerPr(pr,pr.pos.x+tx,pr.pos.y+ty,pr.pos.z+tz,3.2*pr.homing*dt);
       }
+    }
+    // CHAOS: the flight forgets the straight line — composes with SEEKER into a
+    // drunken missile (both steers run). The way home flies true (!returning).
+    if(pr.chaos&&!pr.returning){
+      const sp=pr.vel.length();
+      if(sp>0.001) steerPr(pr, pr.pos.x+pr.vel.x/sp+(runRng()-0.5)*1.6, pr.pos.y+pr.vel.y/sp+(runRng()-0.5)*1.6, pr.pos.z+pr.vel.z/sp+(runRng()-0.5)*1.6, 2.4*pr.chaos*dt);
     }
     const steps=3, sdt=dt/steps;
     let dead=false;
@@ -4709,7 +4762,7 @@ class Zealot{
     // rarely, and only ever the common one
     if(runRng()<(depth>=2?0.35:0.12) && bi<t.base.slots.length){
       const b=ITEM_DEFS[depth>=2&&runRng()>=0.7?'barrelU':'barrelC']();
-      if(runRng()<0.6) b.slots[0]=ITEM_DEFS[['dmgPlus','velPlus','twin','splinter','homingMod','boomerangMod'][Math.floor(runRng()*6)]]();   // seekers/returns are telegraphed by tracer tint
+      if(runRng()<0.6) b.slots[0]=ITEM_DEFS[['dmgPlus','velPlus','twin','splinter','homingMod','boomerangMod','chaoticMod'][Math.floor(runRng()*7)]]();   // seekers/returns/wobble are telegraphed by tracer tint
       b.slots[1]=ITEM_DEFS[runRng()<0.75?'boltCore':'sparkCore']();
       t.base.slots[bi++]=b;
     }
@@ -5468,6 +5521,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.powder) rows.push('feeders ride free — their ⚡ surcharges are waived · threads refuse: full price under BEAM');
     if(e.refund) rows.push('next core: base ⚡ waived · mag-fed cores fire without lead · this +10⚡ is never waived');
     if(e.beltFeed) rows.push('chambers 1 round / 0.9s from your pockets · ticks softly — a suppressed tool feeds silent');
+    if(e.chaos){ rows.push('flight forgets the straight line · threads arc like lightning'); rows.push('with SEEKER: every arc bites the nearest warm thing'); }
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
@@ -5985,7 +6039,7 @@ function updateToolReadout(){
   nm.textContent=activeTool.name.toUpperCase();
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
-    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.refund)tags.push('FREE');
+    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS'); if(p.refund)tags.push('FREE');
     if(p.bounce)tags.push('RIC'); if(p.pierce)tags.push('DRILL'); if(p.grav)tags.push('MASS'); if(p.vel>1)tags.push('SWIFT');
     return (tags.length?tags.join('·')+' ':'')+s.kind.toUpperCase();
   }).join(' / ');
