@@ -31,6 +31,12 @@ Last reviewed: 2026-07-10 (build v22h).
 
 ## Backlog (future — low priority)
 
+- **ENEMY AI REWORK** (owner-requested, v22i): the zealot brain is still
+  direct-steer patrol/suspicious/alarm. Wants a real pass — behaviors worthy
+  of the new body/telegraphs (flanking, cover use, coordination) now that
+  perception, gear, and the vision-cone contract are in place. Design with
+  the owner before building; no pathfinding/navmesh (waypoint discipline
+  stands).
 - Endless-valley crates are currently **decorative** — wire them into the real
   crate/loot system so they can be looted.
 - **Loot tables** should offer the full suite of available items — audit
