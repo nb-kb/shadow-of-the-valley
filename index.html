@@ -1927,6 +1927,7 @@ const playerPos={
 };
 let cameraYaw=0.6, cameraPitch=0;
 let gameTime=0, timeScale=1, runClock=0, kills=0, depth=1;
+let worldClock=0;                             // the sun's clock — ticks with gameTime but survives every deploy; only boot · NEW GAME · the debug time-of-day slider rewind it (gameTime stays the anim/iTime phase source)
 let highestDetection=0;
 
 // ======================================================================================
@@ -2397,7 +2398,7 @@ const dayNight={ lightDir:new Vec3(0,1,0.3), lightCol:[1,1,1], ambient:0.3,
                  skyHi:[0.3,0.45,0.7], skyLo:[0.7,0.6,0.5], sunUp:true, t01:0.32, clock:'07:40' };
 
 function updateDayNight(){
-  const t01 = modJS(P('timeOfDay') + gameTime/P('dayLength'), 1.0);
+  const t01 = modJS(P('timeOfDay') + worldClock/P('dayLength'), 1.0);
   dayNight.t01=t01;
   const hour=t01*24;
   dayNight.clock=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
@@ -5724,7 +5725,7 @@ function buildDebugPanel(){
     const val=document.createElement('span'); val.textContent=p.v;
     inp.addEventListener('input',()=>{ p.v=parseFloat(inp.value); val.textContent=p.v;
       if(k==='renderScale') resize();
-      if(k==='timeOfDay') gameTime=0;
+      if(k==='timeOfDay') worldClock=0;   // the slider IS the clock: zero the offset so t01 lands on the dial — anim phases (gameTime/iTime) keep running
     });
     row.appendChild(lbl); row.appendChild(inp); row.appendChild(val);
     pp.appendChild(row);
@@ -6039,7 +6040,7 @@ function frame(){
 
   const live = isPlayable() && !pausedUI();
   if(live){
-    runClock+=dt; gameTime+=dt;
+    runClock+=dt; gameTime+=dt; worldClock+=dt;
     updatePlayer(dt);
     if(!uiMenusOpen()){
       updateInteract(dt);
