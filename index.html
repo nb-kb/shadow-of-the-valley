@@ -371,7 +371,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22i';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22j';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -3946,7 +3946,24 @@ function resolveLane(col,out){
       const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane};
       lane.shots.push(shot);
       const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY / CONTACT-RELAY: a fused core casts the NEXT core from its point of death; a contact core casts it from its FIRST TOUCH — no timer, no stick
-      if(prev&&(prev.pend.fuse>0||prev.pend.contact)&&!shot.pend.laser) prev.relayNext=shot;
+      if(prev&&(prev.pend.fuse>0||prev.pend.contact)&&!shot.pend.laser){
+        prev.relayNext=shot;
+        // HOUSED PAYLOAD (v22j): the relay target lives INSIDE its trigger — the
+        // fire cycle passes over it (carrier→carrier, no bare-fired BOOMs in your
+        // face) and the CARRIER's pull pre-pays the whole chain: each housed
+        // shot's assembled cost (base + its own feeders' ⚡ — REFUND/POWDER
+        // already folded per shot above) rides the chain root. Chains recurse:
+        // a housed shot's own relay is housed too, billed to the same root.
+        // BEAM carriers are EXEMPT — threads never cast relayNext (only wave/orb
+        // trains do, per emitted copy), so under a laser the old cycle-gate
+        // stands: the payload keeps its cycle seat and pays at its own turn.
+        if(!prev.pend.laser){
+          shot.housed=true;
+          const root=prev.housed?prev.housedRoot:prev;
+          shot.housedRoot=root;
+          root.cost+=shot.cost;
+        }
+      }
       for(const f of feeders) lane.flow.push({from:f,to:m});
       pend=freshPend(); feeders=[];
     }
@@ -3990,6 +4007,8 @@ function describeSequence(res){
     const chips=lane.seq.map(m=>{
       if(m.cat==='proj'){
         const sh=lane.shots[shotIdx++];
+        if(sh&&sh.housed) return '<span class="seqChip" style="border-color:#8e24aa;opacity:.75">'+m.name
+          +'<span class="seqCost">⌂ housed</span></span>';   // fires from the carrier's impact — its ⚡/lead already ride the carrier chip
         return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
           +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&!sh.pend.laser&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';
       }
@@ -4173,7 +4192,20 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
   }
 }
 function toolNoise(silent){ return silent?4:22; }
-function roundsFor(sh){ return sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0; }
+// CARRIER PAYS THE LEAD TOO: a housed ballistic payload (bolt/slug) bills its
+// rounds to the trigger pull. REFUND waives its OWN core's lead only — on the
+// carrier it never covers the housed chain; feeding REFUND to the housed core
+// itself is the way to waive that link.
+function roundsFor(sh){
+  const own=sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0;
+  return own+(sh.relayNext&&sh.relayNext.housed?roundsFor(sh.relayNext):0);
+}
+// the fire cycle never rests on a housed payload — first live entry at/after cyc
+function cycleShotIdx(lane,cyc){
+  const n=lane.shots.length;
+  for(let k=0;k<n;k++){ const i=(cyc+k)%n; if(!lane.shots[i].housed) return i; }
+  return -1;                                          // degenerate all-housed lane: nothing to fire
+}
 
 const _colsBuf=new Float32Array(32);
 let fireCooldown=0, reloadTimer=0;
@@ -4203,16 +4235,18 @@ function tryFirePlayer(dt){
     const n=lane.shots.length; if(!n) continue;
     const cyc=res.bare?0:lane.cycleRef.get();
     const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true);   // bare bolt still drinks from the rack's mag
-    let pick=-1;
+    let pick=-1, passed=false;                           // passed = a LIVE entry was walked over (housed ones are invisible, no click)
     for(let k=0;k<n;k++){
       const i=(cyc+k)%n, sh=lane.shots[i];
+      if(sh.housed) continue;                            // HOUSED: never a cycle entry — it fires from its carrier's impact, already paid there
       const bl=burstLaser(res,sh);                       // burst cam: a fed damage beam volleys pulses instead of flowing
-      if(sh.pend.laser&&!bl) continue;                   // continuous shots belong to the held-fire path
-      if(bl&&_laserBursts.some(q=>q.lane===lane)) continue;   // volley still walking: the lane holds
+      if(sh.pend.laser&&!bl){ passed=true; continue; }   // continuous shots belong to the held-fire path
+      if(bl&&_laserBursts.some(q=>q.lane===lane)){ passed=true; continue; }   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
       const okCharge=activeTool.charge>=(bl?Math.ceil((sh.cost||0)/3):(sh.cost||0));
       const okAmmo=rds===0||(mag&&mag.loaded>=rds);
-      if(okCharge&&okAmmo){ pick=i; if(k>0) skippedAny=true; break; }
+      if(okCharge&&okAmmo){ pick=i; if(passed) skippedAny=true; break; }
+      passed=true;
     }
     if(pick<0) continue;                                 // starved column: cycle HOLDS
     const sh=lane.shots[pick];
@@ -4347,7 +4381,9 @@ function runContinuousBeams(dt){
   for(let li=0;li<res.columns.length;li++){
     const lane=res.columns[li];
     const n=lane.shots.length; if(!n) continue;
-    const sh=lane.shots[lane.cycleRef.get()%n];
+    const hi=cycleShotIdx(lane,lane.cycleRef.get()%n);  // the cycle skips housed payloads here too — a pull can park cycleRef on one
+    if(hi<0) continue;
+    const sh=lane.shots[hi];
     if(!sh.pend.laser) continue;
     if(burstLaser(res,sh)) continue;                  // burst cam owns that lane: pulses, not a thread
     const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
@@ -5161,7 +5197,7 @@ class Zealot{
   tryShoot(dt,dist,seesLOS){
     if(this._dormant||this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
     const mag=toolMagazine(this.tool);
-    const pool=this.res.shots.filter(sh=>!sh.pend.laser);   // continuous threads are a player verb
+    const pool=this.res.shots.filter(sh=>!sh.pend.laser&&!sh.housed);   // continuous threads are a player verb; housed payloads fire only from their carrier's impact — zealots included
     if(!pool.length) return;
     const shot=pool[Math.floor(runRng()*pool.length)];
     if(shot.kind==='bolt'){
@@ -5741,6 +5777,9 @@ function tipBrief(it){                                  // the info square's row
       :it.cat==='muzzle'?'MUZZLE PART'
       :it.cat==='util'?'UTILITY — whole tool':'STAT — whole tool';
     const rows=[];
+    // racked above a FUSE/CONTACT carrier? the resolved shot knows — read it honestly
+    if(it.cat==='proj'&&activeTool&&activeTool._res&&activeTool._res.shots.some(sh=>sh.core===it&&sh.housed))
+      rows.push('⌂ housed — fires from the carrier\'s impact; its ⚡ and lead ride the carrier\'s pull');
     if(e.base) rows.push('⚡'+e.base+' base');
     if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
     if(e.kind==='bolt') rows.push('+1 round per shot');
@@ -5765,9 +5804,9 @@ function tipBrief(it){                                  // the info square's row
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
     if(e.burst) rows.push(e.burst+'-round burst · beam lanes: '+e.burst+'-pulse laser burst');
     if(e.silenced||e.silent) rows.push('silenced');
-    if(e.fuse) rows.push('fused '+e.fuse+'s');
+    if(e.fuse){ rows.push('fused '+e.fuse+'s — the death casts the next core in the lane from the blast point'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); }
     if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
-    if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
+    if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
     if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
@@ -6177,7 +6216,7 @@ function renderRack(containerId,tool,focusIdx){
     const lane=laneByIdx[c.colIdx]||{};
     const it=c.ref?readRef(c.ref):null;
     const n=lane.shots?lane.shots.length:0;
-    const cyc=n&&lane.cycleRef?lane.cycleRef.get()%n:0;
+    const cyc=n&&lane.cycleRef?Math.max(0,cycleShotIdx(lane,lane.cycleRef.get()%n)):0;   // ▶ never rests on a housed payload
     const opts={muz:!!c.muzzle,
       structural:c.structural,
       vent: it&&lane.vented&&lane.vented.includes(it),
@@ -6272,18 +6311,20 @@ function updateToolReadout(){
   nm.textContent=activeTool.name.toUpperCase();
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
-    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS'); if(p.refund)tags.push('FREE');
+    if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS');
+    if(p.refund&&!(s.relayNext&&s.relayNext.housed))tags.push('FREE');   // a carrier billing a housed chain is NOT free — refund waived its own base only
     if(p.bounce)tags.push('RIC'); if(p.pierce)tags.push('DRILL'); if(p.grav)tags.push('MASS'); if(p.vel>1)tags.push('SWIFT');
-    return (tags.length?tags.join('·')+' ':'')+s.kind.toUpperCase();
+    return (tags.length?tags.join('·')+' ':'')+(s.housed?'⌂':'')+s.kind.toUpperCase();
   }).join(' / ');
   md.textContent=(res.silenced?'SUPPRESSED ':'')+(res.auto?'AUTO ':'')+(res.burst>1?'BURST'+res.burst+' ':'')+kinds
     +(res.grip?' +GRIP':'')+(res.pulse?' +PUSH':'');
   // the fire cycle, visible: per COLUMN — the volley is one shot from each
   document.getElementById('trPips').innerHTML=res.columns.filter(l=>l.shots.length).map(lane=>{
     const n=lane.shots.length;
-    const cyc=res.bare?0:lane.cycleRef.get()%n;
+    const cyc=res.bare?0:cycleShotIdx(lane,lane.cycleRef.get()%n);   // ▶ marks the next LIVE entry — housed payloads never head the lane
     return lane.shots.map((sh,i)=>
-      '<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
+      sh.housed?'<span class="off" style="opacity:.6">⌂'+sh.kind.toUpperCase()+'</span>'
+      :'<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
       +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
   }).join(' <span style="opacity:.4">‖</span> ');
   const cm=toolChargeMax(activeTool);
