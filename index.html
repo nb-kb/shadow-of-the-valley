@@ -4810,6 +4810,27 @@ class Zealot{
     const q=clamp((legDepth()-1)/5,0,1);               // 0 at the door · 1 by ring VI — travel legs dress Ring I
     this.helm   = runRng()<0.25+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'helmetSteel':'helmetCap']() : null;
     this.plates = runRng()<0.20+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'platesH':'platesL']() : null;
+    // ---- RUCKSACK ROLL: ~55% hump a REAL bag seeded like a crate on legs.
+    // ---- it drops WORN in die() and CARRIES the ammo roll — fewer world items.
+    this.pack   = runRng()<0.55 ? this.rollPack(q) : null;
+  }
+  rollPack(q){
+    // 2-4 finds: chow · lead · glass — deeper rings pack stranger glass.
+    // same tier lists the crates seed from (seedLevelSpawns' roll idiom)
+    const TIERS=(activeLevel&&activeLevel.spawn&&activeLevel.spawn.lootTiers)||LEVELS.area1.spawn.lootTiers;
+    const bag=ITEM_DEFS.rucksack();
+    const n=2+Math.floor(runRng()*3);
+    for(let i=0;i<n;i++){
+      const r=runRng(); let it;
+      if(r<0.40)      it=ITEM_DEFS[['ration','gummies','bandAid','aloe'][Math.floor(runRng()*4)]]();
+      else if(r<0.72) it=ITEM_DEFS[runRng()<0.7?'ammo9':'magStd']();
+      else{ const tn=runRng()<0.12+0.25*q?'cores':(runRng()<0.10*q?'rare':'mods');
+            const list=TIERS[tn]||TIERS.mods;
+            it=ITEM_DEFS[list[Math.floor(runRng()*list.length)]](); }
+      if(it instanceof Magazine) it.loaded=Math.floor(runRng()*it.maxCapacity);
+      autoPlace(it,bag.inv,bag.invCols,bag.invRows);     // a crowded bag just drops the find
+    }
+    return bag;
   }
   resist(kind){                                        // status-resist read — applyStatus routes enemy doses here
     let m=1;
@@ -4837,7 +4858,10 @@ class Zealot{
     // loot follows gear: they drop exactly what they wore — same item, wear and all
     if(this.helm){ spawnWorldItem(this.helm,this.position.x,this.position.y+0.9,this.position.z,new Vec3((runRng()-0.5)*2.5,3.2,(runRng()-0.5)*2.5)); this.helm=null; }
     if(this.plates){ spawnWorldItem(this.plates,this.position.x,this.position.y+0.7,this.position.z,new Vec3((runRng()-0.5)*2.5,2.8,(runRng()-0.5)*2.5)); this.plates=null; }
-    if(runRng()<0.6){ const a=ITEM_DEFS.ammo9(); a.count=4+Math.floor(runRng()*8);
+    // the worn bag drops contents-and-all (live .inv rides the item object) and
+    // CARRIES the ammo roll — one world item, not five, under the RLIM.ITEMS squeeze
+    if(this.pack){ spawnWorldItem(this.pack,this.position.x,this.position.y+0.75,this.position.z,new Vec3((runRng()-0.5)*2.5,3,(runRng()-0.5)*2.5)); this.pack=null; }
+    else if(runRng()<0.6){ const a=ITEM_DEFS.ammo9(); a.count=4+Math.floor(runRng()*8);
       spawnWorldItem(a,this.position.x,this.position.y+0.6,this.position.z,new Vec3((runRng()-0.5)*3,3.5,(runRng()-0.5)*3)); }
     this.respawnT=45;
   }
