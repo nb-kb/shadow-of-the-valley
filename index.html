@@ -2928,7 +2928,7 @@ const ITEM_DEFS={
   beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: the shot becomes a held, continuous thread (less hurt) · alone atop a column: tactical laser'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands, sings to the camp for 12s · 10⚡'),
-  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · a lobbed charge — arcs heavy, blows BIG wherever it lands. No friends in the blast · 26⚡'),
+  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · the blast itself — no flight: it goes off the moment it is cast, arm\'s length from the muzzle or AT a relay\'s point. FUSE restores the lob. No friends in the blast · 26⚡'),
   waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a wide slow wall of pressure — washes a ~1.8m swath, each foe pays once · 10⚡'),
   sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · teeth, not reach — the whole tool cycles at the floor; its own bite dies at arm\'s length · 1⚡'),
   warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · you arrive where it dies. Loud on arrival, unless you taught it to whisper · 15⚡'),
@@ -2992,6 +2992,8 @@ const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoS
                 'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter','contactMod','slowFuse','boomerangMod','homingMod',
                 'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
                 'barrelC','barrelU','barrelR','platS','platM','battS','battM','scope2x','scope3x','waveCore','chaoticMod'];
+// boomCore stays OUT of MOD_KEYS and every zealot roll ON PURPOSE: an instant
+// blast bare-fired from tryShoot would be self-immolation at their own muzzle.
 
 // ============================================================
 // INVENTORY GRIDS (Tarkov-style, mouse + cursor driven)
@@ -4122,8 +4124,25 @@ function globSlow(pos,host){                          // enemies wade through gl
 }
 let beamActive=false, beamWasHeld=false;
 
-function emitProjectile(owner,origin,dir,shot,base,src){
+function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
   const p=shot.pend;
+  // BOOM IS THE BLAST — no flight, no tracer slot: it detonates the frame it is
+  // cast. Muzzle-fired it goes off ~1.2m out (survivable, stupid); relay/contact
+  // cast (atPoint) it goes off AT the cast point — explosive rounds, breach
+  // charges. FUSE alone restores the lob: a fused boom still flies, sticks and
+  // waits its turn. TWIN pools instead of fanning: ONE blast, radius ×1.4.
+  // SPLINTER still shatters from the fire; its own relay casts onward from it.
+  if(shot.kind==='boom'&&!(p.fuse>0)){
+    const nud=atPoint?0:1.2;
+    triggerPayload({
+      pos:new Vec3(origin.x+dir.x*nud,origin.y+dir.y*nud,origin.z+dir.z*nud),
+      vel:new Vec3(dir.x*26,dir.y*26,dir.z*26), owner, kind:'boom',
+      dmg:34+p.dmg, rMul:Math.round(p.twin)>1?1.4:1, split:p.split||0,
+      relay:shot.relayNext||null, rdir:new Vec3(dir.x,dir.y,dir.z), rbase:base,
+      src:src||null, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
+    });
+    return;
+  }
   const count=Math.max(1,Math.round(p.twin));
   for(let i=0;i<count;i++){
     const spr=base.spread*(count>1?1.8:1.0)*(playerPos.isAiming&&owner==='player'?0.45:1);
@@ -4366,7 +4385,7 @@ function runContinuousBeams(dt){
         hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
       }
       if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
-      if(sh.kind==='boom'&&st.acc[k]>1.1){ st.acc[k]=0; explode({pos:end,kind:'boom',dmg:(34+sh.pend.dmg)*0.5*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // a slow drumbeat of big ones
+      if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
       if(sh.kind==='pick'&&st.acc[k]>0.16){ st.acc[k]=0; carveAt({pos:end,dmg:8,r:0.55}); }
       if(sh.kind==='grip'){
         if(!heldWorld&&!st.gripEn&&!_pgRegrabLock){
@@ -4746,9 +4765,9 @@ function triggerPayload(pr){
   if(pr.kind==='warp') warpArrive(pr);
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick'&&pr.kind!=='boom') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
-  if(pr.relay){                                        // FUSE-RELAY: the death casts the next core — free, the fuse surcharge already paid
+  if(pr.relay){                                        // FUSE/CONTACT-RELAY: the death casts the next core — free, the relay surcharge already paid
     const sh=pr.relay; pr.relay=null;                  // one cast per corpse
-    emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src);
+    emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge
   }
 }
 function splinterBurst(pr){
@@ -4795,7 +4814,7 @@ function explode(pr){
   playSound('boom');
   addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.5,0.2],big?9:5,big?0.45:0.25);
   addNoise(pr.pos.x,pr.pos.y,pr.pos.z,big?36:26);
-  const R=big?4.5:2.4;
+  const R=(big?4.5:2.4)*(pr.rMul||1);                    // rMul: TWIN'd instant boom pools ×1.4 · boom-thread pulse shrinks ×0.75 (R 1.8)
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
     const d=en.position.distanceTo(pr.pos);
@@ -5706,7 +5725,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
     if(e.kind==='bolt') rows.push('+1 round per shot');
     if(e.kind==='decoy') rows.push('sticks · chirps every 1.5s for 12s · lures the unalarmed');
-    if(e.kind==='boom') rows.push('arcs heavy · blows BIG on any impact · no friends in the blast');
+    if(e.kind==='boom'){ rows.push('no flight — detonates as cast: bare fire blasts ~1.2m out (it WILL hurt you)'); rows.push('relay/contact-cast: the blast lands AT the point · FUSE-fed: flies, sticks, timed charge'); rows.push('TWIN: one blast, ×1.4 radius · BEAM-fed: a drum of small charges at the dot'); }
     if(e.kind==='wave') rows.push('a wide slow wall · ~1.8m swath · shoves · each foe pays once');
     if(e.kind==='saw') rows.push('whole tool: cycle floor 0.06s · its own teeth die at ~4m · SWIFT stretches them');
     if(e.kind==='warp'){ rows.push('you arrive where it dies — impact, fuse, or the end of its arc'); rows.push('arrival is LOUD · HUSH-fed: a whisper, both ends'); }

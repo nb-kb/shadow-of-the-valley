@@ -40,7 +40,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `pickCore` | PICK | `{kind:'pick', base:14}` | 14 | Eats stone (SDF carve), spares flesh. Base dmg 14. | uEdits (capped) |
 | `gripField` | GRIP | `{kind:'grip', base:6}` | 6 | Glue glob; sticks to world + kin. Behind BEAM → physgun. | cheap |
 | `decoyCore` | LURE | `{kind:'decoy', base:10}` | 10 | Chirping puck — sticks where it lands, sings to the camp for 12s. | cheap |
-| `boomCore` | BOOM | `{kind:'boom', base:26}` | 26 | Lobbed charge: heavy arc, slow. ANY impact (world or flesh) → big blast (R 4.5, ~55 center, falloff) — hurts the shooter too. Base dmg 34. | cheap |
+| `boomCore` | BOOM | `{kind:'boom', base:26}` | 26 | THE BLAST PRIMITIVE — no flight, no tracer slot: it detonates the frame it is cast (R 4.5, dmg 34+pend, ×1.6 vs flesh w/ falloff — hurts the shooter too). Bare muzzle fire goes off ~1.2m out: survivable, stupid. Relay/contact-cast (`atPoint`) it goes off AT the cast point — [CONTACT,BOLT,BOOM] = explosive rounds, [FUSE,X,BOOM] = X's death detonates. FUSE on the boom ITSELF restores the lob (flies heavy, sticks, blows after the fuse — the timed charge). TWIN pools, never fans: ONE blast ×1.4 radius. BEAM-fed: a drum of small charges (see the beam notes). | cheap |
 | `waveCore` | WAVE | `{kind:'wave', base:10}` | 10 | Wide slow wall of pressure: 10 m/s, dmg 16, washes a ~1.8m swath, each foe pays ONCE (`pr.hit`/`pr.hitPl` sets), shove 7 + stagger. Never impact-dies on flesh (pierce inert on it BY DESIGN); the world still kills it. Enemy-fired = flat 16, dodgeable. | 1 tracer slot (perp-bar) |
 | `sawCore` | SAW | `{kind:'saw', base:1}` | 1 | Teeth, not reach: unlocks the WHOLE tool's cycle to the 0.06 floor; its own bite dmg 8, life 0.16s ≈ 4m at speed 26 (SWIFT is THE reach knob). 16.7⚡/s vs regen 16 + wearRoll per tooth: self-governing attrition. | cheap (~3 live teeth) |
 | `warpCore` | WARP | `{kind:'warp', base:15}` | 15 | You arrive where it dies — impact, fuse, or the end of its arc. Speed 40, dmg 6. Arrival is LOUD (noise 18 + muzzle flare) unless HUSH-fed (noise 4, both ends). Sheds threads at resolve. Player-only: zealots never roll it AND `warpArrive` owner-guards. Rare loot tier. | cheap |
@@ -243,7 +243,22 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   C-P5 · GRIP/PICK threads S (stay straight) · RETURN F (return leg immune —
   the way home flies true) · WARP F (drunken blink, self-priced) · everything
   else F.
-- **ORB** (the blank canvas — its 7 headline rules): 1. BEAM noses it C-P3
+- **BOOM** (instant since v22i — the blast primitive): bare fire F-but-dumb
+  (blast 1.2m off your own muzzle, self-damage stands) · CONTACT-carrier F
+  **"EXPLOSIVE ROUNDS"** ([CONTACT,BOLT,BOOM]: every hit detonates AT the
+  wound/wall) · FUSE on the boom itself F (restores the lob: flies, sticks,
+  timed charge; TIMER does too — ANY fuse time buys the flight back;
+  [FUSE,BOOM,WARP] BREACH-AND-ENTER intact) · FUSE/CONTACT on a
+  CARRIER F (the death/touch detonates at the point) · TWIN: ONE blast ×1.4
+  radius, never N blasts (12⚡ buys area, not count) · SEEKER / RICOCHET /
+  DRILL / RETURN / SWIFT / MASS on a bare boom I (no flight to steer, bounce,
+  pierce, return or hasten — surcharge still real; FUSE-fed they read again,
+  it's a projectile then) · CONTACT on the boom itself I (nothing to touch —
+  it vents; put CONTACT on the carrier) · SPLINTER F (blast + 3 frags from the
+  fire) · burstCam T-soft (three stacked blasts in your own face for one ⚡
+  price — three doses of your own medicine) · BEAM C (the drum, see ledger) ·
+  hitscan/burst-laser BOOM F (unchanged: full blast at the ray's end per
+  pulse, ceil(34/3)=12⚡ each) · zealots: never rolled, see availability. 1. BEAM noses it C-P3
   (puppeteer) · 2. life-expiry pops its payload C-P3 (one shared line with
   warp) → SPLINTER = 6s drifting nova F · 3. FUSE+ORB+X wall-caster F ·
   4. CHAOS tesla-wander F · 5. SEEKER balloon-hunter (6 m/s stalker) F ·
@@ -299,7 +314,11 @@ and never rolled), `sawCore` (their fixed shootCooldown ignores fireRate —
 dead stat on them), `slugCore` (their tryShoot consumes 1 round flat — would
 undercount), `powderCore`/`refundMod`/`beltFeeder` (zealots pay no ⚡ and use
 the reserve model — economy mods are dead on them), `orbCore` (bare orb is
-filler from a random pool).
+filler from a random pool), `boomCore` (v22i: BOOM is an instant blast at the
+muzzle — a zealot bare-firing it through `tryShoot` would immolate itself;
+never in `MOD_KEYS` nor any buildTool roll, and the exclusion is now declared
+in a comment at `MOD_KEYS`. Their relay lanes stay bolt/spark by roll — no
+boom there either).
 
 ## Balance ledger (P6 retune + accepted debts)
 
@@ -333,3 +352,21 @@ filler from a random pool).
   Old behavior (trigger-payload-on-first-impact with no next core) collapses
   into "plain impact" — nothing lost: bare payload-kinds already trigger on
   impact.
+- **BOOM instant** (owner ask: "instant explosion, not a projectile") — same
+  26⚡, same blast (R 4.5, dmg 34+pend). Emission point nudged 1.2m forward on
+  muzzle fire so bare-fire is survivable-but-stupid (~22 self at 1.5m), not
+  suicide; relay/contact casts detonate exactly AT the cast point (`atPoint`
+  arg through `triggerPayload`→`emitProjectile`). FUSE restores flight (the
+  old lob, now opt-in): stick+timer+blast. TWIN = one blast ×1.4 radius via
+  `explode`'s new `rMul` — a nerf vs the old 2 projectiles, deliberate (12⚡
+  buys area). Flight-only feeders (SEEKER/RICOCHET/DRILL/RETURN/SWIFT/MASS)
+  are inert on a bare boom, surcharge still real — the I-column pattern.
+  burstCam stacks its blasts same-frame at one ⚡ price incl. self-damage ×3:
+  accepted as T-soft. Zealots structurally excluded (see availability).
+- **BEAM+BOOM = the drum** (owner ask: "continuous small explosions") — the
+  thread's contact point pulses a small charge every 0.45s: R 1.8
+  (2.4×`rMul:0.75`), dmg 14 (+0.6·pend.dmg, ×0.65/strand under TWIN-split),
+  replacing the old 1.1s half-damage big blast. Priced by the standing
+  per-second formula: 2+(26+8)·0.55 = **20.7⚡/s** — vs regen 16 it runs a
+  −4.7⚡/s deficit, a battery-limited siege verb (SPARK-thread, for scale:
+  16.3⚡/s). Self-damage applies inside 1.8m — point-blank thread work stings.
