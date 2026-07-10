@@ -3813,6 +3813,7 @@ const beamSegs=[];      // {a,b,col,ttl}
 const GLOBS=[]; const GLOB_MAX=10;
 function addGlob(pos){
   for(const g of GLOBS){
+    if(g.en) continue;                                // worn glue keeps its size — no kin-merge on flesh
     const d=Math.hypot(g.x-pos.x,g.y-pos.y,g.z-pos.z);
     if(d<g.r+0.45){                                   // sticks to its kin: grow toward it
       g.x=Math.fround((g.x+pos.x)*0.5); g.y=Math.fround((g.y+pos.y)*0.5); g.z=Math.fround((g.z+pos.z)*0.5);
@@ -3824,11 +3825,40 @@ function addGlob(pos){
   GLOBS.push({x:Math.fround(pos.x),y:Math.fround(pos.y),z:Math.fround(pos.z),r:0.32});
   playSound('place');
 }
-function globSlow(pos){                               // enemies wade through glue
+// glue on flesh: the glob rides the zealot at a fixed offset in THEIR yaw frame,
+// so the metaball (and its shader twin — both read GLOBS) follows for free.
+// Anchors sit 0.84 from the settle sphere's centre (0.42 capsule + 0.32 glob +
+// smin slack) so a worn glob never shoves its own wearer via resolveCollision.
+const GLOB_EN_ANCHORS=[[0.50,1.57,0.0],[-0.50,1.57,0.0]];
+function placeAttachedGlob(g){
+  const w=rotYJS(g.ox,g.oy,g.oz,-g.en.yaw);
+  g.x=Math.fround(g.en.position.x+w.x); g.y=Math.fround(g.en.position.y+w.y); g.z=Math.fround(g.en.position.z+w.z);
+}
+function addGlobOnEnemy(en){
+  let n=0; for(const g of GLOBS) if(g.en===en) n++;
+  const A=GLOB_EN_ANCHORS[n%GLOB_EN_ANCHORS.length];
+  if(GLOBS.length>=GLOB_MAX) GLOBS.shift();
+  const g={x:0,y:0,z:0,r:0.32,en,ox:A[0],oy:A[1]+Math.floor(n/2)*0.12,oz:A[2]};
+  GLOBS.push(g); placeAttachedGlob(g);
+  playSound('place');
+  en.detection=Math.max(en.detection,0.55);           // glue to the shoulder is not subtle
+  en.investigate=new Vec3(playerPos.x,0,playerPos.z);
+  if(en.state===0) en.state=1;
+}
+function updateAttachedGlobs(){
   for(const g of GLOBS){
-    if(Math.hypot(g.x-pos.x,g.y-pos.y,g.z-pos.z)<g.r+0.35) return 0.45;
+    if(!g.en) continue;
+    if(g.en.health<=0){ g.y=Math.fround(restOnSurface(g.x,g.y,g.z)+0.10); g.en=null; continue; }  // host fell: the glue drops where it hung
+    placeAttachedGlob(g);
   }
-  return 1;
+}
+function globSlow(pos,host){                          // enemies wade through glue;
+  let m=1;                                            // riding globs root their host: ×0.55 each, two ≈ 0.3
+  for(const g of GLOBS){
+    if(g.en){ if(g.en===host) m*=0.55; continue; }
+    if(Math.hypot(g.x-pos.x,g.y-pos.y,g.z-pos.z)<g.r+0.35) m=Math.min(m,0.45);
+  }
+  return m;
 }
 let beamActive=false, beamWasHeld=false;
 
@@ -3988,10 +4018,29 @@ function runContinuousBeams(dt){
     if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
     if(sh.kind==='pick'&&st.acc>0.16){ st.acc=0; carveAt({pos:end,dmg:8,r:0.55}); }
     if(sh.kind==='grip'){
-      if(!heldWorld&&!_pgRegrabLock){ const pick=itemUnderCrosshair(40); if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam'); }
+      if(!heldWorld&&!st.gripEn&&!_pgRegrabLock){
+        const pick=itemUnderCrosshair(40);
+        if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam');
+        else if(hitEn){ st.gripEn=hitEn; st.gripDist=clamp(t,2.5,12); playSound('grab'); }   // no item — wrangle flesh
+      }
+      if(st.gripEn){
+        const en=st.gripEn;
+        const tx2=o.x+f.x*st.gripDist, tz2=o.z+f.z*st.gripDist;
+        const ddx=tx2-en.position.x, ddz=tz2-en.position.z, dd=Math.hypot(ddx,ddz);
+        if(en.health<=0||en._dormant||dd>7) st.gripEn=null;    // dead, culled, or wrenched free
+        else{
+          en.stagger=Math.max(en.stagger,0.22);                // wrangled: no shooting, AI on hold
+          const pull=Math.min(12,dd*3);                        // clamped tow — they drag their heels
+          if(dd>0.25){ en.velocity.x=ddx/dd*pull; en.velocity.z=ddz/dd*pull; }
+          else{ en.velocity.x*=0.5; en.velocity.z*=0.5; }
+        }
+      }
     }
     const col=sh.kind==='grip'?[0.35,1.6,1.9]:sh.kind==='spark'?[1.9,0.7,1.6]:sh.kind==='pick'?[0.7,1.9,1.6]:[1.9,0.5,0.6];
-    beamSegs.push({a:muzzleWorld(),b:heldWorld&&sh.kind==='grip'?heldWorld.w.pos:end,col,ttl:0.05});
+    let bEnd=end;
+    if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
+      else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z); }
+    beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
     addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
   }
   if(!any) _endBeams();
@@ -4172,6 +4221,7 @@ function updateProjectiles(dt){
           const hp=enemyHeadPos(en,_hpV);
           const hd=Math.hypot(pr.pos.x-hp.x,pr.pos.y-hp.y,pr.pos.z-hp.z);
           if(d<0.55||hd<0.24){
+            if(pr.kind==='grip'){ addGlobOnEnemy(en); dead=true; break; }   // glue takes flesh: it sticks, it does not cut
             const head=hd<0.24;
             en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark') applyStatus(en,pr); playSound('hit');   // spark dose rides the explosion — once
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
@@ -4487,7 +4537,7 @@ class Zealot{
     if(this.state===2&&this.detection<0.35) this.state=1;
     if(this.state===1&&this.detection<=0.02){ this.state=0; this.investigate=null; }
 
-    let speed=P('enemySpeed')*globSlow(this.position), moveTo=null, faceTo=null;   // glue is glue
+    let speed=P('enemySpeed')*globSlow(this.position,this), moveTo=null, faceTo=null;   // glue is glue
     if(this.state===2){
       this.investigate=new Vec3(px,0,pz);
       faceTo=this.investigate;
@@ -6116,6 +6166,7 @@ function frame(){
       en.update(dt);
       if(en.health>0) highestDetection=Math.max(highestDetection,en.detection);
     }
+    updateAttachedGlobs();                 // worn glue rides its host — sync after the zealots move
     for(let i=noisePings.length-1;i>=0;i--){ noisePings[i].ttl-=dt; if(noisePings[i].ttl<=0) noisePings.splice(i,1); }
     for(let i=dynLights.length-1;i>=0;i--){ dynLights[i].ttl-=dt; if(dynLights[i].ttl<=0) dynLights.splice(i,1); }
     for(let i=beamSegs.length-1;i>=0;i--){ beamSegs[i].ttl-=dt; if(beamSegs[i].ttl<=0) beamSegs.splice(i,1); }
