@@ -38,6 +38,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `sparkCore` | SPARK | `{kind:'spark', base:18}` | 18 | Bursting ember. Base dmg 10. |
 | `pickCore` | PICK | `{kind:'pick', base:14}` | 14 | Eats stone (SDF carve), spares flesh. Base dmg 14. |
 | `gripField` | GRIP | `{kind:'grip', base:6}` | 6 | Glue glob; sticks to world + kin. Behind BEAM → physgun. |
+| `boomCore` | BOOM | `{kind:'boom', base:26}` | 26 | Lobbed charge: heavy arc, slow. ANY impact (world or flesh) → big blast (R 4.5, ~55 center, falloff) — hurts the shooter too. Base dmg 34. |
 
 ## Sequence modifiers (`cat: mod`) — charge the NEXT core
 
