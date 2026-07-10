@@ -1266,17 +1266,29 @@ vec2 map(vec3 p){
   }
 
   // exfil smoke signals — VISUAL ONLY (like tracers): you walk THROUGH smoke, so no JS twin
+  // eight puffs ride laps up the column off a ground ember: bunched low, fat and drifting aloft
   for(int i=0;i<3;i++){
     if(i>=uExfilCount) break;
     vec4 ex=uExfils[i];
     if(ex.w<0.5) continue;
-    float bd = length(p.xz-ex.xz) - 2.4;      // column reach: 0.8 sway + fat top + margin
+    float bd = length(p.xz-ex.xz) - 4.6;      // column reach: 1.25/axis sway+jitter + 2.4 top puff + smin bulge
     if(bd > 0.1){ gBound=min(gBound,bd); continue; }
     vec3 sp=p-ex.xyz;
-    sp.x-=sin(iTime*0.40+p.y*0.15)*0.8;       // the drift that says smoke, not pole
-    sp.z-=cos(iTime*0.31+p.y*0.12)*0.8;
-    float d = sdCapsule(sp, vec3(0.0,-2.0,0.0), vec3(0.0,${EXFIL_SMOKE_H.toFixed(1)},0.0), 0.35+max(sp.y,0.0)*0.008)*0.85;
-    if(d < res.x) res = vec2(d, 19.0);
+    float dcol=length(sp-vec3(0.0,-0.15,0.0))-0.9;               // the ember feeding the plume, rooted in the dirt
+    for(int j=0;j<8;j++){
+      float fj=float(j);
+      float ph=fract(iTime*0.045+fj*0.125);                      // this puff's lap up the column
+      float h01=ph*sqrt(ph);                                     // ease: puffs bunch near the fire, spread aloft
+      float py=h01*${EXFIL_SMOKE_H.toFixed(1)};
+      float r=mix(0.8,2.4,h01)*(1.0-smoothstep(0.92,1.0,ph));    // swell while climbing, thin away at the top
+      vec3 pc=vec3(sin(iTime*0.40+(ex.y+py)*0.15)*0.8+(fract(fj*0.618)-0.5)*0.9,   // the old sway at the puff's own y,
+                   py,                                                             // plus per-puff scatter
+                   cos(iTime*0.31+(ex.y+py)*0.12)*0.8+(fract(fj*0.414)-0.5)*0.9);
+      float dp=length(sp-pc)-r;
+      float hs=clamp(0.5+0.5*(dcol-dp)/1.3,0.0,1.0);             // smin, same recipe as the glue globs
+      dcol=mix(dcol,dp,hs)-1.3*hs*(1.0-hs);
+    }
+    if(dcol < res.x) res = vec2(dcol, 19.0);
   }
 
   // first-person Tool + arm, or the raised menu prop
@@ -1445,7 +1457,20 @@ void main(){
     else if(m>15.5&&m<16.5){ matCol=vec3(0.36,0.26,0.16)*(0.8+0.4*vnoise(vec2(p.y*2.0,p.x+p.z))); } // timber
     else if(m>16.5&&m<17.5){ matCol=vec3(0.16,0.30,0.17)*(0.75+0.5*vnoise(p.xz*1.4)); }  // foliage
     else if(m>17.5&&m<18.5){ matCol=vec3(0.42,0.24,0.15)*(0.7+0.6*vnoise(p.xz*3.1+p.y)); }  // rust
-    else if(m>18.5&&m<19.5){ matCol=vec3(1.0,0.62,0.30)*(0.7+0.5*vnoise(vec2((p.x+p.z)*0.9, p.y*0.45-iTime*0.7))); emiss=1.0; }  // exfil smoke: warm flare, rising grain
+    else if(m>18.5&&m<19.5){                       // exfil smoke: amber ember low, matte gray puffs aloft
+      float exb=p.y; float be=1e9;                 // height above the nearest live exfil base
+      for(int i=0;i<3;i++){
+        if(i>=uExfilCount) break;
+        vec4 ex=uExfils[i]; if(ex.w<0.5) continue;
+        vec2 dxz=p.xz-ex.xz; float d2=dot(dxz,dxz);
+        if(d2<be){ be=d2; exb=ex.y; }
+      }
+      float h01=clamp((p.y-exb)/${EXFIL_SMOKE_H.toFixed(1)}, 0.0, 1.0);
+      float grain=(0.7+0.5*vnoise(vec2((p.x+p.z)*0.9, p.y*0.45-iTime*0.7)))
+                 *(0.85+0.3*vnoise(vec2((p.x-p.z)*1.7, p.y*1.4-iTime*0.35)));   // rising grain, second octave so the puffs roil
+      matCol=mix(vec3(1.0,0.62,0.30), vec3(0.55,0.53,0.50), smoothstep(0.05,0.55,h01))*grain;
+      emiss=mix(0.9,0.25,smoothstep(0.05,0.60,h01));                            // ember-lit base drops to matte smoke: past ~15m it leaves the emissive path and takes ambient light
+    }
     else if(m<3.5){   matCol=vec3(0.60,0.55,0.45)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*1.4));
                       matCol*=mix(0.55,1.0,smoothstep(0.0,1.3,p.y)); }             // stucco, grimy hem
     else if(m<4.5){   matCol=vec3(0.38,0.28,0.17)*(0.8+0.4*vnoise(vec2((p.x+p.z)*6.0,p.y*0.7))); } // timber
