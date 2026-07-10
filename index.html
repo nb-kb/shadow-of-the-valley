@@ -1262,8 +1262,12 @@ vec2 map(vec3 p){
     vec3 mid = (tracerA[i]+tracerB[i])*0.5;
     float bd = length(p-mid) - (length(tracerA[i]-tracerB[i])*0.5 + 0.15);
     if(bd > 0.1){ gBound=min(gBound,bd); continue; }
-    float hot = step(1.5, tracerCol[i].x+tracerCol[i].y+tracerCol[i].z);
-    float d = sdCapsule(p, tracerA[i], tracerB[i], mix(0.035, 0.011, hot));   // gossamer for lasers
+    float csum = tracerCol[i].x+tracerCol[i].y+tracerCol[i].z;
+    float hot = step(1.5, csum);                 // hot pucks draw gossamer
+    float las = step(2.8, csum);                 // laser-class threads draw a single ray:
+    // 0.004 is safe — past ~5m the march eps (0.0007t) exceeds it and rules the
+    // visible width exactly as it did at 0.011, so thinner buys no new shimmer
+    float d = sdCapsule(p, tracerA[i], tracerB[i], mix(mix(0.035, 0.011, hot), 0.004, las));
     if(d < res.x) res = vec2(d, 50.0 + float(i));
   }
 
@@ -4036,7 +4040,8 @@ function runContinuousBeams(dt){
         }
       }
     }
-    const col=sh.kind==='grip'?[0.35,1.6,1.9]:sh.kind==='spark'?[1.9,0.7,1.6]:sh.kind==='pick'?[0.7,1.9,1.6]:[1.9,0.5,0.6];
+    // sums >2.8 land in the shader's single-ray tier; the ×1.6 heat pays for the width
+    const col=sh.kind==='grip'?[0.6,2.6,3.0]:sh.kind==='spark'?[3.0,1.1,2.6]:sh.kind==='pick'?[1.1,3.0,2.6]:[3.0,0.8,1.0];
     let bEnd=end;
     if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
       else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z); }
@@ -4110,7 +4115,7 @@ function runTacLaser(dt){
   const maxLen=40;
   let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
   const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
-  beamSegs.push({a:muzzleWorld(),b:end,col:[1.9,0.45,0.6],ttl:0.05});   // gossamer-hot
+  beamSegs.push({a:muzzleWorld(),b:end,col:[3.0,0.7,1.0],ttl:0.05});   // single-ray hot
   addDyn(end.x,end.y,end.z,[1,0.3,0.35],0.7,0.04);
   const lr=document.getElementById('laserRange');
   if(lr){ lr.textContent=t>=maxLen-0.1?'—— m':t.toFixed(1)+' m'; lr.style.opacity=1; }
@@ -6148,7 +6153,7 @@ function frame(){
       if(heldWorld && heldWorld.w.item && heldWorld.w.item.pointing){
         const hp=heldWorld.w.pos, f=camForward();
         const t=marchWorldJS(hp.x,hp.y,hp.z,f.x,f.y,f.z,40);
-        beamSegs.push({a:new Vec3(hp.x,hp.y,hp.z),b:new Vec3(hp.x+f.x*t,hp.y+f.y*t,hp.z+f.z*t),col:[1.9,0.5,0.6],ttl:0.05});
+        beamSegs.push({a:new Vec3(hp.x,hp.y,hp.z),b:new Vec3(hp.x+f.x*t,hp.y+f.y*t,hp.z+f.z*t),col:[3.0,0.8,1.0],ttl:0.05});
       }
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
     }else if(beamActive) endBeam();
