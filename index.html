@@ -5294,9 +5294,12 @@ function resetLevel(){
 }
 function seedStashKit(){                       // the kit waits in the STASH now, not on the body. NEW GAME and first
   if(stashInv.flat().some(Boolean)) return;    // boot seed it; a stash that still holds ANYTHING is never stomped
-  const kit=[ITEM_DEFS.rucksack()];            // (so a hard-death restart keeps whatever home kept)
+  const rk=ITEM_DEFS.rucksack();               // (so a hard-death restart keeps whatever home kept)
+  for(let i=0;i<2;i++){ const m=ITEM_DEFS.magStd(); m.loaded=8;
+    autoPlace(m,rk.inv,rk.invCols,rk.invRows); }   // two more mags ride INSIDE the bag — grab it, find them
+  const kit=[rk];
   for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.name='Foundling Tool'; kit.push(t); }   // bare frames — no rack
-  const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // ONE mag is all 6x4 affords: the fixed kit takes 22 of 24 cells
+  const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // ONE mag flat is all 6x4 affords: the fixed kit takes 22 of 24 cells
   kit.push(ITEM_DEFS.goggles(),ITEM_DEFS.headphones(),        // every settings utility, exactly once
            ITEM_DEFS.watch(),ITEM_DEFS.compass(),ITEM_DEFS.photometer(),
            ITEM_DEFS.opticsDial(),ITEM_DEFS.volumeKnob(),ITEM_DEFS.manual());
