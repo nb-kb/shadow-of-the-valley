@@ -2044,7 +2044,7 @@ LEVELS.hideout={
      term:[-3.4,-0.6,0.4]},   // the stolen terminal's body — keep on LEVELS.hideout.terminal below
   ],
   exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[],guaranteed:['photometer','compass']},
-  terminal:{x:-3.4,z:-0.6},   // interact point — the model is clutter's `term`
+  terminal:{x:-3.4,z:-0.6,yaw:0.4},   // interact point — keep x/z/yaw equal to clutter's `term`
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
   crates:[[6,-3,0.85],[7.2,-2.4,0.7],[-5,6,0.8],[-6,-5,0.7],[8,5,0.85],[-3,8,0.75]],
@@ -3455,7 +3455,7 @@ function updateInteract(dt){
     if(ex){ setPrompt(_pr, _exfilHold>0
         ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
         : ex.label+' — hold <b>E</b> to extract', true); return; }
-    const cr = isPlayable() ? nearestCrate(2.3) : null;   // home boxes open too — the stash lives there
+    const cr = isPlayable() ? nearestCrate(0.9) : null;   // arm's reach of a box FACE — home boxes open too, the stash lives there
     if(cr && !uiOpen()){
       setPrompt(_pr, cr.stash?'THE STASH — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
       if(pressed('interact')){ openCrate(cr); }
@@ -3465,8 +3465,9 @@ function updateInteract(dt){
     if(dr){ if(pressed('interact')){ toast('SEALED. IT DOES NOT OPEN. YET.'); playSound('empty'); }
       setPrompt(_pr,'A DOOR INTO THE FACILITY — SEALED',true); return; }
     if(activeLevel.terminal){
-      const t=activeLevel.terminal;
-      if(Math.hypot(playerPos.x-t.x,playerPos.z-t.z)<2.2){
+      const t=activeLevel.terminal;                        // desk footprint: LEVEL-PRIM halfs 0.42x0.30
+      const r=faceReach(t.x,t.z,0.42,0.30,t.yaw);
+      if(r.fd<0.9 && r.face>0.34){
         if(pressed('interact')&&!isTerminalOpen){ openTerminal(); }
         setPrompt(_pr,'THE STOLEN TERMINAL — <b>E</b>',true); return;
       }
@@ -4736,11 +4737,24 @@ function nearestCrateTo(x,z,skipFull){
   }
   return null;
 }
+// the box you SEE is the box you get: xz distance to the visual footprint plus a
+// face-it gate. Center-radius picks lied in the cramped hideout — the wrong box won,
+// or a box bid through a wall. yaw spins the frame (the terminal's desk).
+function faceReach(cx,cz,hx,hz,yaw){
+  const wx=cx-playerPos.x, wz=cz-playerPos.z, wl=Math.hypot(wx,wz);
+  const face=wl>1e-6 ? (wx*Math.sin(cameraYaw)+wz*Math.cos(cameraYaw))/wl : 1;
+  const ca=Math.cos(yaw||0), sa=Math.sin(yaw||0);
+  const rx=ca*wx+sa*wz, rz=-sa*wx+ca*wz;      // box frame — the SDF twins' rotation (sign-free under abs)
+  const fd=Math.hypot(Math.max(Math.abs(rx)-hx,0), Math.max(Math.abs(rz)-hz,0));
+  return {fd,face};
+}
 function nearestCrate(maxD){
-  let best=null,bd=maxD*maxD;
+  let best=null,bs=1e9;
   for(const c of crateRegistry){
-    const d=(c.x-playerPos.x)**2+(c.z-playerPos.z)**2;
-    if(d<bd){ bd=d; best=c; }
+    const r=faceReach(c.x,c.z,c.size*0.55,c.size*0.55,0);
+    if(r.fd>maxD || (r.fd>0.05&&r.face<0.34)) continue;   // out of arm's reach, or not looking at it
+    const s=r.fd-r.face*0.6;                              // near face bids, the squarest look wins
+    if(s<bs){ bs=s; best=c; }
   }
   return best;
 }
