@@ -5437,14 +5437,16 @@ function buildCrateRegistry(L){
     // VALLEY-CELL-CRATE twin of cellSDF's crate hash — same cells, same boxes, now openable
     const base=L.crateTiers||['common'];
     const tiers=legDepth()>=3?[...base,'rare','cores']:base;
-    for(let cy=-2;cy<=2;cy++) for(let cx=-10;cx<=10;cx++){
+    const fr=Math.fround;                       // GPU multiplies in f32 — mirror it (same rule as mapWorldBase)
+    const xw=Math.abs(GATE.cx)+14;              // gate walk + draw ring (10) + collide ring (4): every crate you can see or touch on the leg
+    for(let cy=-2;cy<=2;cy++) for(let cx=-xw;cx<=xw;cx++){
       if(cx===GATE.cx&&cy===GATE.cz) continue;
       const h=cellHash(cx+SEED.x, cy+SEED.y);
-      const type=Math.floor(h*5);
-      if(!(type<0.5||type>2.5)) continue;
+      const type=Math.floor(fr(h*5));
+      if(!(type===0||type>2)) continue;
       for(let k=0;k<3;k++){
-        if(((h*(13+7*k))%1)>=0.6) continue;
-        const cx0=((h*(29+11*k))%1)*14-7, cz0=((h*(53+17*k))%1)*14-7;
+        if(fractJS(fr(h*(13+7*k)))>=0.6) continue;
+        const cx0=fractJS(fr(h*(29+11*k)))*14-7, cz0=fractJS(fr(h*(53+17*k)))*14-7;
         add([cx*20+cx0, cy*20+cz0, 1.1], tiers);
       }
     }
