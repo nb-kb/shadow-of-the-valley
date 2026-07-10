@@ -371,7 +371,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22j';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22k';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -694,7 +694,7 @@ uniform vec4  worldItemData[${RLIM.ITEMS}];  // x:type y:yaw z:held w:pitch
 uniform float uWorldTop;                    // nothing exists above this; upward rays stop at the slab exit
 uniform vec4  uVCrates[6];                  // valley gate cache: x,z,size,unused
 uniform int   uVCrateCount;
-uniform int   uExfilCount;                  // authored-level exfil smoke columns
+uniform int   uExfilCount;                  // exfil smoke columns — authored levels + the endless ring
 uniform vec4  uExfils[3];                   // xyz column base · w live — VISUAL ONLY, no JS twin
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
@@ -3726,13 +3726,14 @@ function setPrompt(prompt,html,show){
   else prompt.classList.remove('show');
 }
 function updateInteract(dt){
+  const _pr=document.getElementById('interactPrompt');
+  const _lvl=activeLevel;                                 // the exfil verb runs in EVERY world now — liveExfils gates it
+  const ex=updateExfil(dt);
+  if(activeLevel!==_lvl){ setPrompt(_pr,'',false); return; }  // exfil completed — extraction tore the world down mid-frame
+  if(ex){ setPrompt(_pr, _exfilHold>0
+      ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
+      : ex.label+' — hold <b>E</b> to extract', true); return; }
   if(activeLevel){
-    const _pr=document.getElementById('interactPrompt');
-    const ex=updateExfil(dt);
-    if(!activeLevel){ setPrompt(_pr,'',false); return; }  // exfil completed — travelTo tore the level down mid-frame
-    if(ex){ setPrompt(_pr, _exfilHold>0
-        ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
-        : ex.label+' — hold <b>E</b> to extract', true); return; }
     const cr = isPlayable() ? nearestCrate(0.9) : null;   // arm's reach of a box FACE — home boxes open too, the stash lives there
     if(cr && !uiOpen()){
       setPrompt(_pr, cr.stash?'THE STASH — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
@@ -5248,6 +5249,23 @@ function placeGate(){
   GATE.cz=Math.floor(rr()*3)-1;               // stays inside the valley strip
   GATE.x=GATE.cx*20; GATE.z=GATE.cz*20;
 }
+let VALLEY_EXFIL=null;                        // the true endless ring's ONE door home — null on travel legs (their gate IS the exit)
+function placeValleyExfil(){
+  VALLEY_EXFIL=null;
+  if(TRAVEL) return;                          // a trek keeps no smoke — the gate leads where you're going
+  const rr=mulberry32((SEED.x*83492791)^(SEED.y*52915579));   // hashed off the ring seed, decorrelated from placeGate's stream
+  let x=90,z=0;
+  for(let t=0;t<16;t++){
+    const dist=60+rr()*60, ang=rr()*Math.PI*2;                // 60–120m out on a hashed bearing
+    let zz=Math.cos(ang)*dist;
+    if(Math.abs(zz)>38) zz=38*Math.sign(zz);                  // stay on the valley floor, off the wall roots
+    const xx=(Math.sin(ang)<0?-1:1)*Math.sqrt(dist*dist-zz*zz);   // the clamp keeps the drawn distance
+    if(Math.hypot(xx-GATE.x,zz-GATE.z)<40) continue;          // never in the gate's lap
+    x=xx; z=zz; break;
+  }
+  if(Math.hypot(x-GATE.x,z-GATE.z)<40){ x=-Math.sign(GATE.x||1)*90; z=0; }   // seeded refuge: dead opposite the gate
+  VALLEY_EXFIL={id:'exValley', x, z, y:Math.max(0,restOnSurface(x,30,z)), r:4.5, label:'THE WAY HOME'};   // base snapped to the dirt, same idiom as deployTo's authored snap
+}
 function resetLevel(){
   SEED.x=Math.floor(runRng()*900)+17;
   SEED.y=Math.floor(runRng()*900)+13;
@@ -5258,6 +5276,7 @@ function resetLevel(){
   decals.length=0; dynLights.length=0; noisePings.length=0;
   heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
+  placeValleyExfil();                         // after the edit wipe AND the spawn reset — the ground snap reads the fresh ring (mapWorldJS culls cell props by player cell)
   cameraYaw=Math.atan2(GATE.x,GATE.z);
   PARAMS.maxEnemies.v=Math.min(14, 4+2*legDepth());
   enemies.length=0;
@@ -5380,6 +5399,7 @@ function deployTo(levelId){
   else{ hl.textContent='Ring'; hv.textContent=roman(depth); }
   showBanner(L.name);
   if(L.kind==='authored'&&L.exfils.length) toast('REACH AN EXFIL — HOLD E INSIDE THE SMOKE');   // once per arrival, travelTo-style
+  else if(L.kind==='rings'&&!TRAVEL) toast('SMOKE MARKS THE WAY HOME — HOLD E INSIDE IT');      // the endless ring's own door out (legs get travelTo's toast)
   refreshInvUI();
 }
 function travelTo(dest){                      // THE LOOP: the valley is the land between places
@@ -5502,14 +5522,24 @@ function seedLevelSpawns(L){
   }
 }
 // exfiltration: stand in the circle, hold the verb, go home with the bag
+// THE ONE LIST: every exfil consumer (the verb, the smoke upload, the compass,
+// the sky-slab fold) reads liveExfils — never activeLevel.exfils directly.
+function liveExfils(){
+  if(activeLevel) return activeLevel.exfils;           // authored levels own theirs
+  return (!TRAVEL&&VALLEY_EXFIL)?[VALLEY_EXFIL]:[];    // the true endless ring keeps ONE; a travel leg keeps none
+}
 let _exfilHold=0;
 function updateExfil(dt){
-  if(!activeLevel||gameState!=='play'||!activeLevel.exfils.length) return null;
-  for(const ex of activeLevel.exfils){
+  const exs=liveExfils();
+  if(gameState!=='play'||!exs.length) return null;
+  for(const ex of exs){
     if(Math.hypot(playerPos.x-ex.x,playerPos.z-ex.z)<ex.r){
       if(down('interact')&&!heldWorld){
         _exfilHold+=dt;
-        if(_exfilHold>=3){ playSound('breach'); travelTo('hideout'); return null; }
+        if(_exfilHold>=3){ playSound('breach');
+          if(activeLevel) travelTo('hideout');         // a raid extraction treks home through the valley
+          else deployTo('hideout');                    // the endless ring extracts STRAIGHT home — a leg from here would only re-enter the loop
+          return null; }
       }else _exfilHold=Math.max(0,_exfilHold-dt*2);
       return ex;
     }
@@ -6854,7 +6884,7 @@ function frame(){
     for(const b of beamSegs) _top=Math.max(_top, b.a.y, b.b.y);
     for(const pr of projectiles) _top=Math.max(_top, pr.pos.y);
     for(const w of worldItems) if(!w.settled) _top=Math.max(_top, w.pos.y);
-    if(activeLevel) for(const ex of activeLevel.exfils) _top=Math.max(_top, (ex.y||0)+EXFIL_SMOKE_H);   // smoke pierces the authored slab
+    for(const ex of liveExfils()) _top=Math.max(_top, (ex.y||0)+EXFIL_SMOKE_H);   // smoke pierces the sky slab — authored or endless
     gl.uniform1f(U.uWorldTop, _top+0.6);
   }
   { // valley gate cache — static per mode
@@ -6863,7 +6893,7 @@ function frame(){
     for(let i=0;i<vc.length&&i<6;i++) gl.uniform4f(U.uVCrates[i], vc[i][0], vc[i][1], vc[i][2], 0);
   }
   { // exfil smoke columns — visual-only (walk-through); JS twin untouched by design
-    const exs=activeLevel?activeLevel.exfils:[];
+    const exs=liveExfils();
     const n=Math.min(3,exs.length);
     gl.uniform1i(U.uExfilCount,n);
     for(let i=0;i<n;i++) gl.uniform4f(U.uExfils[i], exs[i].x, exs[i].y||0, exs[i].z, 1);
@@ -7020,13 +7050,13 @@ function frame(){
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
     eye.style.filter='brightness('+(0.3+e*1.6).toFixed(2)+')';
     const comp=document.getElementById('compassStrip');
-    if(hasGadget('compass')&&gameState==='play'&&(!activeLevel||activeLevel.exfils.length)){
+    if(hasGadget('compass')&&gameState==='play'&&(!activeLevel||liveExfils().length)){
       comp.classList.remove('hidden');
-      // valley (travel legs included): the gate — the gate IS the way out on a leg.
-      // an authored raid steers to the nearest exfil instead.
+      // valley (endless AND travel legs): the gate — descending is the quest, and the
+      // endless exfil's own smoke is its finder. An authored raid steers to the nearest exfil.
       let tgt=GATE, lbl='BEACON';
       if(activeLevel){ lbl='EXFIL'; let bd=1e9;
-        for(const ex of activeLevel.exfils){ const d=Math.hypot(ex.x-playerPos.x,ex.z-playerPos.z); if(d<bd){ bd=d; tgt=ex; } }
+        for(const ex of liveExfils()){ const d=Math.hypot(ex.x-playerPos.x,ex.z-playerPos.z); if(d<bd){ bd=d; tgt=ex; } }
       }
       const ddx=tgt.x-playerPos.x, ddz=tgt.z-playerPos.z;
       const ang=(Math.atan2(ddx,ddz)-cameraYaw)*180/Math.PI;
