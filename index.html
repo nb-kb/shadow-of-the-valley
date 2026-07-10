@@ -4055,6 +4055,26 @@ function physgunInputTick(){                // once per frame, right after the p
 function fireDownEff(){ return physgunRes()?_pgFire:down('fire'); }
 function firePressedEff(){ return physgunRes()?_pgFireEdge:pressed('fire'); }
 const _beamLanes=new Map();               // laneIdx -> {acc, engaged}
+const _jDir=new Vec3(0,0,0);
+// dir tilted 0.04–0.08 rad at a random azimuth — the unstable-beam wander
+function jitterDir(f,out){
+  const th=0.04+runRng()*0.04, ph=runRng()*6.2831853;
+  let ux=f.z, uz=-f.x, ul=Math.hypot(ux,uz);          // ⊥ f, lying flat
+  if(ul<0.001){ ux=1; uz=0; ul=1; }
+  ux/=ul; uz/=ul;
+  const vx=f.y*uz, vy=f.z*ux-f.x*uz, vz=-f.y*ux;      // f × u — the climbing perpendicular
+  const s=Math.sin(th), c=Math.cos(th), cp=Math.cos(ph), sp=Math.sin(ph);
+  return out.set(f.x*c+(ux*cp+vx*sp)*s, f.y*c+vy*sp*s, f.z*c+(uz*cp+vz*sp)*s);
+}
+// one-frame beam flashes (twin strands, laser pulses) budget themselves against the
+// tracer pool: 12 slots minus a 2-slot floor kept for projectile tracers minus every
+// seg still uploading this frame. A flash carries its frame's clock (lastT): stale
+// ones (last frame's, dying at this frame's decay) don't count against the pool.
+function flashHeadroom(){
+  let n=RLIM.TRACERS-2;
+  for(const s of beamSegs) if(!s.flash||s.flash===lastT) n--;
+  return n;
+}
 function runContinuousBeams(dt){
   const res=activeTool?activeTool._res:null;
   if(!res||res.bare){ _endBeams(); return; }
@@ -4072,61 +4092,73 @@ function runContinuousBeams(dt){
     spendCharge(activeTool,rate*dt);
     any=true;
     let st=_beamLanes.get(li);
-    if(!st){ st={acc:0}; _beamLanes.set(li,st); wearRoll(toolPowerCells(activeTool).slice(0,1)); }
+    if(!st){ st={acc:[0,0,0]}; _beamLanes.set(li,st); wearRoll(toolPowerCells(activeTool).slice(0,1)); }
     st.engaged=true;
-    let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,50);
-    // enemies intercept the thread — head tested above the body, same ray foot
-    let hitEn=null, hitHead=false;
-    for(const en of enemies){
-      if(en.health<=0||en._dormant) continue;
-      const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
-      const tt=rx*f.x+ry*f.y+rz*f.z;
-      if(tt>0.3&&tt<t){
-        const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
-        const hp=enemyHeadPos(en,_hpV);
-        const hd=Math.hypot(hp.x-(o.x+f.x*tt),hp.y-(o.y+f.y*tt),hp.z-(o.z+f.z*tt));
-        if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
-      }
-    }
-    const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
-    st.acc=(st.acc||0)+dt;
-    if(sh.kind==='bolt'&&hitEn){
-      let bdmg=((24+sh.pend.dmg)*0.55)*dt;
-      if(hitHead){
-        if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
-        else bdmg*=2;
-      }
-      hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
-    }
-    if(sh.kind==='spark'&&st.acc>0.45){ st.acc=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
-    if(sh.kind==='boom'&&st.acc>1.1){ st.acc=0; explode({pos:end,kind:'boom',dmg:(34+sh.pend.dmg)*0.5,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // a slow drumbeat of big ones
-    if(sh.kind==='pick'&&st.acc>0.16){ st.acc=0; carveAt({pos:end,dmg:8,r:0.55}); }
-    if(sh.kind==='grip'){
-      if(!heldWorld&&!st.gripEn&&!_pgRegrabLock){
-        const pick=itemUnderCrosshair(40);
-        if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam');
-        else if(hitEn){ st.gripEn=hitEn; st.gripDist=clamp(t,2.5,12); playSound('grab'); }   // no item — wrangle flesh
-      }
-      if(st.gripEn){
-        const en=st.gripEn;
-        const tx2=o.x+f.x*st.gripDist, tz2=o.z+f.z*st.gripDist;
-        const ddx=tx2-en.position.x, ddz=tz2-en.position.z, dd=Math.hypot(ddx,ddz);
-        if(en.health<=0||en._dormant||dd>7) st.gripEn=null;    // dead, culled, or wrenched free
-        else{
-          en.stagger=Math.max(en.stagger,0.22);                // wrangled: no shooting, AI on hold
-          const pull=Math.min(12,dd*3);                        // clamped tow — they drag their heels
-          if(dd>0.25){ en.velocity.x=ddx/dd*pull; en.velocity.z=ddz/dd*pull; }
-          else{ en.velocity.x*=0.5; en.velocity.z*=0.5; }
+    // TWIN SPLIT — a twinned damage thread frays into round(twin) strands (cap 3),
+    // each wandering off the aim, each 0.65×: three on one mark ≈ ×1.95, priced by
+    // TWIN's ⚡12 already in the rate. grip/pick don't fray — splitting a physgun
+    // or a carving stream is nonsense. Strands draw one-frame segs; when the tracer
+    // pool runs dry the EXTRA strands drop first (damage too), the aim thread never.
+    let K=(sh.kind==='grip'||sh.kind==='pick')?1:Math.max(1,Math.round(sh.pend.twin));
+    if(K>1) K=Math.max(1,Math.min(K,flashHeadroom()));
+    const mul=K>1?0.65:1;
+    for(let k=0;k<K;k++){
+      const dir=K>1?jitterDir(f,_jDir):f;
+      let t=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);
+      // enemies intercept the thread — head tested above the body, same ray foot
+      let hitEn=null, hitHead=false;
+      for(const en of enemies){
+        if(en.health<=0||en._dormant) continue;
+        const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
+        const tt=rx*dir.x+ry*dir.y+rz*dir.z;
+        if(tt>0.3&&tt<t){
+          const d=Math.hypot(en.position.x-(o.x+dir.x*tt),(en.position.y+0.95)-(o.y+dir.y*tt),en.position.z-(o.z+dir.z*tt));
+          const hp=enemyHeadPos(en,_hpV);
+          const hd=Math.hypot(hp.x-(o.x+dir.x*tt),hp.y-(o.y+dir.y*tt),hp.z-(o.z+dir.z*tt));
+          if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
         }
       }
+      const end=new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);
+      st.acc[k]=(st.acc[k]||0)+dt;
+      if(sh.kind==='bolt'&&hitEn){
+        let bdmg=((24+sh.pend.dmg)*0.55*mul)*dt;
+        if(hitHead){
+          if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
+          else bdmg*=2;
+        }
+        hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
+      }
+      if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
+      if(sh.kind==='boom'&&st.acc[k]>1.1){ st.acc[k]=0; explode({pos:end,kind:'boom',dmg:(34+sh.pend.dmg)*0.5*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // a slow drumbeat of big ones
+      if(sh.kind==='pick'&&st.acc[k]>0.16){ st.acc[k]=0; carveAt({pos:end,dmg:8,r:0.55}); }
+      if(sh.kind==='grip'){
+        if(!heldWorld&&!st.gripEn&&!_pgRegrabLock){
+          const pick=itemUnderCrosshair(40);
+          if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam');
+          else if(hitEn){ st.gripEn=hitEn; st.gripDist=clamp(t,2.5,12); playSound('grab'); }   // no item — wrangle flesh
+        }
+        if(st.gripEn){
+          const en=st.gripEn;
+          const tx2=o.x+f.x*st.gripDist, tz2=o.z+f.z*st.gripDist;
+          const ddx=tx2-en.position.x, ddz=tz2-en.position.z, dd=Math.hypot(ddx,ddz);
+          if(en.health<=0||en._dormant||dd>7) st.gripEn=null;    // dead, culled, or wrenched free
+          else{
+            en.stagger=Math.max(en.stagger,0.22);                // wrangled: no shooting, AI on hold
+            const pull=Math.min(12,dd*3);                        // clamped tow — they drag their heels
+            if(dd>0.25){ en.velocity.x=ddx/dd*pull; en.velocity.z=ddz/dd*pull; }
+            else{ en.velocity.x*=0.5; en.velocity.z*=0.5; }
+          }
+        }
+      }
+      // sums >2.8 land in the shader's single-ray tier; the ×1.6 heat pays for the width
+      const col=sh.kind==='grip'?[0.6,2.6,3.0]:sh.kind==='spark'?[3.0,1.1,2.6]:sh.kind==='pick'?[1.1,3.0,2.6]:[3.0,0.8,1.0];
+      let bEnd=end;
+      if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
+        else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z); }
+      if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
+      else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
+      if(k===0) addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
     }
-    // sums >2.8 land in the shader's single-ray tier; the ×1.6 heat pays for the width
-    const col=sh.kind==='grip'?[0.6,2.6,3.0]:sh.kind==='spark'?[3.0,1.1,2.6]:sh.kind==='pick'?[1.1,3.0,2.6]:[3.0,0.8,1.0];
-    let bEnd=end;
-    if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
-      else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z); }
-    beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
-    addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
   }
   if(!any) _endBeams();
 }
@@ -5328,6 +5360,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
+    if(e.twin) rows.push('beam-fed: splits the thread ×'+e.twin+' · strands wander');
     if(e.pierce) rows.push('pierces '+e.pierce);
     if(e.bounce) rows.push('bounces '+e.bounce);
     if(e.spread) rows.push('spread ×'+e.spread);
