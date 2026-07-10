@@ -4297,9 +4297,12 @@ function runContinuousBeams(dt){
     // TWIN SPLIT — a twinned damage thread frays into round(twin) strands (cap 3),
     // each wandering off the aim, each 0.65×: three on one mark ≈ ×1.95, priced by
     // TWIN's ⚡12 already in the rate. grip/pick don't fray — splitting a physgun
-    // or a carving stream is nonsense. Strands draw one-frame segs; when the tracer
-    // pool runs dry the EXTRA strands drop first (damage too), the aim thread never.
-    let K=(sh.kind==='grip'||sh.kind==='pick')?1:Math.max(1,Math.round(sh.pend.twin));
+    // or a carving stream is nonsense. wave/orb don't fray EITHER: their trains twin
+    // at the EMIT (emitProjectile fans round(twin) copies) — a split thread would
+    // square TWIN (K strands × K copies = 9 walls a tick, priced once). Strands draw
+    // one-frame segs; when the tracer pool runs dry the EXTRA strands drop first
+    // (damage too), the aim thread never.
+    let K=(sh.kind==='grip'||sh.kind==='pick'||sh.kind==='wave'||sh.kind==='orb')?1:Math.max(1,Math.round(sh.pend.twin));
     if(K>1) K=Math.max(1,Math.min(K,flashHeadroom()));
     const mul=K>1?0.65:1;
     // CHAOS: damage threads arc like lightning — grip/pick stay straight BY RULE
