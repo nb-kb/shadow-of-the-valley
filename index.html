@@ -2885,12 +2885,13 @@ class Armor extends Item{
     return ' · '+Math.max(0,this.dur)+'/'+this.durMax+' integrity · resists burn '
          +Math.round(this.resist.burn*100)+'% · bleed '+Math.round(this.resist.bleed*100)+'%';
   }
+  foldTag(){ return zoneFolds(this)&&equip[this.armorType]===this ? (this.zoneOpen?' · open':' · closed') : ''; }
   desc(){
     switch(this.armorType){
       case 'plates': return 'incoming ×'+this.damageMult+this.wearTag();
       case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port (dormant)':'')+this.wearTag();
-      case 'goggles': case 'headphones': return 'a settings device — dials live inside';
-      default: return this.invCols? this.invCols+'×'+this.invRows+' pockets':'';
+      case 'goggles': case 'headphones': return 'a settings device — dials live inside'+this.foldTag();
+      default: return this.invCols? this.invCols+'×'+this.invRows+' pockets'+this.foldTag():'';
     }
   }
 }
@@ -2979,16 +2980,22 @@ function invZones(){
                  external:true}];
   return playerZones();
 }
-function playerZones(){
+// harness + settings devices FOLD — [X] on the rig item opens/closes their zone.
+// Session-only state on the item (itemToJSON never sees zoneOpen); default CLOSED
+// to save space. The rucksack and the belt/holster slot-racks never fold.
+const FOLD_SLOTS=['harness','goggles','headphones'];
+const zoneFolds=it=>!!it&&FOLD_SLOTS.includes(it.armorType);
+const zoneShut=it=>zoneFolds(it)&&!it.zoneOpen;
+function playerZones(all){
   const z=[{id:'equip',label:'RIG',equipCol:true,cols:1,rows:EQUIP_SLOTS.length}];
   const push=slot=>{ const it=equip[slot];
-    if(it&&it.inv&&it.invCols>0)
+    if(it&&it.inv&&it.invCols>0&&(all||!zoneShut(it)))
       z.push({id:slot,label:it.name.toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
               locked:!!it.settingsDevice,storage:!it.settingsDevice,slotMode:!!it.slotMode}); };
   ['rucksack','harness','holster','belt','goggles','headphones'].forEach(push);
   return z;
 }
-function storageZones(){ return playerZones().filter(z=>z.storage); }
+function storageZones(){ return playerZones(true).filter(z=>z.storage); }   // logic keeps folded pockets — only the eye loses them
 function clampZone(){
   const z=invZones();
   zoneIdx=clamp(zoneIdx,0,z.length-1);
@@ -3324,7 +3331,20 @@ function interactInventory(){
 
 // [X] — inspect · activate. Magazines & spare tools open their own pockets.
 function activateAtCursor(){
-  const f=focusGrid(); if(!f.grid&&!f.rack){ if(inspectItem) closeInspect(); return; }
+  const f=focusGrid();
+  if(f.equipCol){                                       // X on the rig: fold a harness/device zone open·closed
+    clampCursor(f);
+    const it=cellAt(f);
+    if(it&&zoneFolds(it)){
+      it.zoneOpen=!it.zoneOpen;
+      clampZone();                                      // the stack changed shape — never strand the cursor
+      toast(it.name.toUpperCase()+(it.zoneOpen?' · OPEN':' · CLOSED')); playSound('click');
+      refreshInvUI(); return;
+    }
+    if(inspectItem) closeInspect();
+    return;
+  }
+  if(!f.grid&&!f.rack){ if(inspectItem) closeInspect(); return; }
   clampCursor(f);
   const cell=cellAt(f);
   if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
@@ -5255,7 +5275,8 @@ function tipBrief(it){                                  // the info square's row
     rows:[it.length+' slots','+'+it.addedSpread.toFixed(2)+' spread','own muzzle slot']};
   if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
     rows:[it.slots.length+' side slots','each fires alone']};
-  if(it instanceof Armor) return {kind:'ARMOR · '+it.armorType.toUpperCase(), rows:[it.desc(), 'equip it in the rig column']};
+  if(it instanceof Armor) return {kind:'ARMOR · '+it.armorType.toUpperCase(),
+    rows:[it.desc(), equip[it.armorType]===it ? (zoneFolds(it)?'equipped · [X] opens / closes it':'equipped') : 'equip it in the rig column']};
   if(it&&it.widget) return {kind:'SETTING', rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired yet — turns freely']};
   if(it.ration) return {kind:'RATION', rows:['+14 vitality','tastes like the war']};
   if(it.pill) return {kind:'LAST RESORT',
@@ -5275,7 +5296,7 @@ function syncTip(){
   if(!open){ tooltipEl.style.display='none'; return; }
   const f=focusGrid();
   if(menuMode===2) paintToolStats();
-  if(!f.grid&&!f.rack){ tooltipEl.style.display='none'; return; }
+  if(!f.grid&&!f.rack&&!f.equipCol){ tooltipEl.style.display='none'; return; }   // rig items carry a tip too — fold state lives there
   const sx=cursorX, sy=cursorY;                        // read-only view of the cursor
   clampCursor(f); const it=cellAt(f);
   const ref=f.rack?refAt(f):null;
