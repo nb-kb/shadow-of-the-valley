@@ -460,6 +460,8 @@ const ACTIONS = [
   {id:'flash',    label:'Lantern',             kb:'KeyF',        pad:3},   // triangle
   {id:'leanL',    label:'Lean left',           kb:'KeyQ',        pad:4},   // L1
   {id:'leanR',    label:'Lean right',          kb:'KeyX',        pad:5},   // R1
+  {id:'cycleL',   label:'Holster · prev tool', kb:null,          pad:14},  // d-left
+  {id:'cycleR',   label:'Holster · next tool', kb:'KeyT',        pad:15},  // d-right (Q is spoken for — lean)
   {id:'bag',      label:'Rucksack',            kb:'KeyB',        pad:8},   // share
   {id:'tool',     label:'Tool rack / close layer',kb:'Tab',       pad:1},   // circle
   {id:'manual',   label:'Field manual',        kb:'KeyM',        pad:9},   // options
@@ -3446,6 +3448,30 @@ function wieldTool(tool){
   activeTool=tool;
   if(old){ if(!autoPlaceAny(old)) dropItemToWorld(old,1.0,1.5); }
   playSound('pickup'); refreshInvUI();
+}
+// HOLSTER CYCLE — d-pad ◀▶ / [T] swaps the wield through the holster slot-rack
+// without opening a menu. The outgoing wield drops into the slot the incoming
+// tool came from; empty and non-tool slots are skipped; the walk wraps. An empty
+// holster answers with a soft click, nothing more.
+let holsterCur=-1;              // slot the current wield was drawn from — session-only
+function cycleHolster(dir){
+  const h=equip.holster, inv=h?h.inv:null;
+  if(inv){
+    const cols=h.invCols, n=cols*h.invRows;
+    const start=holsterCur>=0?holsterCur:(dir>0?-1:n);   // fresh hands enter from the near edge
+    for(let s=1;s<=n;s++){
+      const i=(((start+dir*s)%n)+n)%n, r=(i/cols)|0, c=i%cols;
+      const inc=inv[r][c];
+      if(!(inc instanceof Tool)) continue;
+      _endBeams();                       // mid-beam swap: same teardown the menus force via uiOpen()
+      inv[r][c]=activeTool||null;        // the wield takes the incoming tool's slot
+      if(activeTool){ activeTool.x=c; activeTool.y=r; }
+      activeTool=inc;
+      holsterCur=i;
+      playSound('pickup'); refreshInvUI(); return;
+    }
+  }
+  playSound('click');
 }
 function useGadget(g){
   switch(g.kind){
@@ -6508,6 +6534,8 @@ function frame(){
         beamSegs.push({a:new Vec3(hp.x,hp.y,hp.z),b:new Vec3(hp.x+f.x*t,hp.y+f.y*t,hp.z+f.z*t),col:[3.0,0.8,1.0],ttl:0.05});
       }
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
+      if(pressed('cycleL')) cycleHolster(-1);   // d-pad ◀ — draw the previous holstered tool
+      if(pressed('cycleR')) cycleHolster(1);    // d-pad ▶ / [T] — draw the next
     }else if(beamActive) endBeam();
     updateHeldPhysics(dt);
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
