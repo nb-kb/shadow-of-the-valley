@@ -2049,7 +2049,7 @@ LEVELS.area1={
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
               'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
               'platesH','helmetSteel','helmetRig','autoSear','burstCam','rucksack',
-              'tool','cyanide']
+              'tool','cyanide','warpCore']
     },
     regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
                  testing:['mods','common','rare'], tentsA:['common','gear','gear'],
@@ -2813,6 +2813,7 @@ const ITEM_DEFS={
   boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · a lobbed charge — arcs heavy, blows BIG wherever it lands. No friends in the blast · 26⚡'),
   waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a wide slow wall of pressure — washes a ~1.8m swath, each foe pays once · 10⚡'),
   sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · teeth, not reach — the whole tool cycles at the floor; its own bite dies at arm\'s length · 1⚡'),
+  warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · you arrive where it dies. Loud on arrival, unless you taught it to whisper · 15⚡'),
   powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · a slug that pays in lead — its feeders ride free. Threads refuse the discount'),
   slugCore:   ()=>new ToolMod('SLUG','#a1887f','proj',{kind:'slug',base:0},'Core · three rounds, one fat blow — ×3 tool hurt, slow hands. Housed in a relay, the tool keeps its pace'),
   orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · just an orb. Slow, patient, six seconds aloft — it becomes whatever you feed it · 8⚡'),
@@ -3967,19 +3968,19 @@ function emitProjectile(owner,origin,dir,shot,base,src){
     const spr=base.spread*(count>1?1.8:1.0)*(playerPos.isAiming&&owner==='player'?0.45:1);
     const d=new Vec3(dir.x+(runRng()-0.5)*spr*2, dir.y+(runRng()-0.5)*spr*2, dir.z+(runRng()-0.5)*spr*2).normalize();
     const kind=shot.kind;
-    const speed=(kind==='spark'?34:kind==='pick'?60:kind==='decoy'?22:kind==='boom'?26:kind==='saw'?26:kind==='slug'?48:kind==='wave'?10:kind==='orb'?6:82)*p.vel;
+    const speed=(kind==='spark'?34:kind==='pick'?60:kind==='decoy'?22:kind==='boom'?26:kind==='saw'?26:kind==='warp'?40:kind==='slug'?48:kind==='wave'?10:kind==='orb'?6:82)*p.vel;
     const rel=(i===0&&shot.relayNext)||null;          // only the first TWIN copy carries the chain — no 3^n fireworks
     projectiles.push({
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:kind==='orb'?6.0:kind==='saw'?0.16:2.2, owner, kind,   // saw reach ≈ 4m — SWIFT is its reach knob; orb: 6s aloft, then the payload pops
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything (slug: ×3 TOOL hurt, pend added after)
-      dmg:(kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg,   // wave flat 16 — enemy-fired included, declared
+      dmg:(kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg,   // wave flat 16 — enemy-fired included, declared
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
       burn:p.burn||0, bleed:!!p.bleed,
-      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[1.2,1.2,0.9]:kind==='slug'?[1.6,1.2,0.4]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; saw hot steel, slug hot brass sum >2.8 — heavy draws thick
+      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[1.2,1.2,0.9]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[1.6,1.2,0.4]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; saw hot steel, slug hot brass sum >2.8 — heavy draws thick
       silent:p.silent||base.silenced,
     });
   }
@@ -4516,7 +4517,7 @@ function updateProjectiles(dt){
 }
 function impactOrPierce(pr){
   if(pr.contact){ triggerPayload(pr); return true; }   // CONTACT: flesh counts as arrival
-  if(pr.kind==='spark'||pr.kind==='boom'){ triggerPayload(pr); return true; }
+  if(pr.kind==='spark'||pr.kind==='boom'||pr.kind==='warp'){ triggerPayload(pr); return true; }   // WARP+SEEKER = blink onto the mark
   if(pr.split>0){ splinterBurst(pr); return true; }
   if(pr.pierce>0){ pr.pierce--; return false; }
   if(pr.relay||pr.fuse>0) triggerPayload(pr);          // FUSE on flesh: still terminal — the payload fires, the chain casts
@@ -4527,6 +4528,7 @@ function triggerPayload(pr){
   if(pr.kind==='pick') carveAt(pr);
   if(pr.kind==='spark'||pr.kind==='boom') explode(pr);
   if(pr.kind==='grip') addGlob(pr.pos);
+  if(pr.kind==='warp') warpArrive(pr);
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick'&&pr.kind!=='boom') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
   if(pr.relay){                                        // FUSE-RELAY: the death casts the next core — free, the fuse surcharge already paid
@@ -4550,6 +4552,18 @@ function splinterBurst(pr){
       col:pr.col, silent:pr.silent,
     });
   }
+}
+function warpArrive(pr){
+  if(pr.owner!=='player') return;                      // zealots do not walk the door (and never roll it)
+  worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+  const x=pr.pos.x+_n.x*0.45, z=pr.pos.z+_n.z*0.45;    // step off the face before standing up
+  playerPos.x=x; playerPos.z=z;
+  playerPos.y=restOnSurface(x, pr.pos.y+1.2, z);       // Zealot-ctor idiom — land ON the surface
+  playerPos.velY=0; playerPos.ySm=playerPos.y;         // snap the camera smoother: no lag-streak (v21q)
+  addDyn(x,playerPos.y+1.0,z,[0.4,0.95,1.0],2.4,0.18);
+  playSound('spark');
+  if(pr.silent) addNoise(x,playerPos.y,z,4);           // HUSH-fed: a whisper both ends
+  else{ addNoise(x,playerPos.y,z,18); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.35); }   // arrival FLARES — you are seen
 }
 function carveAt(pr){
   const r=Math.min(2.2, Math.max(1.0, 1.4+(pr.dmg-12)*0.05));
@@ -5448,6 +5462,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.kind==='boom') rows.push('arcs heavy · blows BIG on any impact · no friends in the blast');
     if(e.kind==='wave') rows.push('a wide slow wall · ~1.8m swath · shoves · each foe pays once');
     if(e.kind==='saw') rows.push('whole tool: cycle floor 0.06s · its own teeth die at ~4m · SWIFT stretches them');
+    if(e.kind==='warp'){ rows.push('you arrive where it dies — impact, fuse, or the end of its arc'); rows.push('arrival is LOUD · HUSH-fed: a whisper, both ends'); }
     if(e.kind==='slug') rows.push('3 rounds per shot · fat, slow, ×3 tool hurt · whole tool +0.45s cycle unless relay-housed');
     if(e.kind==='orb') rows.push('slow pearl · 6s aloft, then its payload pops · weak alone — it becomes what you feed it');
     if(e.powder) rows.push('feeders ride free — their ⚡ surcharges are waived · threads refuse: full price under BEAM');
