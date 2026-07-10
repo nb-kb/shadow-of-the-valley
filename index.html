@@ -4624,6 +4624,12 @@ function startRun(){
   deployTo('hideout'); timeScale=1;
   refreshInvUI();
 }
+function newGame(){                            // the terminal's START OVER — a fresh run; the memory slots keep
+  for(const row of stashInv) row.fill(null);   // the stash forgets, in place — the crate registry holds this array
+  worldClock=0;                                // day one, dawn again — the only clock rewind outside boot
+  startRun();                                  // the boot path: starter kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
+  toast('NEW RUN — THE MEMORY SLOTS KEEP');
+}
 function onDeath(){
   if(!_pillDeath && !(activeLevel&&activeLevel.id==='hideout')){   // a lost raid, not a lost life
     playSound('death');
@@ -4861,6 +4867,7 @@ const TERM_SCREENS={
   home:()=>({title:'THE STOLEN TERMINAL', rows:[
     {label:'DEPLOY', screen:'deploy'},
     {label:'MEMORY (SAVE / LOAD)', screen:'saves'},
+    {label:'NEW GAME', screen:'newgame'},
     {label:'CLOSE', action:closeTerminal},
   ]}),
   deploy:()=>({title:'DESTINATIONS', rows:[
@@ -4880,6 +4887,10 @@ const TERM_SCREENS={
     {label:'SAVE HERE', action:()=>{ saveGame(_termSlot); termScreen='saves'; termSel=0; renderTerminal(); }},
     ...(saveMeta(_termSlot)?[{label:'LOAD', action:()=>{ loadGame(_termSlot); closeTerminal(); }}]:[]),
     {label:'BACK', screen:'saves'},
+  ]}),
+  newgame:()=>({title:'NEW GAME', rows:[            // the confirm gate — a stray press lands here, not on the wipe
+    {label:'YES — START OVER', meta:'memory slots keep', action:()=>{ closeTerminal(); newGame(); }},
+    {label:'BACK', screen:'home'},
   ]}),
 };
 let _termSlot=0;
