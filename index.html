@@ -909,13 +909,29 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     d=max(sd-B.z, p.y-0.06); m=12.0;
     float berm=max(abs(sd-(B.z+0.55))-0.35, p.y-0.20);            // LEVEL-PRIM shoulder berms
     if(berm<d){ d=berm; m=3.0; }
-    for(int i=0;i<4;i++){ if(i+nseg>=ln) break; vec4 cr=lvPool(ls+nseg+i);
+    int ncar=int(B.w+0.5);
+    for(int i=0;i<6;i++){ if(i>=ncar) break; vec4 cr=lvPool(ls+nseg+i);
       vec2 l=p.xz-cr.xy; float ca=cos(cr.z), sa=sin(cr.z);
       vec2 r2=vec2(ca*l.x+sa*l.y, -sa*l.x+ca*l.y);
-      float body=max(abs(r2.x)-1.85, max(abs(p.y-0.55)-0.42, abs(r2.y)-0.80));
-      float cab =max(abs(r2.x+0.35)-0.92, max(abs(p.y-1.18)-0.34, abs(r2.y)-0.72));
-      float cd=min(body,cab);
+      float cd;
+      if(cr.w>0.5){                                              // LEVEL-PRIM truck wreck: container, cab, chassis
+        float cont=max(abs(r2.x-0.7)-1.9, max(abs(p.y-1.62)-1.05, abs(r2.y)-1.0));
+        float cab2=max(abs(r2.x+2.55)-0.85, max(abs(p.y-0.95)-0.75, abs(r2.y)-0.85));
+        float chas=max(abs(r2.x-0.2)-2.9, max(abs(p.y-0.42)-0.18, abs(r2.y)-0.9));
+        cd=min(cont,min(cab2,chas));
+      }else{
+        float body=max(abs(r2.x)-1.85, max(abs(p.y-0.55)-0.42, abs(r2.y)-0.80));
+        float cab =max(abs(r2.x+0.35)-0.92, max(abs(p.y-1.18)-0.34, abs(r2.y)-0.72));
+        cd=min(body,cab);
+      }
       if(cd<d){ d=cd; m=18.0; } }
+    int nrl=int(C.z+0.5), nbr=int(C.w+0.5);
+    for(int i=0;i<4;i++){ if(i>=nrl) break; vec4 g2=lvPool(ls+nseg+ncar+i);   // LEVEL-PRIM guardrail
+      float rl=max(seg2L(p.xz,g2.xy,g2.zw)-0.14, abs(p.y-0.62)-0.17);
+      if(rl<d){ d=rl; m=16.0; } }
+    for(int i=0;i<4;i++){ if(i>=nbr) break; vec4 g2=lvPool(ls+nseg+ncar+nrl+i); // LEVEL-PRIM jersey run
+      float br2=max(seg2L(p.xz,g2.xy,g2.zw)-0.35, p.y-1.05);
+      if(br2<d){ d=br2; m=3.0; } }
   }else if(kind==2){                                              // WALLS compound
     float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
     float inner=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x-0.5,h*0.5+0.2,hb.z-0.5));
@@ -969,7 +985,7 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     float outer=sdBoxL(p, vec3(c.x,h*0.5,c.z), vec3(hb.x,h*0.5,hb.z));
     float inner=sdBoxL(p, vec3(c.x,h*0.5+0.2,c.z), vec3(hb.x-0.22,h*0.5+0.4,hb.z-0.22));
     d=max(outer,-inner); m=14.0;
-    for(int i=0;i<6;i++){ if(i>=ln) break; vec4 it=lvPool(ls+i);
+    for(int i=0;i<10;i++){ if(i>=ln) break; vec4 it=lvPool(ls+i);
       if(it.w>0.5){ d=max(d,-lvHole(p,vec3(c.x,0.,c.z),vec3(hb.x,0.,hb.z),it,0.8,1.3)); }
       else{ float bd=sdBoxL(p, vec3(it.x,0.9,it.y), vec3(1.1,0.9,0.5));
             if(bd<d){ d=bd; m=3.0; } } }
@@ -981,6 +997,10 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
     vec4 t=lvPool(ls+ln);                                     // trench box after rings
     cut=min(cut, sdBoxL(p, vec3((t.x+t.z)*0.5, 0.4-B.z, (t.y+t.w)*0.5),
                         vec3((t.z-t.x)*0.5, B.z, (t.w-t.y)*0.5)));
+    int nln=int(C.z+0.5);
+    for(int i=0;i<3;i++){ if(i>=nln) break; vec4 sb=lvPool(ls+ln+1+i);   // LEVEL-PRIM sandbag line
+      float sd2=max(seg2L(p.xz,sb.xy,sb.zw)-0.55, p.y-0.85);
+      if(sd2<d){ d=sd2; m=15.0; } }
   }else if(kind==9){                                              // TREES (+cutX stumps)
     float cell=B.z;
     ivec2 g=ivec2(floor((p.xz-vec2(c.x-hb.x,c.z-hb.z))/cell));
@@ -1004,6 +1024,14 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
       if(B.w>0.5 && o.x>C.z){                                     // logged half
         float sd2=max(rr-0.42, p.y-(0.35+hh*0.3));
         if(sd2<d){ d=sd2; m=16.0; }
+        float hL=lvHash(g+ivec2(29,61));                          // LEVEL-PRIM felled log beside its stump
+        if(hL>0.275){                                             // NB hash range is [0,0.5): bit31 of h^(h>>16) is always 0
+          bool fx=hL>0.3875; float off=(lvHash(g+ivec2(3,89))<0.25)?-0.4:0.4;
+          vec2 l2=p.xz-(o+(fx?vec2(0.0,off):vec2(off,0.0)));
+          float ld=fx? max(abs(l2.x)-1.4, max(abs(p.y-0.28)-0.27, abs(l2.y)-0.27))
+                     : max(abs(l2.y)-1.4, max(abs(p.y-0.28)-0.27, abs(l2.x)-0.27));
+          if(ld<d){ d=ld; m=16.0; }
+        }
       }else{
         float th=C.w+ (B.y-C.w)*hh;                               // hMin..hMax
         float trunk=max(rr-0.28, p.y-th*0.42);
@@ -1999,14 +2027,16 @@ LEVELS.area1={
     {id:'crateK', loot:['gear','mods'], kind:LVL.KIND.PROPS, box:[59,-67,67,-59],
      crates:[[61,-65,0.85],[62.3,-64.2,0.7],[65,-61,0.8]]},
     {id:'road', kind:LVL.KIND.ROAD, w:4.6,
-     cars:[[-24,-6,0.7],[6,32,2.3],[38,72,1.1]],
+     cars:[[-24,-6,0.7],[6,32,2.3],[38,72,1.1],[-6,14,0.35,1],[59,33,0.44,1]],   // 4th lane: 1=truck
+     rails:[[-152,-32,-78,-9],[0,28,43,79]],                                     // guardrail runs, offset ≤5.5m off spline
+     bars:[[-29,-5,-21,-2],[6,13,13,17],[-36,-100,-29,-98]],                     // jersey runs
      segs:[[-196,-52,-12,6],[-12,6,96,132],[-6,2,112,58],[-58,-14,-78,-118],[-78,-118,-6,-96]]},
     // West: Weapon Design Lab — one composite region: wall ring + one-room building
     {id:'lab', kind:LVL.KIND.WALLS, box:[-170,-12,-124,42], h:3.2, gate:['E',14,6],
      bldg:[-158,4,-136,26], bldgH:3.6, door:['E',0,2.2]},
     // North-west: weapon pits — sandbag rings + a trench cut
     {id:'pits', kind:LVL.KIND.PITS, box:[-98,92,-48,152], rings:[[-84,112],[-60,138],[-56,104]],
-     trench:[-92,124,-52,136], trenchD:1.7},
+     trench:[-92,124,-52,136], trenchD:1.7, lines:[[-81,115,-63,135],[-56,108,-60,134]]},
     // North-center: Armory north of the forest
     {id:'armory', kind:LVL.KIND.BUILDING, box:[2,102,20,116], h:3.4, door:['S',0,2.8]},
     // Center: ONE forest — standing trees west, logged stumps east of the cut line
@@ -2018,7 +2048,7 @@ LEVELS.area1={
      doors:[['W',96],['S',136],['E',84],['N',150]]},
     // South-east: weapons testing — fence ring, target blocks inside
     {id:'testing', kind:LVL.KIND.FENCE, box:[96,-96,184,-12], h:2.4,
-     gates:[['W',-52],['N',132]], blocks:[[130,-40],[152,-62],[128,-78]]},
+     gates:[['W',-52],['N',132]], blocks:[[130,-40],[152,-62],[128,-78],[140,-30],[163,-44],[139,-70]]},
     // South: housing — tents scattered on the footpaths
     {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
     {id:'tentsB', kind:LVL.KIND.TENT, box:[-22,-132,34,-64],  tents:[[-8,-92,0.2],[14,-108,2.9],[26,-84,1.6],[-2,-120,5.1]]},
@@ -2148,10 +2178,26 @@ function regionSdfJS(r,px,py,pz){
     if(r.cars) for(const cr of r.cars){                          // LEVEL-PRIM wreck on the road
       const lx=px-cr[0], lz=pz-cr[1], ca=Math.cos(cr[2]), sa=Math.sin(cr[2]);
       const rx=ca*lx+sa*lz, rz=-sa*lx+ca*lz;
-      const body=Math.max(Math.abs(rx)-1.85, Math.max(Math.abs(py-0.55)-0.42, Math.abs(rz)-0.80));
-      const cab =Math.max(Math.abs(rx+0.35)-0.92, Math.max(Math.abs(py-1.18)-0.34, Math.abs(rz)-0.72));
-      const cd=Math.min(body,cab);
+      let cd;
+      if(cr[3]){                                                 // LEVEL-PRIM truck wreck: container, cab, chassis
+        const cont=Math.max(Math.abs(rx-0.7)-1.9, Math.max(Math.abs(py-1.62)-1.05, Math.abs(rz)-1.0));
+        const cab2=Math.max(Math.abs(rx+2.55)-0.85, Math.max(Math.abs(py-0.95)-0.75, Math.abs(rz)-0.85));
+        const chas=Math.max(Math.abs(rx-0.2)-2.9, Math.max(Math.abs(py-0.42)-0.18, Math.abs(rz)-0.9));
+        cd=Math.min(cont,Math.min(cab2,chas));
+      }else{
+        const body=Math.max(Math.abs(rx)-1.85, Math.max(Math.abs(py-0.55)-0.42, Math.abs(rz)-0.80));
+        const cab =Math.max(Math.abs(rx+0.35)-0.92, Math.max(Math.abs(py-1.18)-0.34, Math.abs(rz)-0.72));
+        cd=Math.min(body,cab);
+      }
       if(cd<d){ d=cd; m=18.0; }
+    }
+    if(r.rails) for(const g of r.rails){                         // LEVEL-PRIM guardrail: floating timber band
+      const rl=Math.max(_seg2(px,pz,g[0],g[1],g[2],g[3])-0.14, Math.abs(py-0.62)-0.17);
+      if(rl<d){ d=rl; m=16.0; }
+    }
+    if(r.bars) for(const g of r.bars){                           // LEVEL-PRIM jersey run: solid to 1.05m
+      const br=Math.max(_seg2(px,pz,g[0],g[1],g[2],g[3])-0.35, py-1.05);
+      if(br<d){ d=br; m=3.0; }
     }
   }else if(r.kind===K.WALLS){
     const outer=_sdBox3(px,py,pz,cx,r.h/2,cz,hx,r.h/2,hz);
@@ -2240,6 +2286,10 @@ function regionSdfJS(r,px,py,pz){
     }
     const t=r.trench;                                          // trench: a ground CUT
     cut=_sdBox3(px,py,pz,(t[0]+t[2])/2,0.4-r.trenchD,(t[1]+t[3])/2,(t[2]-t[0])/2,r.trenchD,(t[3]-t[1])/2+0.0);
+    if(r.lines) for(const g of r.lines){                       // LEVEL-PRIM sandbag line
+      const sd2=Math.max(_seg2(px,pz,g[0],g[1],g[2],g[3])-0.55, py-0.85);
+      if(sd2<d){ d=sd2; m=15.0; }
+    }
   }else if(r.kind===K.STUMPS){
     const cell=r.cell;
     const gx=Math.floor((px-bx[0])/cell), gz=Math.floor((pz-bx[1])/cell);
@@ -2270,6 +2320,14 @@ function regionSdfJS(r,px,py,pz){
       if(r.cutX!==undefined && ox>r.cutX){                 // logged: a stump remains
         const sd2=Math.max(rr-0.42, py-(0.35+h*0.3));
         if(sd2<d){ d=sd2; m=16.0; }
+        const hL=_hash2i(gx+29,gz+61);                     // LEVEL-PRIM felled log beside its stump
+        if(hL>0.275){                                      // NB hash range is [0,0.5): bit31 of h^(h>>16) is always 0
+          const fx=hL>0.3875, off=_hash2i(gx+3,gz+89)<0.25?-0.4:0.4;
+          const lx2=px-(ox+(fx?0:off)), lz2=pz-(oz+(fx?off:0));
+          const ld=fx? Math.max(Math.abs(lx2)-1.4, Math.max(Math.abs(py-0.28)-0.27, Math.abs(lz2)-0.27))
+                     : Math.max(Math.abs(lz2)-1.4, Math.max(Math.abs(py-0.28)-0.27, Math.abs(lx2)-0.27));
+          if(ld<d){ d=ld; m=16.0; }
+        }
       }else{
         const th=r.hMin+(r.hMax-r.hMin)*h;
         const trunk=Math.max(rr-0.28, py-th*0.42);
@@ -2316,9 +2374,13 @@ function buildLevelTexData(level,bake){
     const cx=(bx[0]+bx[2])/2, cz=(bx[1]+bx[3])/2, hx=(bx[2]-bx[0])/2, hz=(bx[3]-bx[1])/2;
     let B=[r.kind,0,0,0], C=[17*0+pool,0,0,0];   // C.x = pool index (row 17 flat)
     const items=[];
-    if(r.kind===K.ROAD){ B=[r.kind,r.segs.length,r.w,0];
+    if(r.kind===K.ROAD){ B=[r.kind,r.segs.length,r.w,r.cars?r.cars.length:0];
       r.segs.forEach(g=>items.push(g));
-      if(r.cars) r.cars.forEach(cr=>items.push([cr[0],cr[1],cr[2],0])); }
+      if(r.cars) r.cars.forEach(cr=>items.push([cr[0],cr[1],cr[2],cr[3]||0]));
+      if(r.rails) r.rails.forEach(g=>items.push(g));
+      if(r.bars)  r.bars.forEach(g=>items.push(g));
+      C[2]=r.rails?r.rails.length:0; C[3]=r.bars?r.bars.length:0;
+      if(B[3]>6||C[2]>4||C[3]>4) console.warn('ROAD prim count over GLSL loop cap (GPU drops the rest):',r.id); }
     if(r.kind===K.WALLS){
       B=[r.kind,r.h,0,r.bldgH||0];
       const g=r.gate; items.push([axis[g[0]],g[1],g[2],0]);
@@ -2335,11 +2397,14 @@ function buildLevelTexData(level,bake){
       r.doors.forEach(dr=>{ const a=axis[dr[0]]; items.push([a, dr[1]-(a<1.5?cz:cx), 0.95, 0]); }); }
     if(r.kind===K.FENCE){ B=[r.kind,r.h,0,0];
       r.gates.forEach(g=>{ const a=axis[g[0]]; items.push([a, g[1]-(a<1.5?cz:cx), 2.2, 1]); });
-      r.blocks.forEach(b2=>items.push([b2[0],b2[1],0,0])); }
+      r.blocks.forEach(b2=>items.push([b2[0],b2[1],0,0]));
+      if(items.length>10) console.warn('FENCE item count over GLSL loop cap (GPU drops the rest):',r.id); }
     if(r.kind===K.PITS){ B=[r.kind,0,r.trenchD,0];
       r.rings.forEach(rg=>items.push([rg[0],rg[1],0,0]));
       const t=r.trench; items.push([t[0],t[1],t[2],t[3]]);
-      C[1]=r.rings.length;   // ln = rings only; trench read at ls+ln
+      if(r.lines){ r.lines.forEach(g=>items.push(g)); C[2]=r.lines.length;
+        if(C[2]>3) console.warn('PITS line count over GLSL loop cap (GPU drops the rest):',r.id); }
+      C[1]=r.rings.length;   // ln = rings only; trench read at ls+ln, lines at ls+ln+1
     }
     if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,r.shrubs?1:0,r.cutX??0,r.hMin]; }
     if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
