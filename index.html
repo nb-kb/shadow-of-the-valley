@@ -397,6 +397,7 @@ const PARAMS = {
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
   fogDensity:  {v:0.014,min:0,  max:0.1,  step:0.002,label:'fog density'},
+  fogWeather:  {v:-1,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
 };
 const P = k => PARAMS[k].v;
 
@@ -2403,7 +2404,23 @@ let visitedCells=new Set();
 const dayNight={ lightDir:new Vec3(0,1,0.3), lightCol:[1,1,1], ambient:0.3,
                  skyHi:[0.3,0.45,0.7], skyLo:[0.7,0.6,0.5], sunUp:true, t01:0.32, clock:'07:40' };
 
+// FOG WEATHER — banks ride the sun's clock: three slow sines layered, fully
+// deterministic, so a deploy lands in the weather it left and NEW GAME clears
+// the sky with the rewind. fogW 0 = clear … 1 = socked-in. JS-only state — the
+// twin is untouched; geometry never moves, only how far you (and they) can see.
+let fogW=0;
+function updateFogWeather(){
+  const o=P('fogWeather');
+  if(o>=0){ fogW=o; return; }                  // slider >=0 forces the weather for testing
+  const t=worldClock;
+  const w = Math.sin(t/830.0)*0.5+0.5          // ~87 min swell
+          + Math.sin(t/223.0+2.1)*0.30         // ~23 min fronts
+          + Math.sin(t/89.0+4.7)*0.12;         // ~9 min ragged edges
+  fogW = clamp((w-0.66)/0.5, 0, 1);            // biased clear: fog is an event, not the default
+}
+
 function updateDayNight(){
+  updateFogWeather();
   const t01 = modJS(P('timeOfDay') + worldClock/P('dayLength'), 1.0);
   dayNight.t01=t01;
   const hour=t01*24;
@@ -2438,6 +2455,26 @@ function updateDayNight(){
   dayNight.ambient=lerp(nAmb,dAmb,k);
   dayNight.skyHi=mixV(nHi,dHi);
   dayNight.skyLo=mixV(nLo,dLo);
+  // FOG MOOD — the palette flattens toward its own gray and the sun disk dims
+  // to a rumor; all of it rides the existing per-frame uniforms (uSkyHi/uSkyLo/
+  // uLightCol), so the shader needs no new plumbing.
+  if(fogW>0){
+    const lum=c=>c[0]*0.35+c[1]*0.5+c[2]*0.15;
+    const gLo=lum(dayNight.skyLo), gHi=lerp(lum(dayNight.skyHi),gLo,0.6);
+    const a=0.85*fogW, toG=(c,g)=>[lerp(c[0],g,a),lerp(c[1],g,a),lerp(c[2],g,a)];
+    dayNight.skyHi=toG(dayNight.skyHi,gHi);
+    dayNight.skyLo=toG(dayNight.skyLo,gLo);
+    const dim=1-0.75*fogW;
+    dayNight.lightCol=[dayNight.lightCol[0]*dim,dayNight.lightCol[1]*dim,dayNight.lightCol[2]*dim];
+  }
+  // EFFECTIVE ATMOSPHERE — weather thickens the level's authored haze toward a
+  // dense cap, and the far plane follows the fog wall in: march no farther than
+  // where transmittance ~2.5% (exp(-fog·far)=0.025 → far=3.7/fog). Fog-opaque
+  // distance ≈ far, so shrinking uFar is pure FPS win — nothing visible is cut.
+  const baseFog=activeLevel&&activeLevel.atmos ? activeLevel.atmos.fog : P('fogDensity');
+  const baseFar=activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0;
+  dayNight.fogE=Math.max(baseFog, lerp(baseFog,0.085,fogW));      // full bank: see ~43m
+  dayNight.farE=Math.min(baseFar, 3.7/Math.max(dayNight.fogE,1e-4));
 }
 
 // how lit is the player right now? (drives stealth)
@@ -3398,12 +3435,17 @@ function hasGadget(kind){
   }
   return false;
 }
+// FOG EYES — a bank blinds the zealots too. ONE scale, shared by the AI rate,
+// the hard sight gate, and the photometer, so the drawn number never lies.
+function fogEye(){ return 1-0.65*fogW; }
+function effVision(){ return P('enemyVision')*fogEye(); }
 // PHOTOMETER MATH — inverts the zealot perception line (Zealot.update):
-//   rate = exposure * (enemyVision/dist) * motion, accumulating only while rate > 0.12.
-// Standing+quiet motion is 0.6 → dist = exposure*enemyVision*5. Floor 2m; cap at the
-// 34m sight gate. Assumes the zealot is LOOKING — the cone is their problem, not the light's.
+//   rate = exposure * (effVision/dist) * motion, accumulating only while rate > 0.12.
+// Standing+quiet motion is 0.6 → dist = exposure*effVision*5. Floor 2m; cap at the
+// 34m sight gate (fog-scaled, same as the AI's). Assumes the zealot is LOOKING —
+// the cone is their problem, not the light's.
 function spotDistance(){
-  return clamp(playerPos.exposure*P('enemyVision')*0.6/0.12, 2, 34);
+  return clamp(playerPos.exposure*effVision()*0.6/0.12, 2, 34*fogEye());
 }
 
 // ============================================================
@@ -4504,7 +4546,7 @@ class Zealot{
     const dx=px-this.position.x, dz=pz-this.position.z;
     const dist=Math.hypot(dx,dz);
     const eyeY=this.position.y+1.55;
-    const seesLOS = dist<34 && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz));
+    const seesLOS = dist<34*fogEye() && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz));
     const fwdX=Math.sin(this.yaw), fwdZ=Math.cos(this.yaw);
     const cone=(fwdX*dx+fwdZ*dz)/Math.max(0.001,dist);
     const fovCos=Math.cos((P('enemyFovDeg')*Math.PI/180)/2);
@@ -4514,7 +4556,7 @@ class Zealot{
     let rate=0;
     if(seesLOS&&inCone){
       const motion=playerPos.isSprinting?1.35:(playerPos.noiseLevel>1.5?1.0:(playerPos.isCrouching?0.35:0.6));
-      rate=playerPos.exposure*(P('enemyVision')/Math.max(1,dist))*motion;   // PHOTOMETER twin: spotDistance() inverts this line + the 0.12 gate below
+      rate=playerPos.exposure*(effVision()/Math.max(1,dist))*motion;   // PHOTOMETER twin: spotDistance() inverts this line + the 0.12 gate below
     }
     if(dist<12){
       const heard=playerPos.noiseLevel/Math.max(1,dist)* (seesLOS?1:0.4);
@@ -5841,6 +5883,7 @@ function updateDebugWatch(dt){
     ['detection', highestDetection.toFixed(2)],
     ['health', playerPos.health.toFixed(0)],
     ['clock', dayNight.clock+(dayNight.sunUp?' ☀':' ☾')],
+    ['fog', fogW.toFixed(2)+' · far '+Math.round(dayNight.farE)+'m'],
     ['items world', ''+worldItems.length],
     ['projectiles', ''+projectiles.length],
     ['zealots', enemies.filter(e=>e.health>0).length+'/'+enemies.length],
@@ -6230,7 +6273,7 @@ function frame(){
   gl.uniform1f(U.uAmbient,dayNight.ambient);
   gl.uniform3f(U.uSkyHi,dayNight.skyHi[0],dayNight.skyHi[1],dayNight.skyHi[2]);
   gl.uniform3f(U.uSkyLo,dayNight.skyLo[0],dayNight.skyLo[1],dayNight.skyLo[2]);
-  gl.uniform1f(U.uFog, activeLevel&&activeLevel.atmos ? activeLevel.atmos.fog : P('fogDensity'));
+  gl.uniform1f(U.uFog, dayNight.fogE);   // weather-effective density (updateDayNight)
   { // world ceiling: static per world, raised by anything airborne this frame
     let _top = (activeLevel&&activeLevel.kind==='authored') ? (activeLevel.worldTop||18.0) : 81.0;
     for(const b of beamSegs) _top=Math.max(_top, b.a.y, b.b.y);
@@ -6250,7 +6293,7 @@ function frame(){
     gl.uniform1i(U.uExfilCount,n);
     for(let i=0;i<n;i++) gl.uniform4f(U.uExfils[i], exs[i].x, exs[i].y||0, exs[i].z, 1);
   }
-  gl.uniform1f(U.uFar, activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0);
+  gl.uniform1f(U.uFar, dayNight.farE);   // weather-effective far — the march never pays for meters the fog owns
   gl.uniform1i(U.uMaxSteps, P('rayQuality')|0);
   gl.uniform2f(U.uSeed,SEED.x,SEED.y);
   gl.uniform2f(U.uGateCell,GATE.cx,GATE.cz);
@@ -6262,11 +6305,12 @@ function frame(){
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, 0);
   gl.uniform1f(U.uExposure, playerPos.exposure);
 
-  // items (nearest first)
+  // items (nearest first) — cull follows the fog wall in: past uFar nothing uploads
   renderItemsBuf.length=0;
+  const cullR2=Math.min(60, dayNight.farE+5)**2;
   for(const w of worldItems){
     const d=(w.pos.x-playerPos.x)**2+(w.pos.y-playerPos.y)**2+(w.pos.z-playerPos.z)**2;
-    if(d<3600) renderItemsBuf.push([d,w]);
+    if(d<cullR2) renderItemsBuf.push([d,w]);
   }
   renderItemsBuf.sort((a,b)=>a[0]-b[0]);
   const nItems=Math.min(RLIM.ITEMS,renderItemsBuf.length);
@@ -6385,7 +6429,7 @@ function frame(){
     document.getElementById('clockRow').style.display=hasW?'':'none';
     document.getElementById('fpsRow').style.display=hasO?'':'none';
     if(hasO) document.getElementById('hudFps').textContent=fpsEma.toFixed(0);
-    if(hasW) document.getElementById('hudClock').textContent=dayNight.clock+(dayNight.sunUp?' ☀':' ☾');
+    if(hasW) document.getElementById('hudClock').textContent=dayNight.clock+(dayNight.sunUp?' ☀':' ☾')+(fogW>0.5?' FOG':'');
     // PHOTOMETER owns the whole exposure readout: no light meter, no eye, no SEEN.
     // (the sim keeps running — enemies still read exposure; this gates HUD only)
     const hasPM=hasGadget('photometer')&&gameState==='play';
