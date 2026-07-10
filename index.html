@@ -7092,8 +7092,7 @@ function frame(){
 // BOOT
 // ============================================================
 updateDayNight();
-initLoadout();          // so the intro backdrop has a tool readout
-updateToolReadout();
+updateToolReadout();    // EMPTY HANDS on the intro backdrop — the kit waits in the stash now
 engineReady=true;       // every top-level let/const is initialized past this point
 frame();
 </script>
