@@ -6612,17 +6612,23 @@ function menuNav(){
           zoneIdx=0; cursorX=0; cursorY=clamp(cursorY,0,EQUIP_SLOTS.length-1); moved=true; return;
         }
       }
-      const inspGrid=inspectItem instanceof Tool;         // the pockets panel sits to the RIGHT
+      // the pockets panel sits to the RIGHT — Tool racks AND plain pockets take the cursor
+      // (Tool-only here left pouch/spare-container panels enterable once, by X, and never again)
+      const inspGrid=inspectItem instanceof Tool||!!(inspectItem&&inspectItem.inv);
       if(dx>0 && nx>=f.cols && inspGrid && currentFocus!==2){
-        const tz=rackZone(inspectItem);
-        const rows=tz.rowsOf(0);
-        const entry=f.rack?cursorY:(rows-1-clamp(cursorY,0,rows-1));   // grid rows are top-origin
-        setFocus(2, 0, clamp(entry,0,rows-1)); moved=true; return;
+        if(inspectItem instanceof Tool){
+          const tz=rackZone(inspectItem);
+          const rows=tz.rowsOf(0);
+          const entry=f.rack?cursorY:(rows-1-clamp(cursorY,0,rows-1));   // grid rows are top-origin
+          setFocus(2, 0, clamp(entry,0,rows-1));
+        }else setFocus(2, 0, clamp(cursorY,0,inspectItem.invRows-1));    // plain pockets: top-origin both sides
+        moved=true; return;
       }
       if(dx<0 && nx<0 && currentFocus===2){
         const back=isToolMenuOpen?1:0;
-        if(back===0){ const cz=clampZone(); const rows=f.rowsOf?f.rowsOf(cursorX):cz.rows;
-                      setFocus(0, cz.cols-1, clamp(rows-1-cursorY,0,cz.rows-1)); }   // invert back to top-origin
+        if(back===0){ const cz=clampZone();
+                      const ey=f.rack?(f.rowsOf?f.rowsOf(cursorX):cz.rows)-1-cursorY:cursorY;   // racks invert to top-origin; plain pockets go straight across
+                      setFocus(0, cz.cols-1, clamp(ey,0,cz.rows-1)); }
         else{ const tz=activeTool?rackZone(activeTool):null;
               const bc=tz?tz.cols:1;
               setFocus(1, bc-1, clamp(cursorY,0,tz?tz.rowsOf(bc-1)-1:0)); }            // rack -> rack: same origin
