@@ -3575,6 +3575,7 @@ function cycleHolster(dir){
       const inc=inv[r][c];
       if(!(inc instanceof Tool)) continue;
       _endBeams();                       // mid-beam swap: same teardown the menus force via uiOpen()
+      reloadTimer=0;                     // a holstered tool keeps its half-fed magazine — the reload dies with the swap
       inv[r][c]=activeTool||null;        // the wield takes the incoming tool's slot
       if(activeTool){ activeTool.x=c; activeTool.y=r; }
       activeTool=inc;
@@ -4125,7 +4126,7 @@ function emitProjectile(owner,origin,dir,shot,base,src){
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
       burn:p.burn||0, bleed:!!p.bleed, chaos:p.chaos||0,
-      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[1.2,1.2,0.9]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[1.6,1.2,0.4]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; saw hot steel, slug hot brass sum >2.8 — heavy draws thick
+      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[0.75,0.75,0.55]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[0.78,0.55,0.15]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; width tiers: sum<1.5 fat, <2.8 gossamer, ≥2.8 hairline — slug brass stays under 1.5 (fat shell), saw steel rides the gossamer tier
       silent:p.silent||base.silenced,
     });
   }
