@@ -4001,14 +4001,21 @@ function tryFirePlayer(dt){
     let pick=-1;
     for(let k=0;k<n;k++){
       const i=(cyc+k)%n, sh=lane.shots[i];
-      if(sh.pend.laser) continue;                      // continuous shots belong to the held-fire path
-      const needsAmmo=sh.kind==='bolt';
-      const okCharge=activeTool.charge>=(sh.cost||0);
+      const bl=burstLaser(res,sh);                       // burst cam: a fed damage beam volleys pulses instead of flowing
+      if(sh.pend.laser&&!bl) continue;                   // continuous shots belong to the held-fire path
+      if(bl&&_laserBursts.some(q=>q.lane===lane)) continue;   // volley still walking: the lane holds
+      const needsAmmo=sh.kind==='bolt'&&!bl;             // pulses are light, not lead
+      const okCharge=activeTool.charge>=(bl?Math.ceil((sh.cost||0)/3):(sh.cost||0));
       const okAmmo=!needsAmmo||(mag&&mag.loaded>0);
       if(okCharge&&okAmmo){ pick=i; if(k>0) skippedAny=true; break; }
     }
     if(pick<0) continue;                                 // starved column: cycle HOLDS
     const sh=lane.shots[pick];
+    if(burstLaser(res,sh)){                              // queue the volley — pays per pulse, first lands this frame
+      _laserBursts.push({lane,sh,res,left:res.burst,t:0});
+      lane.cycleRef.set((pick+1)%n);
+      firedAny=true; continue;
+    }
     wearRoll(spendCharge(activeTool,sh.cost||0));        // price the shot, not the copies — and roll the dice
     for(let b=0;b<res.burst;b++){
       if(sh.kind==='bolt'){
@@ -4026,7 +4033,10 @@ function tryFirePlayer(dt){
     firedAny=true;
   }
   if(skippedAny) playSound('click');
-  if(!firedAny){ playSound('empty'); fireCooldown=0.3; return; }
+  if(!firedAny){
+    if(!_laserBursts.length){ playSound('empty'); fireCooldown=0.3; }   // a walking volley is not a dry click
+    return;
+  }
   if(loudest>0) addNoise(playerPos.x,playerPos.y,playerPos.z,loudest);
   fireCooldown=res.fireRate;
   updateToolReadout();
@@ -4087,6 +4097,7 @@ function runContinuousBeams(dt){
     const n=lane.shots.length; if(!n) continue;
     const sh=lane.shots[lane.cycleRef.get()%n];
     if(!sh.pend.laser) continue;
+    if(burstLaser(res,sh)) continue;                  // burst cam owns that lane: pulses, not a thread
     const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
     if(activeTool.charge<rate*dt){ continue; }        // starved thread gutters out
     spendCharge(activeTool,rate*dt);
@@ -4173,39 +4184,86 @@ function _endBeams(){
   if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false);
   _beamLanes.clear();
 }
-function fireHitscan_DEAD(owner,origin,dir,shot,res){
+// THE PULSE — one hitscan laser, the burst cam's tooth. Marches the world for the
+// hit point, sweeps enemy spheres (animated head included — projectile headshot
+// rules: bare head x2, a helm eats the bonus and cracks), honors DRILL pierce, and
+// pays the core's FULL projectile hurt — no continuous-beam discount. Draws one
+// one-frame laser-tier flash (col sums >2.8 land in the shader's 0.004 ray).
+function fireHitscan(owner,origin,dir,shot,res,dt){
   const p=shot.pend;
   const o=owner==='player'?camPos():origin, f=dir;
   const maxLen=60;
   let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
-  let pierceLeft=p.pierce, dmg=(shot.kind==='spark'?10:14)+p.dmg;
+  let pierceLeft=p.pierce;
+  const dmg=(shot.kind==='boom'?34:shot.kind==='spark'?12:res.dmg)+p.dmg;
   const hits=[];
   for(const en of enemies){
-    if(en.health<=0) continue;
+    if(en.health<=0||en._dormant) continue;
     const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
     const tt=rx*f.x+ry*f.y+rz*f.z;
     if(tt>0.3&&tt<t){
       const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
-      if(d<0.55) hits.push({en,tt});
+      const hp=enemyHeadPos(en,_hpV);
+      const hd=Math.hypot(hp.x-(o.x+f.x*tt),hp.y-(o.y+f.y*tt),hp.z-(o.z+f.z*tt));
+      if(d<0.55||hd<0.24) hits.push({en,tt,head:hd<0.24});
     }
   }
   hits.sort((a,b)=>a.tt-b.tt);
   for(const h of hits){
-    if(owner==='player') h.en.hurt(dmg,'player');
-    if(res&&res.pulse){ h.en.velocity.addScaledVector(f,9); h.en.stagger=0.3; }
+    h.en.hurt(headshotDmg(h.en,dmg,h.head),owner,h.head?'head':undefined);
+    if(shot.kind!=='spark'&&shot.kind!=='boom') applyStatus(h.en,p);   // blast kinds dose via the explosion — once
+    playSound('hit');
+    if(res&&res.pulse){ h.en.velocity.addScaledVector(f,8); h.en.stagger=0.35; }
     if(pierceLeft<=0){ t=h.tt; break; }
     pierceLeft--;
   }
   const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
   beamSegs.push({a:origin.clone?origin.clone():new Vec3(origin.x,origin.y,origin.z),b:end,
-                 col:shot.kind==='spark'?[1.0,0.45,0.9]:[1.0,0.3,0.35],ttl:0.06});
+                 col:shot.kind==='spark'?[3.0,1.1,2.6]:shot.kind==='boom'?[3.2,1.0,0.5]:[3.2,0.9,1.1],
+                 ttl:dt+0.001,flash:lastT});
   if(shot.kind==='spark'){                              // remote detonation at the dot
-    explode({pos:end,dmg,owner});
-  }else if(shot.kind==='pick'){
-    carveAt({pos:end,dmg});
+    explode({pos:end,dmg,owner,burn:p.burn,bleed:p.bleed});
+  }else if(shot.kind==='boom'){
+    explode({pos:end,kind:'boom',dmg,owner,burn:p.burn,bleed:p.bleed});
   }else{
     worldNormalJS(end.x,end.y,end.z,_n); addDecal(end,_n,0.14);
     addDyn(end.x,end.y,end.z,[1,0.4,0.4],1.0,0.05);
+  }
+}
+// BURST LASERS — burst cam + BEAM on a damage core: the lane stops flowing and
+// VOLLEYS instead. `burst` pulses 70ms apart, re-trigger gated by fireRate like
+// any shot. Each pulse pays ceil(cost/3)⚡ — a full burst drinks about what one
+// held second would, so the cam buys the full hurt back without free lasing.
+// TWIN splits every pulse into round(twin) wandering rays (cap 3, full hurt
+// each — projectile-twin parity, headroom drops extra rays first). Pulses are
+// SHOTS: they ring toolNoise (22, or 4 under HUSH/suppressor), unlike threads.
+// grip/pick never volley — the physgun and the carver stay continuous.
+const _laserBursts=[];                    // {lane,sh,res,left,t}
+function burstLaser(res,sh){
+  return res.burst>1&&sh.pend.laser&&sh.kind!=='grip'&&sh.kind!=='pick';
+}
+function runBurstLasers(dt){
+  for(let i=_laserBursts.length-1;i>=0;i--){
+    const q=_laserBursts[i];
+    if(!activeTool||activeTool._res!==q.res){ _laserBursts.splice(i,1); continue; }   // re-racked mid-volley: it dies with the old sequence
+    q.t-=dt;
+    while(q.t<=0&&q.left>0){
+      const cost=Math.ceil((q.sh.cost||0)/3);
+      if(activeTool.charge<cost){ q.left=0; playSound('click'); break; }              // browned out mid-volley
+      wearRoll(spendCharge(activeTool,cost));
+      const f=camForward(), origin=muzzleWorld();       // each pulse re-reads the aim — the burst walks with the crosshair
+      let rays=Math.max(1,Math.round(q.sh.pend.twin));
+      if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
+      for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f,_jDir):f,q.sh,q.res,dt);
+      const silent=q.sh.pend.silent||q.res.silenced||q.lane.silenced;
+      playSound(silent?'silenced':'spark');
+      addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
+      if(!silent){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
+      cameraPitch+=0.012+q.res.dmg*0.0004; playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4);
+      updateToolReadout();
+      q.left--; q.t+=0.07;
+    }
+    if(q.left<=0) _laserBursts.splice(i,1);
   }
 }
 
@@ -4233,45 +4291,6 @@ function runTacLaser(dt){
   if(lr){ lr.textContent=t>=maxLen-0.1?'—— m':t.toFixed(1)+' m'; lr.style.opacity=1; }
 }
 function endBeam(){ beamActive=false; beamAudio(false); if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false); }
-function runBeam_DEAD(dt,res,shot){
-  beamAudio(true);
-  activeTool.charge=Math.max(0,activeTool.charge-(24+(shot.pend.surcharge||0))*dt);
-  if(activeTool.charge<=0){ endBeam(); return; }
-  const o=camPos(), f=camForward();
-  const maxLen=30;
-  let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
-  // beam vs enemies
-  let hitEnemy=null;
-  for(const en of enemies){
-    if(en.health<=0) continue;
-    const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
-    const tt=rx*f.x+ry*f.y+rz*f.z;
-    if(tt>0.3&&tt<t){
-      const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
-      if(d<0.55){ t=tt; hitEnemy=en; }
-    }
-  }
-  // GRIP: pin an object to the crosshair at range
-  if(res.grip && !heldWorld){
-    const pick=itemUnderCrosshair(maxLen);
-    if(pick.idx>=0){ grabWorld(pick.idx,Math.max(1.5,pick.t),'beam'); }
-  }
-  if(heldWorld&&heldWorld.mode==='beam') t=Math.min(t,heldWorld.holdDist);
-  const dmg=(shot.pend.dmg>0? 26+shot.pend.dmg : 7);
-  if(hitEnemy && !res.grip){
-    hitEnemy.hurt((res.pulse?4:dmg)*dt,'player');
-    if(res.pulse){ hitEnemy.velocity.addScaledVector(f,26*dt); hitEnemy.stagger=0.4; }
-  }
-  if(res.pulse&&heldWorld&&heldWorld.mode==='beam'){ /* held items already follow */ }
-  const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
-  const col=res.grip?[0.3,0.9,1.0]:(res.pulse?[1.0,0.85,0.3]:[1.0,0.25,0.35]);
-  beamSegs.push({a:muzzleWorld(),b:end,col,ttl:0.05});
-  addDyn(end.x,end.y,end.z,col,1.2,0.05);
-  addNoise(playerPos.x,playerPos.y,playerPos.z,5);
-  if(!res.grip&&!res.pulse&&t<maxLen-0.1&&!hitEnemy&&Math.random()<dt*8){
-    worldNormalJS(end.x,end.y,end.z,_n); addDecal(end,_n,0.12);
-  }
-}
 
 // ---- HEADSHOTS: the head is a second, smaller test sphere — twin of the GLSL head.
 // ---- The center MOVES: it rides the head-look (enHeadYaw in the shader — change one,
@@ -4835,6 +4854,7 @@ function resetLevel(){
   placeGate();
   visitedCells.clear();
   worldItems.length=0; projectiles.length=0; beamSegs.length=0; SDF_EDITS.length=0;
+  _laserBursts.length=0;
   decals.length=0; dynLights.length=0; noisePings.length=0;
   heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
@@ -4933,7 +4953,7 @@ function teardownWorld(){
   worldItems.length=0; enemies.length=0; projectiles.length=0;
   beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
   SDF_EDITS.length=0; dynLights.length=0;
-  _beamLanes.clear();
+  _beamLanes.clear(); _laserBursts.length=0;
   if(heldWorld){ heldWorld=null; document.getElementById('crosshair').classList.remove('carrying'); }
   fireCooldown=0; playerPos.noiseLevel=0.2; playerPos.exposure=0.5;
   _hoverCache.idx=-1; _hoverCache.w=null;
@@ -5365,6 +5385,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.bounce) rows.push('bounces '+e.bounce);
     if(e.spread) rows.push('spread ×'+e.spread);
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
+    if(e.burst) rows.push(e.burst+'-round burst · beam lanes: '+e.burst+'-pulse laser burst');
     if(e.silenced||e.silent) rows.push('silenced');
     if(e.fuse) rows.push('fused '+e.fuse+'s');
     if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
@@ -6327,6 +6348,7 @@ function frame(){
     if(!uiMenusOpen()){
       updateInteract(dt);
       tryFirePlayer(dt);
+      runBurstLasers(dt);
       runContinuousBeams(dt);
       runTacLaser(dt);
       if(heldWorld && heldWorld.w.item && heldWorld.w.item.pointing){
