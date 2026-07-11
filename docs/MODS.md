@@ -19,8 +19,9 @@ Legend: **cat** = category, drives resolver semantics. **⚡** = `surcharge`
   proj core** consumes, then the charge resets. Multiple modifiers stack onto
   one core.
 - **proj** cores emit a shot using the pending charge.
-- **The relay convention (v22j):** FUSE/CONTACT wire the next proj core as their
-  relay payload (`relayNext`). Under a **non-laser carrier** that payload is
+- **The relay convention (v22j, extended v22 P-grammar):** FUSE/CONTACT/**TIMER**
+  wire the next proj core as their relay payload (`relayNext`). Under a
+  **non-laser carrier** that payload is
   **housed** (`shot.housed`, recursive down the chain): the fire cycle passes
   over it entirely (carrier→carrier — a housed BOOM can never bare-fire in your
   face), enemy `tryShoot` and the continuous-beam head pick skip it too, and the
@@ -31,7 +32,16 @@ Legend: **cat** = category, drives resolver semantics. **⚡** = `surcharge`
   waives mod surcharges only, never housed core bases. **BEAM carriers are
   exempt**: threads never cast `relayNext` (only wave/orb trains do), so under
   a laser the old cycle-gate stands — the payload keeps its cycle seat and pays
-  at its own turn.
+  at its own turn. **The family reads:** CONTACT = last touch · TIMER = bell or
+  touch · FUSE = stick, then the bell. Every cast leaves along the struck FACE
+  (world) or RADIALLY out of the wound (flesh) — stored flight dir only for
+  mid-air expiries (TIMER bell, orb/warp life-end). **EXTRA CASTS COST A THIRD
+  (v22 P-grammar, `castRelay`):** the pull pre-pays ONE delivery of the housed
+  chain; every cast past the first (in-body DRILL ticks, SPLINTER shard
+  deliveries) draws `ceil(chain ⚡/3)` — the burst-pulse precedent — and a
+  ballistic chain's extras eat their rounds from the carrier's own mag (the
+  POWDER law: lead is a full price). Can't pay either bill: the cast simply
+  doesn't happen. Zealots pay no ⚡ — their extras cap flat at 3 per projectile.
 - A lane whose trailing feeders end in a lone **BEAM** becomes a tactical laser;
   anything under it "vents" (wasted).
 
@@ -68,14 +78,14 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `dmgPlus` | HURT+ | `{dmg:10}` | 5 | `pend.dmg` → shot dmg | cheap |
 | `velPlus` | SWIFT | `{vel:1.6}` | 4 | `pend.vel` ×= (proj speed) | cheap |
 | `bounce` | RICOCHET | `{bounce:2}` | 6 | `pr.bounces` (index.html:3599) | cheap |
-| `pierce` | DRILL | `{pierce:2}` | 8 | `pierceLeft` (index.html:3735) | cheap |
+| `pierce` | DRILL | `{pierce:1}` | 8 | v22 P-grammar: **pierce-ALL** — flesh never stops the shot (`impactOrPierce` returns false first), only the world or the lifetime ends it. Call sites bill **one hit per body per 0.1s** (`pr._dHit` map keyed on the body, `pr.life` as the clock) — a fast bolt = exactly 1 bill per body ("pierces all enemies", paid by geometry); a slow core dwelling in a body ticks ~10/s, capped. Hitscan pulses take every swept body before the wall (`pierceAll`). Blast kinds under DRILL pass through flesh and resolve on the environment ([DRILL,SPARK] blasts at the backstop; WARP blinks THROUGH the crowd) — declared. Stacking DRILL = idempotent 8⚡ of nothing — declared. Price held at 8⚡: per-body single-bill is FAIRER than the old accidental in-body triple-tap. | cheap |
 | `heavy` | MASS | `{grav:1, dmg:6}` | 5 | `pr.vel.y-=grav*12*dt` (3838) | cheap |
 | `twin` | TWIN | `{twin:2}` | 12 | shot count `round(twin)`, **cap 3** | cheap |
 | `silentMod` | HUSH | `{silent:true}` | 3 | suppresses shot noise (3654) | cheap |
-| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane from the blast point (`relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT. v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
-| `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's FIRST TOUCH (world or flesh) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. TWIN first-copy rule applies (copies don't chain). v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
-| `slowFuse` | TIMER | `{fuseAdd:1.5}` | 3 | `pend.fuse += 1.5` — more patience on the same fuse; stacks, and extends FUSE's 1.2s | cheap |
-| `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (3889) | cheap |
+| `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane **OFF the face it stuck to** (v22 P-grammar: `rdir` set to the surface normal at stick time — a stuck FUSE is a directional mine; `relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT. v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
+| `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's **LAST TOUCH** (v22 P-grammar: RICOCHET spends its banks first on the world; flesh triggers any time) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick; the cast leaves along the struck face / radially out of the wound. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. Under DRILL: the payload delivers EVERY in-body tick (see THE AUGER, extras billed). TWIN first-copy rule applies (copies don't chain). v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
+| `slowFuse` | TIMER | `{timer:1.5}` | 3 | v22 P-grammar rework: **a clock, not glue** — `pend.timer` (stacks). The next core triggers at the bell (`pr.timerT`, 1.5s in flight) OR on first touch, whichever first, casting its payload either way — no stick. TIMER is the third relay trigger (wires `relayNext`, housed + carrier-pays identically). Feeding a core that also has FUSE: merged at resolve (`pend.fuse += timer`, timer zeroed) — patience, not a second clock. [TIMER,BOOM] = the flak shell (flies, blows at the bell or first touch). defKey `slowFuse` unchanged (saves serialize by defKey). | cheap |
+| `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (`splinterBurst`). v22 P-grammar: split now routes through `triggerPayload` on flesh too — a TIMER/FUSE relay casts even when the shot shatters (the old split-branch silently dropped the relay: declared fix). Under CONTACT the shards CARRY the payload to where THEY land (frags inherit `relay`/`rdir`/`rbase`, `_relayPaid:true`) — the parent's terminal was the free cast, every shard delivery draws `ceil(chain ⚡/3)` + lead (see CLUSTER WRIT). | cheap |
 | `serrated` | SERRATED | `{bleed:true, surcharge:5}` | 5 | `pend.bleed` → `pr.bleed` → `applyStatus`: opens a wound — wounds STACK (`status.bleedN`, cap 5), 1 hp/s per stack, `bleedT` runs 15s from the freshest cut (resists shave the clock). Both sides, same rate. Blast kinds pass the flag through the explosion dose — once. | cheap |
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
 | `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. BEAM-fed (v22i): the damage thread BENDS fully onto the nearest mark within a ~12° cone of the aim (`seekBias`, 45m, no LOS — the cone is the clamp); twin strands share the one mark; grip/pick never bend; its 7⚡ prices through the thread's per-second rate. | cheap |
@@ -119,15 +129,20 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 ## Pending-charge fields (the `pend` object, `index.html:3400`)
 
 `freshPend()` = `{dmg:0, vel:1, bounce:0, pierce:0, grav:0, twin:1, silent:false,
-fuse:0, split:0, contact:false, burn:0, bleed:false, boomerang:false, homing:0,
-surcharge:0, laser:false, refund:false, surchargeHard:0, chaos:0}`. Each modifier
-adds/multiplies its field; a proj core copies `pend`, then it resets.
+fuse:0, timer:0, split:0, contact:false, burn:0, bleed:false, boomerang:false,
+homing:0, surcharge:0, laser:false, refund:false, surchargeHard:0, chaos:0}`.
+Each modifier adds/multiplies its field; a proj core copies `pend`, then it resets.
 **All fields are consumed downstream — no dead stats** (re-verified, mod wave v1):
 
 - `contact` — consumed at (a) resolveLane's relay wiring (`relayNext`, the
-  instant sibling of FUSE's), (b) the flight first-touch branches
-  (`updateProjectiles` world hit + `impactOrPierce` flesh hit), both guarded
+  instant sibling of FUSE's), (b) the flight touch branches
+  (`updateProjectiles` world hit — AFTER the bounce branch since v22 P-grammar —
+  + `impactOrPierce` flesh hit + the DRILL in-body tick gates), all guarded
   `&&!(pr.fuse>0)` — FUSE governs on a shared core.
+- `timer` (v22 P-grammar) — consumed at (a) the resolve-time FUSE merge
+  (`pend.fuse+=pend.timer` when both >0), (b) resolveLane's relay wiring (third
+  trigger), (c) the instant-boom gate (`!(p.fuse>0||p.timer>0)` — a timed BOOM
+  flies), (d) emit → `pr.timerT`, the flight bell in `updateProjectiles`.
 - `refund` — consumed at (a) the resolveLane cost formula (waives the core's
   base ⚡), (b) `roundsFor()` (waives lead).
 - `surchargeHard` — consumed at the resolveLane cost formula: the un-waivable
@@ -146,8 +161,11 @@ adds/multiplies its field; a proj core copies `pend`, then it resets.
 
 Effect-only flags (never land on `pend`): `powder` (read in the resolveLane proj
 branch cost formula), `beltFeed` (foldFrame → `out.beltFeed` → `tickBeltFeed`).
-New `pr` fields: `chaos` (steer block), `hit`/`hitPl` (wave once-per-foe) — all
-consumed in `updateProjectiles`.
+New `pr` fields: `chaos` (steer block), `hit`/`hitPl` (wave once-per-foe),
+and — v22 P-grammar — `timerT` (the flight bell), `_dHit` (DRILL per-body 0.1s
+bill map), `_relayPaid` (castRelay: first delivery pre-paid, extras billed),
+`_exCasts` (zealot extras flat cap 3) — all consumed in `updateProjectiles` /
+`castRelay`.
 
 ---
 
@@ -166,7 +184,7 @@ Status vs. current code:
 | proposal | cat | proposed effect | ⚡ | behavior | status |
 |---|---|---|---|---|---|
 | **FUSE → relay** | mod | extend `fuse` | 4+ | on impact/death, **re-cast the next core in the sequence from the impact point** (not just blow) | **done** = FUSE relay (`relayNext`) |
-| **TIMER** (tunable) | mod | `{delay:t}` | ? | generalize FUSE's fixed 1.2 s into an authored delay | **done** = TIMER (`slowFuse`, `{fuseAdd:1.5}`) |
+| **TIMER** (tunable) | mod | `{delay:t}` | ? | generalize FUSE's fixed 1.2 s into an authored delay | **done, reworked v22 P-grammar** = TIMER (`slowFuse`, `{timer:1.5}` — a clock in flight, bell or touch) |
 | **CONTACT** | mod | `{trigger:'impact'}` | ? | fire the pending charge on first contact / proximity | **done, reworked v22i** = CONTACT (`contactMod`): now the instant relay — first touch casts the next core from the hit point |
 | **LOOP / WRAP** | mod | `{loop:n}` | ? | sequence/path re-emits or wraps N times | **new** (positional) |
 | **SPLITTER** | mod | `{split:n}` | 7 | shatter into N on impact | **done** = SPLINTER (`split:3`) |
@@ -229,13 +247,18 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
 - **WARP**: FUSE-relay F, both seats ([FUSE,WARP]=delayed door;
   [FUSE,X,WARP]=cast onward from X's death; [FUSE,WARP,X]=you arrive as X
   casts) · CONTACT F ([CONTACT,WARP,X]: you blink to the impact AND X casts
-  from it, instantly) · TIMER F · TWIN T-soft
+  from it, instantly; v22 P-grammar face-cast: [CONTACT/FUSE,BOLT,WARP]'s
+  payload-warp now flies OFF the struck face — a bounce-back door — instead of
+  dying 6cm into the wall as a de-facto blink-to-impact; declared, the combo
+  most likely to be missed in playtest) · TIMER F · TWIN T-soft
   (double-blink, 12⚡ to be yanked twice) · BEAM S (laser stripped; BEAM vents
   its 8 into the chip) · burstCam F (triple-blink, self-punishing, allowed) ·
   RETURN **T "THE LASSO"** — the named headline trap: looks like a recall
   rope; the catch splices with NO payload → 21⚡ to teleport nowhere unless it
   clips a wall mid-return. Decided: kept, deliberately · SEEKER F
-  "SWAP-STRIKE" (blink onto the mark) · DRILL I · RICOCHET F "BANK SHOT"
+  "SWAP-STRIKE" (blink onto the mark) · DRILL F (I→F v22 P-grammar: flesh
+  never stops it — **blink THROUGH the crowd**, the warp resolves on the
+  environment) · RICOCHET F "BANK SHOT"
   (bounce a blink around the corner) · SPLINTER F (arrive in a shower) ·
   HUSH F "GHOST STEP" (whisper both ends) · MASS F (grenade-arc jump) ·
   SWIFT F (longer blink) · HURT+ F · BOOM via FUSE F "BREACH-AND-ENTER"
@@ -275,7 +298,8 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   P-balance — ×1.6 flesh both sides, view kick, burn dose) · CONTACT-carrier F
   **"EXPLOSIVE ROUNDS"** ([CONTACT,BOLT,BOOM]: every hit detonates AT the
   wound/wall) · FUSE on the boom itself F (restores the lob: flies, sticks,
-  timed charge; TIMER does too — ANY fuse time buys the flight back;
+  timed charge; TIMER too, its own way — v22 P-grammar [TIMER,BOOM] F
+  **"FLAK"**: flies, blows at the bell or first touch, whichever first;
   [FUSE,BOOM,WARP] BREACH-AND-ENTER intact) · FUSE/CONTACT on a
   CARRIER F (the death/touch detonates at the point) · TWIN: ONE blast ×1.4
   radius, never N blasts (12⚡ buys area, not count) · SEEKER / RICOCHET /
@@ -380,6 +404,17 @@ per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
    free pulses. CLOSED.
 7. SAW spam → 16.7⚡/s vs regen 16 + wearRoll per tooth: self-governing
    attrition. CLOSED.
+8. In-body tick loop (DRILL+CONTACT dwell) → closed by the 10/s per-body gate
+   (`pr._dHit`, 0.1s bill window shared by damage AND cast) + `ceil(chain ⚡/3)`
+   per extra delivery + lead-billing + zealot flat cap 3. CLOSED by pricing.
+9. Zero-cost housed-bolt tick chain ([DRILL,CONTACT,X,BOLT]: extras have no ⚡
+   base) → closed by lead-billing: every extra cast eats its rounds from the
+   carrier's own mag — a 10rd/s mag-dump through a body, governed by mag
+   capacity and reload. Powerful-but-paid. CLOSED.
+10. Shard-relay multiplication (SPLINTER+CONTACT: up to 4 extra deliveries) →
+    frags ship `_relayPaid:true`, so every shard delivery draws its third +
+    lead. [CONTACT,SPLINTER,BOLT,BOOM] ≈ 74⚡ for 5 blasts vs 155⚡ pulled
+    singly — a real discount, battery-bounded. FEATURE, not free. CLOSED.
 
 ## Balance ledger (v22 P-balance: CHAOS hand · bleed stacks · REFUND decree · honest blasts)
 
@@ -415,6 +450,48 @@ serialized shape changed; `status.bleedN` is runtime-only).
 - **B3 REFUND decree** — worked prices updated above; the 1⚡/0rd bolt sidearm
   collapses most of the lead economy wherever the mod drops. Decreed; loot
   rarity is now REFUND's entire price. Watch knob: surcharge 2–3.
+
+## Balance ledger (v22 P-grammar: payload grammar — G1–G6)
+
+Six items landed: CONTACT-after-RICOCHET · face/radial casts · DRILL pierce-all ·
+castRelay pricing · SPLINTER shard delivery · TIMER rework. ZERO GLSL edits — no
+world geometry touched, the TWIN RULE was never triggered. No SAVE_VER bump
+(TIMER's defKey `slowFuse` unchanged; all new fields are runtime-only).
+
+- **G1 CONTACT after RICOCHET** — the world-hit chain is now bounce → contact →
+  fuse → plain: CONTACT has the same precedence vs RICOCHET that FUSE always had
+  (bounce already preempted fuse) — family symmetry. Flesh still triggers any
+  time ("OR on flesh", owner's ruling). [RICOCHET,CONTACT,BOLT,BOOM] = the bank
+  shot: banks first, blasts on the final impact.
+- **G2 face/radial casts (unified, incl. FUSE)** — justification for unify: a
+  stored-dir cast from a world impact fired INTO the face just hit — every
+  non-BOOM relay off a wall was a latent dud; the fix is one line at each site
+  where the normal is already computed; a stuck FUSE becomes a directional mine.
+  Mid-air expiries keep the stored flight dir (no surface to read).
+- **G3/G4 THE AUGER** — DRILL+CONTACT delivers the payload every in-body tick
+  (10/s cap: damage tick and cast tick are ONE bill window). Worked prices:
+  [DRILL,CONTACT,BOLT,BOOM] pull = 39⚡+1rd; one body at bolt speed = 1 tick =
+  the free delivery; the wall's terminal then draws ceil(26/3)=9⚡. Slow-core
+  dwell ([...ORB,BOOM], 47⚡ pull): ~2 ticks/body, extras 9⚡ each —
+  battery-bounded siege. [DRILL,CONTACT,X,BOLT]: extra bolts cost 1 round each
+  (+0⚡) — a 10rd/s mag-dump governed by mag and reload. Brown-out rule: can't
+  pay, no cast (incl. tool swapped mid-flight — the extras brown out; accepted
+  honest gutter, `sh.lane` null-guarded). Split-through-payload declared fix: a
+  TIMER/FUSE relay casts even when the shot shatters.
+- **G5 CLUSTER WRIT** — SPLINTER+CONTACT: the shards deliver the payload where
+  THEY land; parent's terminal was the free cast, each shard delivery draws its
+  third + lead. ≈74⚡ for 5 BOOMs vs 155⚡ singly — discounted, paid, bounded.
+- **G6 TIMER family reads** — CONTACT = last touch · TIMER = bell or touch ·
+  FUSE = stick, then the bell. TIMER+FUSE on one core merges F (patience, not a
+  second clock); [TIMER,BOOM] FLAK F. LURE's hardcoded fuse:12 unaffected.
+- **DRILL×blast kinds, declared (owner sign-off pending):** [DRILL,SPARK]/
+  fused-BOOM/WARP pass through flesh and resolve on the environment — the
+  letter of "flesh never stops it". Revert knob: one ordering line in
+  `impactOrPierce`. DRILL+SERRATED: in-body ticks can hit the bleed cap 5 in
+  ~0.5s of dwell — the cap governs, declared.
+- **WATCHED:** enemy TIMER airbursts + DRILL pass-through + relay extras
+  (flat cap 3) ride existing `MOD_KEYS` rolls — collectively a difficulty bump;
+  fallback knobs are single lines (drop `slowFuse`/`pierce` from `MOD_KEYS`).
 
 ## Zealot availability
 
