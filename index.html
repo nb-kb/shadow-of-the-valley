@@ -5954,7 +5954,7 @@ function teardownWorld(){
   worldItems.length=0; enemies.length=0; projectiles.length=0;
   beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
   _swing=null; playerPos.swinging=false; playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; meleeT=0;
-  slideT=0; slideHopSpd=0; sprintLatch=false;   // MOMENTUM CHAIN state must not leak across a world swap / respawn
+  slideT=0; slideHopSpd=0; sprintLatch=false; airSlideArmed=false;   // MOMENTUM CHAIN state must not leak across a world swap / respawn
   SDF_EDITS.length=0; dynLights.length=0;
   _beamLanes.clear(); _laserBursts.length=0;
   if(heldWorld){ heldWorld=null; document.getElementById('crosshair').classList.remove('carrying'); }
@@ -7201,7 +7201,7 @@ let heldUseArm=null;           // △ tap-vs-hold: {t,subj} while the button rid
 let sprintIdleT=0;             // a stopped run lets the sprint toggle go after a beat
 const SLIDE_DUR=0.9;           // SLIDE — crouch pressed at sprint speed rides the run's momentum out
 let slideT=0, slideV0=0, slideDX=0, slideDZ=1, slideStand=false, slideVcur=0, slideHopSpd=0;   // slideVcur = live (decaying) slide speed; slideHopSpd = the launch floor a slide-hop holds through its whole airborne arc
-let sprintLatch=false;   // MOMENTUM CHAIN — a slide/slide-hop chain came off a sprint: resume the sprint toggle when the chain lands (a slide crouch-kills sprintOn; this restores it so you land ready to slide again)
+let sprintLatch=false, airSlideArmed=false;   // MOMENTUM CHAIN — sprintLatch: a slide/hop chain came off a sprint, resume it on landing (a slide crouch-kills sprintOn). airSlideArmed: a mid-air crouch queues a slide that starts on the next landing, carrying the air momentum
 const _c1=new Vec3(), _c2=new Vec3();
 
 function updatePlayer(dt){
@@ -7246,6 +7246,7 @@ function updatePlayer(dt){
   if(pressed('crouch')&&!menus){
     const m=Math.hypot(mx,mz);
     if(slideT>0) slideStand=!slideStand;
+    else if(!playerPos.onGround) airSlideArmed=!airSlideArmed;   // MID-AIR CROUCH: arm a landing-slide (toggle). No mid-air duck — keeping the air speed is what lets the touchdown clear the slide's speed gate; the slide (and its crouch) begin on landing
     else if(!playerPos.isCrouching&&playerPos.isSprinting&&playerPos.onGround&&m>=0.8){
       const wx=rx*mx+fx*mz, wz=rz*mx+fz*mz;          // world-frame run direction, unit
       slideDX=wx/m; slideDZ=wz/m;
@@ -7380,8 +7381,23 @@ function updatePlayer(dt){
         const _land=!playerPos.onGround;       // the TOUCHDOWN EDGE — was airborne, now planted
         playerPos.onGround=true; playerPos.velY=0;
         if(_land){                             // MOMENTUM CHAIN resolves on the touchdown edge
-          if(playerPos.launched){ playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0; }   // slide-hop momentum spends on landing
-          if(sprintLatch){ sprintOn=true; sprintLatch=false; if(moving&&!playerPos.isCrouching&&!playerPos.isAiming) playerPos.isSprinting=true; }   // land the slide/hop chain STILL SPRINTING — ready to slide again
+          // horizontal speed we're landing with: a slide-hop keeps it in velX/velZ; a plain
+          // jump's air step is positional (input×speed), so read that instead.
+          const _hvx=playerPos.launched?playerPos.velX:(rx*mx+fx*mz)*speed;
+          const _hvz=playerPos.launched?playerPos.velZ:(rz*mx+fz*mz)*speed;
+          const _hsp=Math.hypot(_hvx,_hvz), _slideMin=0.8*P('playerSpeed')*P('sprintMult');
+          if(airSlideArmed&&_hsp>=_slideMin){   // MID-AIR CROUCH cashed in — land straight into a slide carrying the momentum (a jump-out then hops at THAT speed: the loop closes)
+            slideDX=_hvx/_hsp; slideDZ=_hvz/_hsp;
+            slideV0=_hsp; slideVcur=_hsp; slideT=SLIDE_DUR; slideStand=false;
+            playerPos.isCrouching=true; sprintLatch=true;   // the slide owns the momentum now; the chain still resumes sprint when its hop lands
+            playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0;
+            sprintOn=false; playerPos.isSprinting=false; playSound('step');
+          }else{
+            if(playerPos.launched){ playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0; }   // slide-hop momentum spends on landing
+            if(sprintLatch){ sprintOn=true; sprintLatch=false; if(moving&&!playerPos.isCrouching&&!playerPos.isAiming) playerPos.isSprinting=true; }   // land the slide/hop chain STILL SPRINTING — ready to slide again
+            if(airSlideArmed) playerPos.isCrouching=true;   // armed but too slow: just a crouch, no slide
+          }
+          airSlideArmed=false;                  // consumed on the touchdown edge, slide or not
         }
       }else playerPos.onGround=false;
     }
