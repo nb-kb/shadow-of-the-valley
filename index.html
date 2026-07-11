@@ -361,6 +361,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </div></div>
 
 <div id="errBanner"></div>
+<div id="diag" style="display:none"></div>
 <div id="igpuBanner"></div>
 <script type="text/plain" id="gameSrc">
 'use strict';
@@ -1203,6 +1204,7 @@ vec2 mapProc(vec3 p){
     vec2 cedge=min(cfr,1.0-cfr)*cellSize;
     res.x=min(res.x, min(cedge.x,cedge.y)+0.8);
   }
+#ifndef PREVIEW
   if(abs(cellId.y)<=2.0 && max(abs(cellId.x-camCell.x),abs(cellId.y-camCell.y))<=10.0){
     vec3 q=p;
     q.xz=mod(q.xz+cellSize*0.5,cellSize)-cellSize*0.5;
@@ -1211,6 +1213,7 @@ vec2 mapProc(vec3 p){
     vec2 cell=cellSDF(q,h,isGate);
     if(cell.x<res.x) res=cell;
   }
+#endif
   float beacon=sdCapsule(p, vec3(uGatePos.x,0.0,uGatePos.z), vec3(uGatePos.x,70.0,uGatePos.z), 0.30);
   if(beacon<res.x) res=vec2(beacon,7.0);
   for(int i=0;i<6;i++){ if(i>=uVCrateCount) break; vec4 vc=uVCrates[i];   // VALLEY-CRATE twin
@@ -1273,6 +1276,7 @@ float sdBackpack(vec3 p){
 vec2 map(vec3 p){
   vec2 res = mapStatic(p);
   gBound=1e9;
+#ifndef PREVIEW
   vec3 fwd=normalize(rd);
 
   for(int i=0;i<${RLIM.ITEMS};i++){
@@ -1462,6 +1466,7 @@ vec2 map(vec3 p){
       if(lash<res.x) res=vec2(lash,20.0);
     }
   }
+#endif
   return res;
 }
 
@@ -1495,6 +1500,9 @@ vec2 raycast(vec3 o, vec3 dir){
 }
 
 float softShadow(vec3 o, vec3 dir, float maxDist){
+#ifdef PREVIEW
+  return 1.0;
+#endif
   float res=1.0; float t=0.08;
   for(int i=0;i<24;i++){
     float d=mapStatic(o+dir*t).x;
@@ -1632,6 +1640,7 @@ void main(){
     }
 
     // scorch decals
+#ifndef PREVIEW
     for(int i=0;i<${RLIM.DECALS};i++){
       if(i>=decalCount) break;
       vec3 dp=p-decalPos[i].xyz; float ds=decalPos[i].w;
@@ -1640,10 +1649,15 @@ void main(){
         matCol = mix(matCol, vec3(0.02), (1.0-sqrt(d2)/ds)*0.85);
       }
     }
+#endif
 
     if(emiss > 0.5){
       col = matCol*(1.0+emiss);
     }else{
+#ifdef PREVIEW
+      float dif=clamp(dot(n,uLightDir),0.0,1.0);
+      col = matCol*(uLightCol*dif + uAmbient*(0.55+0.45*n.y));
+#else
       float dif = clamp(dot(n,uLightDir),0.0,1.0);
       float sh  = dif > 0.01 ? softShadow(p+n*0.05, uLightDir, 60.0) : 0.0;
       vec3 lit = matCol * uLightCol * dif * sh;
@@ -1704,6 +1718,7 @@ void main(){
         }
       }
       col = lit + matCol*emiss;
+#endif
     }
     if(m>19.5 && m<21.5) col *= mix(0.35, 1.0, smoothstep(0.0, 0.8, uExposure)); // hands darken with the cover you stand in — viewmodel only
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
@@ -1773,6 +1788,14 @@ function makeShader(type,src){
   return s;   // status deferred to the poll — querying here forces a synchronous compile stall
 }
 const parallelExt=gl.getExtension('KHR_parallel_shader_compile');   // null on SwiftShader & many drivers
+const fragmentPreviewSource = fragmentShaderSource.replace('#version 300 es\n','#version 300 es\n#define PREVIEW 1\n');
+// PREVIEW program — cheap; comes up first so the player can move immediately
+const previewProgram=gl.createProgram();
+gl.attachShader(previewProgram,makeShader(gl.VERTEX_SHADER,vertexShaderSource));
+const _pfs=makeShader(gl.FRAGMENT_SHADER,fragmentPreviewSource);
+gl.attachShader(previewProgram,_pfs);
+gl.linkProgram(previewProgram);
+// FULL program — expensive; finishes in the background via the poll
 const program=gl.createProgram();
 const _vs=makeShader(gl.VERTEX_SHADER,vertexShaderSource);
 const _fs=makeShader(gl.FRAGMENT_SHADER,fragmentShaderSource);
@@ -1817,8 +1840,9 @@ function cacheUniforms(prog){
 function rebindProgram(prog){ gl.useProgram(prog); cacheUniforms(prog); setupAttrib(prog); }
 
 let dynScale=1.0, dynResT=0;            // auto resolution: rides under the Optics Dial
+let previewScale=0;                     // >0 during the boot preview: rough but instant
 function resize(){
-  const s=P('renderScale')*Math.round(dynScale*20)/20;   // quantized: no per-frame canvas churn
+  const s=(previewScale>0?previewScale:P('renderScale'))*Math.round(dynScale*20)/20;   // quantized: no per-frame canvas churn
   const w=Math.max(2,Math.floor(window.innerWidth * Math.min(window.devicePixelRatio,1.5) * s));
   const h=Math.max(2,Math.floor(window.innerHeight* Math.min(window.devicePixelRatio,1.5) * s));
   if(canvas.width!==w||canvas.height!==h){
@@ -7944,6 +7968,7 @@ function frame(){
   }
 
   gl.drawArrays(gl.TRIANGLES,0,6);
+  if(DIAG && window.__wantFullRGB){ window.__wantFullRGB=0; window.__fullRGB=centerRGB(); bootDiag(); }  // full render proof, post-swap
 
   // ---- auto resolution: if the GPU can't keep pace, shrink the ray count ----
   dynResT-=dt;
@@ -8017,24 +8042,49 @@ function frame(){
 // ============================================================
 // BOOT
 // ============================================================
+const DIAG = (typeof location!=='undefined') && location.search.indexOf('diag')>=0;  // ?diag: boot instrumentation for --dump-dom (production pays nothing)
+function bootDiag(){                             // mirror boot markers to the DOM for --dump-dom
+  if(!DIAG) return;
+  const d=document.getElementById('diag'); if(!d) return;
+  d.textContent='phase='+(window.__bootPhase||'')+' preview@'+((window.__tPreview||0)|0)+' full@'+((window.__tFull||0)|0)
+    +' pv='+(window.__pvRGB||'')+' full='+(window.__fullRGB||'');
+  const bs=document.getElementById('bootStatus'); if(bs) bs.dataset.phase=window.__bootPhase||'';
+}
+function centerRGB(){                            // readback the center pixel: proves non-black render
+  try{ const px=new Uint8Array(4); gl.readPixels((canvas.width/2)|0,(canvas.height/2)|0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
+    return px[0]+','+px[1]+','+px[2]; }catch(e){ return 'err'; }
+}
 function startBoot(){
-  let waited=0;
-  // Fallback (no KHR): proceed after one rAF — the loading screen is already
-  // painted (paint-first boot) and CSS-pulsing, and the sparse BeginFrame budget
-  // in headless virtual-time can deliver only 1 rAF, so don't hard-require more.
+  let waited=0, phase='preview';
+  // Fallback (no KHR): proceed after one rAF per phase — the loading screen is
+  // already painted (paint-first boot) and CSS-pulsing, and the sparse BeginFrame
+  // budget in headless virtual-time can deliver only 1 rAF, so don't require more.
   function ready(prog){ return parallelExt ? gl.getProgramParameter(prog,parallelExt.COMPLETION_STATUS_KHR) : (waited>=1); }
-  function tickLoad(){                          // honest heartbeat; runs every rAF
+  function tickLoad(){                           // honest heartbeat; runs every rAF
     const bs=document.getElementById('bootStatus');
     if(bs && bs.dataset.armed!=='1'){ const n=Math.floor(waited/12)%4; bs.textContent='COMPILING THE VALLEY'+'.'.repeat(n)+' '.repeat(3-n); }
   }
   function poll(){
     waited++; tickLoad();
+    if(phase==='preview'){
+      if(!ready(previewProgram)){ requestAnimationFrame(poll); return; }
+      if(!gl.getProgramParameter(previewProgram,gl.LINK_STATUS)) fatal('preview link:\n'+gl.getProgramInfoLog(previewProgram)+'\n'+gl.getShaderInfoLog(_pfs));
+      rebindProgram(previewProgram);             // useProgram + cacheUniforms(preview) + setupAttrib
+      previewScale=0.35; resize();               // low render scale — rough but instant
+      window.__firstRealFrame=true; window.__bootPhase='preview'; window.__tPreview=performance.now();
+      frame();                                   // start the ONE render loop (do not start it again)
+      if(DIAG){ window.__pvRGB=centerRGB(); } bootDiag();
+      phase='full'; waited=0; requestAnimationFrame(poll); return;
+    }
+    // phase==='full'
     if(!ready(program)){ requestAnimationFrame(poll); return; }
     if(!gl.getProgramParameter(program,gl.LINK_STATUS)) fatal('program link:\n'+gl.getProgramInfoLog(program)+'\n'+gl.getShaderInfoLog(_fs));
-    rebindProgram(program);
-    resize();
-    window.__firstRealFrame=true; window.__bootPhase='full';
-    frame();                                    // starts the single rAF render loop
+    rebindProgram(program);                      // HOT SWAP: U re-cached for the full program, attrib re-pointed
+    previewScale=0; resize();                    // restore normal renderScale
+    window.__bootPhase='full'; window.__tFull=performance.now();
+    if(DIAG) window.__wantFullRGB=1;             // read the center pixel inside the next full frame (post-drawArrays)
+    bootDiag();
+    // do NOT call frame() again — the loop from preview keeps running and picks up the full program next frame
   }
   requestAnimationFrame(poll);
 }
