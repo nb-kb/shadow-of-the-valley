@@ -2974,7 +2974,7 @@ const ITEM_DEFS={
   refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +1⚡, never waived'),
   chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core forgets the straight line. Threads arc like lightning; with SEEKER the arcs bite the nearest warm thing. Hits +45% harder per stack — two stacks cap it; the wild path is the price · +6⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
-  gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
+  gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun. Dies in flight: the glue sets where it died'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
   lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'A light of your own. It sees you back. [F]'),
   beltFeeder: ()=>new ToolMod('BELT-FEEDER','#6d4c41','util',{beltFeed:true},'Chambers one round every 0.9s from your pockets. It ticks while it works — a suppressed tool hushes it'),
@@ -4880,7 +4880,7 @@ function updateProjectiles(dt){
       continue;
     }
     pr.life-=dt;
-    if(pr.life<=0){ if(pr.kind==='warp'||pr.kind==='orb') triggerPayload(pr); projectiles.splice(i,1); continue; }   // ORB pops at 6s; WARP: the end of the arc is arrival too
+    if(pr.life<=0){ if(pr.kind==='warp'||pr.kind==='orb'||pr.kind==='grip') triggerPayload(pr); projectiles.splice(i,1); continue; }   // ORB pops at 6s; WARP: the end of the arc is arrival too; GRIP: glue sets wherever it dies — midair included
     if(pr.timerT>0){ pr.timerT-=dt; if(pr.timerT<=0){ triggerPayload(pr); projectiles.splice(i,1); continue; } }   // TIMER: the bell rings mid-air — the payload casts where it hangs
     pr.vel.y-=pr.grav*dt;
     // RETURN: the way out is spent — the shot stalls, banks, and flies home to
