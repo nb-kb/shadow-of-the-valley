@@ -188,6 +188,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #debugUI .drow{display:flex;justify-content:space-between;align-items:center;gap:6px;margin:3px 0;color:var(--dust);}
 #debugUI .drow span:last-child{color:var(--bone);}
 #debugUI input[type=range]{width:130px;accent-color:var(--alert);}
+#debugUI .dval{flex:0 0 6ch;text-align:right;} /* fixed value cell — free-width text re-flexed the row and walked the slider mid-drag */
 #debugUI select,#debugUI button{background:#000;border:1px solid var(--line);color:var(--bone);
   font-family:inherit;font-size:12px;padding:3px 6px;cursor:pointer;letter-spacing:.08em;}
 #debugUI button:hover{border-color:var(--alert);color:var(--alert);}
@@ -6962,6 +6963,11 @@ function dbgNav(){
   if(nav.confirm||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
   if(moved){ playSound('click'); renderDebugItems(); }
 }
+// step-true decimals into a FIXED 6ch cell (.dval) — the value used to print at
+// natural width, so "-1" → "-0.95" re-flexed the space-between row, the track
+// slid under the still pointer mid-drag, and the grabbed value jumped with it
+const dbgDec=s=>{ s=String(s); const i=s.indexOf('.'); return i<0?0:s.length-1-i; };
+const dbgFmt=p=>(+p.v).toFixed(dbgDec(p.step));
 function buildDebugPanel(){
   if(debugBuilt){ renderDebugItems(); return; } debugBuilt=true;
   DBG_KEYS=Object.keys(ITEM_DEFS);
@@ -6985,8 +6991,8 @@ function buildDebugPanel(){
     const lbl=document.createElement('span'); lbl.textContent=p.label;
     const inp=document.createElement('input'); inp.type='range';
     inp.min=p.min; inp.max=p.max; inp.step=p.step; inp.value=p.v;
-    const val=document.createElement('span'); val.textContent=p.v;
-    inp.addEventListener('input',()=>{ p.v=parseFloat(inp.value); val.textContent=p.v;
+    const val=document.createElement('span'); val.className='dval'; val.textContent=dbgFmt(p);
+    inp.addEventListener('input',()=>{ p.v=parseFloat(inp.value); val.textContent=dbgFmt(p);
       if(k==='renderScale') resize();
       if(k==='timeOfDay') worldClock=0;   // the slider IS the clock: zero the offset so t01 lands on the dial — anim phases (gameTime/iTime) keep running
     });
