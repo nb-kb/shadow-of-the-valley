@@ -3027,7 +3027,7 @@ const ITEM_DEFS={
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it, off the stuck face · +4⚡'),
   contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core fires the one after it, where it hits — the cast leaves along the struck face. Nothing racked above: plain impact · +5⚡'),
   slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{timer:1.5,surcharge:3},'Next core goes off at 1.5s or on first touch, whichever comes first — and fires the one after it. On a FUSE: +1.5s patience instead · +3⚡'),
-  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact — with CONTACT, the shards carry its payload · +7⚡'),
+  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact — the shards inherit its steer (SEEKER homes · CHAOS flies wild · RETURN boomerangs); with CONTACT they carry its payload · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core flies out, banks, and returns to the thrower — both passes cut · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core steers toward the nearest warm target ahead — cover still works · +7⚡'),
   refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core fires free — no base ⚡, no round spent · +1⚡, never waived'),
@@ -5350,7 +5350,16 @@ function castRelay(pr,term,cx,cy,cz){
   emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true,pr.tool);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge; the chain's tool rides into the sub-emit
 }
 function splinterBurst(pr){
-  const nFrag=Math.min(4,pr.split);
+  // SHARD BUDGET — steered shards LINGER (SEEKER chases, RETURN loops home), so a
+  // TWIN(3)×SPLINTER volley piles up faster than the old dumb frags did. The tracer
+  // upload is already hard-capped at RLIM.TRACERS (excess shards simply don't draw),
+  // but updateProjectiles walks the WHOLE array each frame — cap LIVE shards so a
+  // pathological build can't starve the incoming-fire tracers or grow the sim
+  // unbounded. 24 ≈ two full TWIN(3)×SPLINTER(4) pulls; past it a burst spawns
+  // fewer/none — the blast, relay and explode still fire, only the shard spray is
+  // clamped. Powerful-but-paid stands: normal play never reaches the rail.
+  let live=0; for(const q of projectiles) if(q._shard) live++;
+  const nFrag=Math.max(0,Math.min(4,pr.split,24-live));
   for(let j=0;j<nFrag;j++){
     const a=runRng()*Math.PI*2, e=(runRng()-0.2)*1.2;
     const sp=Math.max(14,pr.vel.length()*0.45)||26;
@@ -5360,10 +5369,19 @@ function splinterBurst(pr){
       vel:new Vec3(Math.cos(a)*Math.cos(e)*sp,Math.sin(e)*sp,Math.sin(a)*Math.cos(e)*sp),
       dmg:Math.max(2,Math.round(pr.dmg*0.45)),
       bounces:pr.bounces, pierce:pr.pierce, grav:6,
-      fuse:0, split:0, stuck:false,                      // fragments never re-split
+      fuse:0, split:0, stuck:false, _shard:true,         // fragments never re-split; _shard counts against the burst budget
       contact:!!(pr.contact&&pr.relay), relay:pr.relay||null,
       rdir:pr.rdir?pr.rdir.clone():null, rbase:pr.rbase||null, src:pr.src||null, tool:pr.tool||null,
-      _relayPaid:true, chaos:0,                          // parent's terminal was the free cast — every shard delivery draws its third
+      _relayPaid:true,                                   // parent's terminal was the free cast — every shard delivery draws its third
+      // STEERING RIDES THE SHARD (owner ask): the same core's charged steer carries
+      // onto each shard — SEEKER shards home, CHAOS shards fly wild, RETURN shards
+      // boomerang home from the shatter point (fresh 0.55s out, their own launch
+      // speed back). steerPr integrates them every frame exactly like the parent;
+      // precedence (return overrides homing, chaos wobbles unless returning) is the
+      // projectile machinery's own, unchanged. Bare BOOM+SPLINTER shards stay dumb —
+      // the boom object carries no steer fields (flight-feeders inert by design).
+      homing:pr.homing||0, chaos:pr.chaos||0,
+      retT:pr.retSp>0?0.55:0, retSp:pr.retSp>0?sp:0,
       burn:Math.round((pr.burn||0)*0.45), bleed:!!pr.bleed,
       col:pr.col, silent:pr.silent,
     });
@@ -6386,7 +6404,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.powder) rows.push('its feeding mods cost no ⚡ · under BEAM: hitscan paid in lead — 1 round per pulse, 0⚡');
     if(e.refund) rows.push('next core: base ⚡ waived · mag-fed: no lead spent · this +1⚡ is never waived');
     if(e.beltFeed) rows.push('chambers 1 round / 0.9s from your pockets · ticks softly — a suppressed tool feeds silent');
-    if(e.chaos){ rows.push('wild flight · beam threads arc like lightning'); rows.push('with SEEKER: the arcs bite the nearest warm thing'); }
+    if(e.chaos){ rows.push('wild flight · beam threads arc like lightning'); rows.push('with SEEKER: the arcs bite the nearest warm thing · with SPLINTER: the shards fly wild too'); }
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
@@ -6401,9 +6419,9 @@ function tipBrief(it){                                  // the info square's row
     if(e.fuse){ rows.push('fused '+e.fuse+'s — sticks, blows, and casts the next core in the lane off the stuck face'); rows.push('that core is HOUSED — out of the fire cycle, billed to this carrier'); }
     if(e.timer){ rows.push(e.timer+'s clock or first touch — whichever first, casts the payload'); rows.push('feeding a FUSE: +'+e.timer+'s patience instead'); }
     if(e.contact){ rows.push('LAST touch casts the next core in the lane, off the struck face — RICOCHET banks first · nothing above: plain impact · FUSE on the same core wins'); rows.push('that core is HOUSED — billed to this carrier · on a BEAM: the thread drums half-size casts at the contact point every 0.5s (ballistic beats cost lead)'); }
-    if(e.split){ rows.push('splinters ×'+e.split+' on impact'); rows.push('beam-fed: the thread shatters at contact — up to 3 shard rays, 6m, weaker · every TWIN strand shatters'); }
-    if(e.boomerang){ rows.push('returns to the thrower · both passes cut'); rows.push('beam-fed: the thread loops out and back — cuts beside cover · TWIN mirrors it'); }
-    if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
+    if(e.split){ rows.push('splinters ×'+e.split+' on impact'); rows.push('the shards inherit the core’s steer — SEEKER shards home · CHAOS shards fly wild · RETURN shards boomerang home · TWIN: every copy shatters'); rows.push('beam-fed: the thread shatters at contact — up to 3 shard rays, 6m, weaker · every TWIN strand shatters'); }
+    if(e.boomerang){ rows.push('returns to the thrower · both passes cut'); rows.push('with SPLINTER: the shards boomerang too'); rows.push('beam-fed: the thread loops out and back — cuts beside cover · TWIN mirrors it'); }
+    if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('with SPLINTER: the shards seek too'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
     if(e.laser){ rows.push('laser · ⚡+'+(e.surcharge||0)); rows.push('beam hurt also burns — an equal dose per tick (pool 30, resists apply)'); }
     return {kind,rows};
   }
