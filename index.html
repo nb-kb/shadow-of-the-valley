@@ -5351,6 +5351,16 @@ function playerResist(kind){
   for(const s of ['plates','helmet']){ const a=equip[s]; if(a&&a.resist) m*=1-(a.resist[kind]||0); }
   return m;
 }
+// ---- the HUD's transients die with the run: the hurt vignette, the alert wash,
+// ---- the recoil pendulums. The gen counter spends any hurt-flash setTimeout
+// ---- still in flight — a killing blow's 120ms echo must not paint a fresh spawn.
+let _fxGen=0;
+function clearHudFx(){
+  _fxGen++;
+  document.getElementById('vignette').style.opacity=0;
+  document.getElementById('alertFlash').style.opacity=0;
+  playerPos.viewKick=0; playerPos.kickV=0; playerPos.pitchPend=0;
+}
 function damagePlayer(dmg){
   // ---- armor seam: plates multiply, helmet shaves. Enemy fire aims center-mass, so
   // ---- there is no head channel to read on received fire yet — both pieces wear a
@@ -5362,7 +5372,8 @@ function damagePlayer(dmg){
   playSound('hurt');
   const v=document.getElementById('vignette');
   v.style.opacity=Math.min(1,0.35+ (1-playerPos.health/playerPos.maxHealth)*0.6);
-  setTimeout(()=>{v.style.opacity=Math.max(0,(1-playerPos.health/playerPos.maxHealth)*0.45);},120);
+  const g=_fxGen;
+  setTimeout(()=>{ if(g===_fxGen) v.style.opacity=Math.max(0,(1-playerPos.health/playerPos.maxHealth)*0.45); },120);
   if(playerPos.health<=0) onDeath();
 }
 let _beltT=0;
@@ -5755,6 +5766,7 @@ function startRun(){
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
   playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
+  clearHudFx();                                // a fresh run starts with a clean visor
   for(const k of EQUIP_SLOTS) equip[k]=null;   // you start with NOTHING on the body — the stash holds the kit
   activeTool=null; holsterCur=-1;
   syncBagAlias(); clampZone();
@@ -5782,6 +5794,7 @@ function onDeath(){
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
     playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
+    clearHudFx();                            // the death that sent you home must not stain the next screen
     showBanner('THE VALLEY KEPT EVERYTHING');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
