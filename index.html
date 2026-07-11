@@ -3809,7 +3809,9 @@ function updateInteract(dt){
   const hover=_hoverCache;
   const prompt=document.getElementById('interactPrompt');
   if(heldWorld){
-    setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow',true);
+    const stowing=heldUseArm&&heldWorld.w.item instanceof Tool
+      ?' · <b>△</b> stowing '+'▮'.repeat(Math.min(4,1+(heldUseArm.t/0.35*4|0)))+'▯'.repeat(Math.max(0,3-(heldUseArm.t/0.35*4|0))):'';
+    setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow'+stowing,true);
   }else if(hover.idx>=0 && worldItems[hover.idx]){
     const it=worldItems[hover.idx].item;
     setPrompt(prompt,'<b>E</b> grab '+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
@@ -3872,6 +3874,22 @@ function releaseHeld(hurl){
   }else playSound('place');
   heldWorld=null;
   document.getElementById('crosshair').classList.remove('carrying');
+}
+// HOLD-△ with a plain TOOL in the hands: it holsters itself. Owner's order —
+// belt, then holster, then rucksack, then the ground at your feet. One object
+// one home (the v22j law): the tool leaves the WORLD first, then exactly one
+// write; no space anywhere and the hands simply let it go (the drop verb).
+function stowHeldTool(){
+  const t=heldWorld.w.item;
+  consumeHeld();
+  const zs=storageZones().filter(z=>!z.external);
+  for(const id of ['belt','holster']){
+    const z=zs.find(z=>z.id===id);
+    if(z&&slotPlace(t,z)){ toast('STOWED · '+z.label); playSound('place'); refreshInvUI(); return; }
+  }
+  if(autoPlace(t,bagGrid,BAG_COLS,BAG_ROWS)){ toast('STOWED · RUCKSACK'); playSound('place'); refreshInvUI(); return; }
+  dropItemToWorld(t,0.4,0.6);                        // no pocket would take it — it rests at the feet
+  toast('NO ROOM — DROPPED'); playSound('drop'); refreshInvUI();
 }
 // pin + hinge: a spring pins the grabbed point to the crosshair ray;
 // its off-centre pull becomes torque, so the item swings on the hinge
@@ -6871,6 +6889,7 @@ function updateDebugWatch(dt){
 // ============================================================
 function uiMenusOpen(){ return isInventoryOpen||isToolMenuOpen||isCrateOpen; }   // crate is a first-class menu: nav, render, close, mouse-lock all flow through here
 let stepAcc=0;
+let heldUseArm=null;           // △ tap-vs-hold: {t,w} while the button rides the carried item
 const _c1=new Vec3(), _c2=new Vec3();
 
 function updatePlayer(dt){
@@ -7046,8 +7065,20 @@ function updatePlayer(dt){
     stepAcc+=speed*dt;
     if(stepAcc>2.1){ stepAcc=0; playSound(playerPos.isSprinting?'stepRun':'step'); }
   }
-  // lantern toggle
-  if(pressed('flash')&&!menus&&!isManualOpen&&heldWorld){ heldUse(heldWorld.w.item); }
+  // lantern toggle · △ and the carried item — the TAP now fires on RELEASE
+  // (<0.35s) so a HOLD can mean something: held long with a plain TOOL in hand,
+  // the hands holster it themselves (stowHeldTool). Non-tools keep the pure tap —
+  // their verb fires on release however long the finger sat, so grenade arming
+  // and gadget toggles lose nothing but a third of a second of eagerness.
+  if(menus||isManualOpen||!heldWorld||(heldUseArm&&heldUseArm.w!==heldWorld)) heldUseArm=null;
+  if(!menus&&!isManualOpen&&heldWorld){
+    if(pressed('flash')) heldUseArm={t:0,w:heldWorld};
+    else if(heldUseArm&&down('flash')){
+      heldUseArm.t+=dt;
+      if(heldUseArm.t>=0.35&&heldWorld.w.item instanceof Tool){ stowHeldTool(); heldUseArm=null; }
+    }
+    else if(heldUseArm){ heldUseArm=null; heldUse(heldWorld.w.item); }
+  }
   else if(pressed('flash')&&!menus&&!isManualOpen){
     if(res.flashlight){ playerPos.flashlightOn=!playerPos.flashlightOn; playSound('click'); }
     else { toast('NO LANTERN RACKED IN TOOL'); playSound('empty'); }
