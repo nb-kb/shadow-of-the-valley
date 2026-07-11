@@ -2965,8 +2965,8 @@ const ITEM_DEFS={
   helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
-  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it from the blast · +4⚡'),
-  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core casts the core ABOVE it from its first touch — world or flesh, no stick, no wait. Nothing above: it just impacts. FUSE outranks it on the same core · +5⚡'),
+  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it OFF the face it stuck to · +4⚡'),
+  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core casts the core ABOVE it from its LAST touch — RICOCHET banks first, flesh triggers any time; the cast leaves along the struck face. Nothing above: plain impact. FUSE outranks it on the same core · +5⚡'),
   slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{fuseAdd:1.5,surcharge:3},'Next core waits +1.5s more on the fuse · +3⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
@@ -4755,7 +4755,7 @@ function updateProjectiles(dt){
       }else{
       if(pr.owner!=='player'){
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-        if(d<(pr.kind==='slug'?0.7:0.42)){ damagePlayer(pr.dmg); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
+        if(d<(pr.kind==='slug'?0.7:0.42)){ damagePlayer(pr.dmg); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr,playerPos.x,playerPos.y+0.9,playerPos.z); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
@@ -4768,7 +4768,7 @@ function updateProjectiles(dt){
             const head=hd<0.24;
             en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');   // spark/boom dose rides the explosion — once
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
-            dead=impactOrPierce(pr); break; }
+            dead=impactOrPierce(pr,en.position.x,en.position.y+0.95,en.position.z); break; }
         }
         if(dead) continue;
       }
@@ -4785,12 +4785,14 @@ function updateProjectiles(dt){
           pr.bounces--; playSound('click');
         }else if(pr.contact&&!(pr.fuse>0)){            // CONTACT: the LAST touch triggers — RICOCHET spends its banks first; flesh triggers any time (on the same core FUSE governs: stick+timer; contact vents)
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          if(pr.relay&&pr.rdir) pr.rdir.set(_n.x,_n.y,_n.z);   // the cast leaves the FACE, not the flight
           pr.pos.addScaledVector(_n,0.06);
           addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
           dead=true;
           triggerPayload(pr);
         }else if(pr.fuse>0){                             // FUSE: stick to the surface
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          if(pr.relay&&pr.rdir) pr.rdir.set(_n.x,_n.y,_n.z);   // the cast leaves the FACE, not the flight
           pr.pos.addScaledVector(_n,0.06);
           pr.vel.set(0,0,0); pr.grav=0;
           pr.stuck=true; pr.fuseT=pr.fuse;
@@ -4798,6 +4800,7 @@ function updateProjectiles(dt){
           dead=false; break;
         }else{
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          if(pr.relay&&pr.rdir) pr.rdir.set(_n.x,_n.y,_n.z);   // the cast leaves the FACE, not the flight
           addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
           dead=true;
           triggerPayload(pr);
@@ -4807,7 +4810,8 @@ function updateProjectiles(dt){
     if(dead) projectiles.splice(i,1);
   }
 }
-function impactOrPierce(pr){
+function impactOrPierce(pr,cx,cy,cz){
+  if(pr.relay&&pr.rdir&&cx!==undefined){ const l=Math.hypot(pr.pos.x-cx,pr.pos.y-cy,pr.pos.z-cz)||1; pr.rdir.set((pr.pos.x-cx)/l,(pr.pos.y-cy)/l,(pr.pos.z-cz)/l); }   // flesh casts leave RADIALLY, out of the wound
   if(pr.contact&&!(pr.fuse>0)){ triggerPayload(pr); return true; }   // CONTACT: flesh counts as arrival — the relay casts from the wound (FUSE on the same core governs)
   if(pr.kind==='spark'||pr.kind==='boom'||pr.kind==='warp'){ triggerPayload(pr); return true; }   // WARP+SEEKER = blink onto the mark
   if(pr.split>0){ splinterBurst(pr); return true; }
@@ -5834,7 +5838,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.silenced||e.silent) rows.push('silenced');
     if(e.fuse){ rows.push('fused '+e.fuse+'s — the death casts the next core in the lane from the blast point'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); }
     if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
-    if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
+    if(e.contact){ rows.push('LAST touch casts the NEXT core in the lane — RICOCHET banks first; the cast leaves along the struck face'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
     if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
