@@ -4403,6 +4403,8 @@ function runContinuousBeams(dt){
     let st=_beamLanes.get(li);
     if(!st){ st={acc:[0,0,0]}; _beamLanes.set(li,st); wearRoll(toolPowerCells(activeTool).slice(0,1)); }
     st.engaged=true;
+    const dmgKind=sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw';
+    const arc=dmgKind&&sh.pend.boomerang;             // RETURN ARC (v22 B1): the thread bends into a D-loop — grip/pick/wave/orb stay inert BY DESIGN (6⚡ priced)
     // TWIN SPLIT — a twinned damage thread frays into round(twin) strands (cap 3),
     // each wandering off the aim, each 0.65×: three on one mark ≈ ×1.95, priced by
     // TWIN's ⚡12 already in the rate. grip/pick don't fray — splitting a physgun
@@ -4414,11 +4416,11 @@ function runContinuousBeams(dt){
     // dry the EXTRA strands drop first (damage too), the aim thread never.
     let K=(sh.kind==='grip'||sh.kind==='pick'||sh.kind==='wave'||sh.kind==='orb')?1:Math.max(1,Math.round(sh.pend.twin));
     if(K>1) K=Math.max(1,Math.min(K,flashHeadroom()));
+    if(arc) K=Math.max(1,Math.min(K,Math.floor(flashHeadroom()/4)));   // loops FLASH 4 segs each: TWIN tops at 2 loops by budget — a strand that can't draw never damages
     const mul=K>1?0.65:1;
     // CHAOS: damage threads arc like lightning — grip/pick stay straight BY RULE
     // (a jittering physgun is nausea). With SEEKER: CHAIN LIGHTNING — the arc
     // leans at the nearest warm thing, scanned once per lane-frame.
-    const dmgKind=sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw';
     const chaos=dmgKind?(sh.pend.chaos||0):0;
     // SEEKER bends the damage thread (12° lock — priced by its 7⚡ already in the
     // rate); with CHAOS it becomes chain lightning instead (40° arc bias). GRIP/
@@ -4426,13 +4428,71 @@ function runContinuousBeams(dt){
     const fb=(chaos&&sh.pend.homing>0)?chaosBias(o,f):(dmgKind&&sh.pend.homing>0?seekBias(o,f):f);
     for(let k=0;k<K;k++){
       const dir=chaos?jitterDir(fb,_jDir,1+0.6*chaos):(K>1?jitterDir(fb,_jDir):fb);   // chaos: the aim WANDERS even at K===1 — that is the price; strands wander around the (possibly bent) aim
-      let t=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);
+      let arcApex=null, loopClip=null;                // B1: loop apex · first world-clip (B2 shards anchor there)
+      if(arc){
+        // RETURN ARC (v22 B1) — RETURN bends the thread into a flat D-loop: out
+        // along the (seek/chaos-bent, jittered) aim, bulging to one side (sign
+        // alternates per strand: +,−,+), home to the muzzle. Four segs marched
+        // in order — a seg that hits the world TRUNCATES the loop there (draw to
+        // the hit, drop the rest this frame: the thread breaks at the wall, and
+        // SPLINTER anchors at that first clip). ONE bite per enemy per tick
+        // (dedupe set): damage BESIDE and part-way behind cover, never more
+        // single-target dps than the straight thread. bolt/saw bite on the line
+        // (A5 cook rides); spark/boom keep their pulse — it fires at the APEX
+        // (end:=A below). CHAOS wobbles W, never joints the segs (the loop IS
+        // the multi-seg). All four segs FLASH: 4 slots a strand a frame, the
+        // honest arc price, pre-paid by the K clamp above — damage follows draw.
+        const R=sh.kind==='saw'?4:14;                 // saw: a hand-width halo, allowed comedy
+        const t0=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,R);
+        const sl=Math.hypot(dir.z,dir.x)||1, sgn=k%2?-1:1;
+        const sx=-dir.z/sl*sgn, sz=dir.x/sl*sgn;      // side = dir×up, flat, alternating
+        const W=2.5*(1+(runRng()-0.5)*0.8*(sh.pend.chaos||0));
+        const lcol=sh.kind==='spark'?[3.0,1.1,2.6]:[3.0,0.8,1.0];
+        const hx=o.x+dir.x*t0*0.5, hy=o.y+dir.y*t0*0.5, hz=o.z+dir.z*t0*0.5;
+        arcApex=new Vec3(o.x+dir.x*t0,o.y+dir.y*t0,o.z+dir.z*t0);
+        const M=muzzleWorld();
+        const pts=[M,new Vec3(hx+sx*W,hy,hz+sz*W),arcApex,new Vec3(hx-sx*W,hy,hz-sz*W),M];
+        const lineBite=sh.kind==='bolt'||sh.kind==='saw';
+        const bit=lineBite?new Set():null;
+        for(let s=0;s<4;s++){
+          const P=pts[s], Q=pts[s+1];
+          const gl=Math.hypot(Q.x-P.x,Q.y-P.y,Q.z-P.z)||0.001;
+          const dx=(Q.x-P.x)/gl, dy=(Q.y-P.y)/gl, dz=(Q.z-P.z)/gl;
+          const ts=marchWorldJS(P.x,P.y,P.z,dx,dy,dz,gl);
+          const cut=ts<gl-0.05;
+          if(lineBite) for(const en of enemies){
+            if(en.health<=0||en._dormant||bit.has(en)) continue;
+            const rx=en.position.x-P.x, ry=(en.position.y+0.95)-P.y, rz=en.position.z-P.z;
+            const tt=rx*dx+ry*dy+rz*dz;
+            if(tt>0.05&&tt<ts){
+              const d=Math.hypot(en.position.x-(P.x+dx*tt),(en.position.y+0.95)-(P.y+dy*tt),en.position.z-(P.z+dz*tt));
+              const hp=enemyHeadPos(en,_hpV);
+              const hd=Math.hypot(hp.x-(P.x+dx*tt),hp.y-(P.y+dy*tt),hp.z-(P.z+dz*tt));
+              if(d<0.55||hd<0.24){
+                bit.add(en);
+                let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
+                const hh=hd<0.24;
+                if(hh){
+                  if(en.helm){ en._helmT=(en._helmT||0)+dt; if(en._helmT>=0.4){ en._helmT-=0.4; crackHelm(en); } }
+                  else bdmg*=2;
+                }
+                en.hurt(bdmg,'player',hh?'head':undefined); applyStatus(en,{burn:bdmg,bleed:sh.pend.bleed});   // A5: arc line ticks COOK too
+              }
+            }
+          }
+          const E=cut?new Vec3(P.x+dx*ts,P.y+dy*ts,P.z+dz*ts):Q;
+          beamSegs.push({a:P,b:E,col:lcol,ttl:dt+0.001,flash:lastT});
+          if(cut){ loopClip={x:E.x,y:E.y,z:E.z,dx,dy,dz}; break; }   // truncate: the rest of the loop dies this frame
+        }
+      }
+      let t=arc?50:marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);   // arcs marched their own loop above — no straight 50m march
       if(sh.kind==='saw') t=Math.min(t,4.0);          // CHAINSAW: the teeth die at arm's length
       if(sh.kind==='wave') t=Math.min(t,10.0);        // PRESSURE CORRIDOR: short, wide, continuous
       // enemies intercept the thread — head tested above the body, same ray foot
-      // (wave skips this: the corridor washes THROUGH — flesh never clamps t, only the world does)
+      // (wave skips this: the corridor washes THROUGH — flesh never clamps t, only
+      // the world does; arcs skip it too — the loop block owns its per-seg bites)
       let hitEn=null, hitHead=false;
-      if(sh.kind!=='wave') for(const en of enemies){
+      if(sh.kind!=='wave'&&!arc) for(const en of enemies){
         if(en.health<=0||en._dormant) continue;
         const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
         const tt=rx*dir.x+ry*dir.y+rz*dir.z;
@@ -4443,7 +4503,7 @@ function runContinuousBeams(dt){
           if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
         }
       }
-      const end=new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);
+      const end=arc?arcApex:new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);   // arc: spark/boom pulses fire at the APEX
       st.acc[k]=(st.acc[k]||0)+dt;
       if((sh.kind==='bolt'||sh.kind==='saw')&&hitEn){
         let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
@@ -4515,9 +4575,71 @@ function runContinuousBeams(dt){
       let bEnd=end;
       if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
         else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z); }
-      if(chaos) pushJaggedSeg(muzzleWorld(),bEnd,col,chaos,dt);   // lightning: jointed one-frame strand, joints starve first
-      else if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
-      else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
+      if(!arc){                                       // arcs drew their four flash segs in the loop block — no straight seg, no jagged joints (B1)
+        if(chaos) pushJaggedSeg(muzzleWorld(),bEnd,col,chaos,dt);   // lightning: jointed one-frame strand, joints starve first
+        else if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
+        else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
+      }
+      // SPLINTER SHATTER (v22 B2) — a damage thread with SPLINTER sprays shard
+      // rays at its contact point every frame it touches something: a world hit
+      // reflects off the face, a flesh hit shatters THROUGH (forward shrapnel —
+      // distinct from DRILL's single full line). Arc loops shed only at their
+      // first world clip; an unclipped loop sheds nothing. Shards are BOLT-shards
+      // regardless of parent kind (the splinterBurst frags-become-bolts
+      // precedent): 0.45× the bolt line, 6m (saw parent 2.7m), own chest/head
+      // intercept (head ×2, helm _helmT tick), A5 cook, bleed refresh. BUDGET
+      // FIRST — reserve one flash per remaining strand; declared starve order:
+      // aim thread > extra strands > chaos joints > shards (later strands'
+      // shards starve first). A shard that can't draw doesn't march or hurt.
+      if(dmgKind&&sh.pend.split>0){
+        const wHit=arc?!!loopClip:t<(sh.kind==='saw'?3.99:49.9);
+        if(wHit||(!arc&&hitEn)){
+          const room=flashHeadroom()-(K-1-k);
+          const nSh=Math.max(0,Math.min(3,Math.round(sh.pend.split),room));
+          if(nSh>0){
+            const sO=new Vec3(), sB=new Vec3();       // shard origin · base dir
+            if(arc){
+              worldNormalJS(loopClip.x,loopClip.y,loopClip.z,_n);
+              const dn=2*(loopClip.dx*_n.x+loopClip.dy*_n.y+loopClip.dz*_n.z);
+              sB.set(loopClip.dx-dn*_n.x,loopClip.dy-dn*_n.y,loopClip.dz-dn*_n.z).normalize();
+              sO.set(loopClip.x+_n.x*0.06,loopClip.y+_n.y*0.06,loopClip.z+_n.z*0.06);
+            }else if(hitEn){ sB.set(dir.x,dir.y,dir.z); sO.set(end.x,end.y,end.z); }
+            else{
+              worldNormalJS(end.x,end.y,end.z,_n);
+              const dn=2*(dir.x*_n.x+dir.y*_n.y+dir.z*_n.z);
+              sB.set(dir.x-dn*_n.x,dir.y-dn*_n.y,dir.z-dn*_n.z).normalize();
+              sO.set(end.x+_n.x*0.06,end.y+_n.y*0.06,end.z+_n.z*0.06);
+            }
+            const sLen=sh.kind==='saw'?2.7:6;
+            const scol=[col[0]*0.8,col[1]*0.8,col[2]*0.8];   // parent col ×0.8 — hairline laser tier
+            for(let si=0;si<nSh;si++){
+              const ds=jitterDir(sB,_jDir,5);         // 0.2–0.4 rad, re-rolled every frame — the sparkler
+              let ts=marchWorldJS(sO.x,sO.y,sO.z,ds.x,ds.y,ds.z,sLen);
+              let sEn=null, sHead=false;
+              for(const en of enemies){
+                if(en.health<=0||en._dormant) continue;
+                const rx=en.position.x-sO.x, ry=(en.position.y+0.95)-sO.y, rz=en.position.z-sO.z;
+                const tt=rx*ds.x+ry*ds.y+rz*ds.z;
+                if(tt>0.05&&tt<ts){
+                  const d=Math.hypot(en.position.x-(sO.x+ds.x*tt),(en.position.y+0.95)-(sO.y+ds.y*tt),en.position.z-(sO.z+ds.z*tt));
+                  const hp=enemyHeadPos(en,_hpV);
+                  const hd=Math.hypot(hp.x-(sO.x+ds.x*tt),hp.y-(sO.y+ds.y*tt),hp.z-(sO.z+ds.z*tt));
+                  if(d<0.55||hd<0.24){ ts=tt; sEn=en; sHead=hd<0.24; }
+                }
+              }
+              if(sEn){
+                let sd=0.45*((24+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);   // bolt-shard tick — chaos boosts once, same as the parent line (frag precedent: inherit, no double dip)
+                if(sHead){
+                  if(sEn.helm){ sEn._helmT=(sEn._helmT||0)+dt; if(sEn._helmT>=0.4){ sEn._helmT-=0.4; crackHelm(sEn); } }
+                  else sd*=2;
+                }
+                sEn.hurt(sd,'player',sHead?'head':undefined); applyStatus(sEn,{burn:sd,bleed:sh.pend.bleed});   // A5: shard ticks COOK too
+              }
+              beamSegs.push({a:sO,b:new Vec3(sO.x+ds.x*ts,sO.y+ds.y*ts,sO.z+ds.z*ts),col:scol,ttl:dt+0.001,flash:lastT});
+            }
+          }
+        }
+      }
       if(k===0) addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
       if(sh.kind==='wave'){                            // the WIDE read: one flash-tier perp bar spans the corridor's end (sum 1.45 → fat 0.035)
         const cw=Math.round(sh.pend.twin)>1?2.1:1.5, pl=Math.hypot(dir.z,dir.x)||1;
@@ -5922,8 +6044,8 @@ function tipBrief(it){                                  // the info square's row
     if(e.fuse){ rows.push('fused '+e.fuse+'s — the death casts the next core in the lane from the blast point'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); }
     if(e.timer){ rows.push(e.timer+'s clock — bell or first touch, whichever first, casts the payload'); rows.push('feeding a FUSE: +'+e.timer+'s patience on it instead of a second clock'); }
     if(e.contact){ rows.push('LAST touch casts the NEXT core in the lane — RICOCHET banks first; the cast leaves along the struck face'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
-    if(e.split) rows.push('splinters ×'+e.split);
-    if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
+    if(e.split){ rows.push('splinters ×'+e.split); rows.push('beam-fed: the thread shatters at its contact — up to 3 shard rays, 6m, weaker · every TWIN strand shatters'); }
+    if(e.boomerang){ rows.push('returns to the hand that threw it · both passes cut'); rows.push('beam-fed: the thread arcs out and back — a standing loop that cuts beside cover · TWIN mirrors it'); }
     if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
     if(e.laser){ rows.push('laser · ⚡+'+(e.surcharge||0)); rows.push('threads COOK: per-tick line hurt doses equal burn (pool 30, resists apply)'); }
     return {kind,rows};

@@ -85,9 +85,9 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane **OFF the face it stuck to** (v22 P-grammar: `rdir` set to the surface normal at stick time — a stuck FUSE is a directional mine; `relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT. v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
 | `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's **LAST TOUCH** (v22 P-grammar: RICOCHET spends its banks first on the world; flesh triggers any time) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick; the cast leaves along the struck face / radially out of the wound. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. Under DRILL: the payload delivers EVERY in-body tick (see THE AUGER, extras billed). TWIN first-copy rule applies (copies don't chain). v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
 | `slowFuse` | TIMER | `{timer:1.5}` | 3 | v22 P-grammar rework: **a clock, not glue** — `pend.timer` (stacks). The next core triggers at the bell (`pr.timerT`, 1.5s in flight) OR on first touch, whichever first, casting its payload either way — no stick. TIMER is the third relay trigger (wires `relayNext`, housed + carrier-pays identically). Feeding a core that also has FUSE: merged at resolve (`pend.fuse += timer`, timer zeroed) — patience, not a second clock. [TIMER,BOOM] = the flak shell (flies, blows at the bell or first touch). defKey `slowFuse` unchanged (saves serialize by defKey). | cheap |
-| `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (`splinterBurst`). v22 P-grammar: split now routes through `triggerPayload` on flesh too — a TIMER/FUSE relay casts even when the shot shatters (the old split-branch silently dropped the relay: declared fix). Under CONTACT the shards CARRY the payload to where THEY land (frags inherit `relay`/`rdir`/`rbase`, `_relayPaid:true`) — the parent's terminal was the free cast, every shard delivery draws `ceil(chain ⚡/3)` + lead (see CLUSTER WRIT). | cheap |
+| `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (`splinterBurst`). v22 P-grammar: split now routes through `triggerPayload` on flesh too — a TIMER/FUSE relay casts even when the shot shatters (the old split-branch silently dropped the relay: declared fix). Under CONTACT the shards CARRY the payload to where THEY land (frags inherit `relay`/`rdir`/`rbase`, `_relayPaid:true`) — the parent's terminal was the free cast, every shard delivery draws `ceil(chain ⚡/3)` + lead (see CLUSTER WRIT). BEAM-fed (v22 P-beamB B2, I→C): a damage thread's contact point sprays up to 3 shard rays EVERY frame it touches something — world hits reflect off the face, flesh shatters THROUGH (forward shrapnel, distinct from DRILL's one full line); shards are bolt-shards regardless of parent (0.45× the bolt line, 6m, saw parent 2.7m, own chest/head intercept, A5 cook); every TWIN strand shatters at ITS OWN contact; RETURN arcs shed only at their first world clip; flash-budgeted, shards starve first. grip/pick/wave/orb threads stay inert (7⚡ priced). | cheap |
 | `serrated` | SERRATED | `{bleed:true, surcharge:5}` | 5 | `pend.bleed` → `pr.bleed` → `applyStatus`: opens a wound — wounds STACK (`status.bleedN`, cap 5), 1 hp/s per stack, `bleedT` runs 15s from the freshest cut (resists shave the clock). Both sides, same rate. Blast kinds pass the flag through the explosion dose — once. | cheap |
-| `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
+| `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). BEAM-fed (v22 P-beamB B1, implicit-inert→C): a damage thread (bolt/spark/boom/saw) bends into a flat D-loop — out along the (seek/chaos-bent) aim, bulging ±2.5m to one side, home to the muzzle; ONE bite per enemy per tick (damage BESIDE and part-way behind cover, never more single-target dps); a world hit truncates the loop there; spark/boom pulse at the APEX; TWIN mirrors it (right+left, flash-budget cap 2 loops); saw R=4 hand-width halo; grip/pick/wave/orb threads stay inert (6⚡ priced). | cheap |
 | `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. BEAM-fed (v22i): the damage thread BENDS fully onto the nearest mark within a ~12° cone of the aim (`seekBias`, 45m, no LOS — the cone is the clamp); twin strands share the one mark; grip/pick never bend; its 7⚡ prices through the thread's per-second rate. | cheap |
 | `beamCore` | BEAM | `{laser:true}` | 8 | shot → continuous thread; alone → tac laser. THREAD HEAT LAW (v22 P-beamA A5): every per-tick LINE hurt (bolt/saw threads, wave corridor) doses EQUAL burn via `applyStatus` (pool cap 30, resists apply) — threads COOK; spark/boom tip pulses stay discrete blasts dosing `pend.burn` via `explode`, unchanged | cheap |
 | `refundMod` | REFUND | `{refund:true, surcharge:1}` | 1 (never waived) | `pend.refund` → resolveLane cost formula (waives next core's base ⚡) + `roundsFor()` (waives lead). Its own 1⚡ rides `pend.surchargeHard` — the one no core forgives, POWDER included. Idempotent flag: REFUND+REFUND = 2⚡ of nothing. v22 P-balance: 10→1 by owner decree — the real price is the rack cell + loot rarity; watch knob 2–3⚡, never a mechanic change. | cheap |
@@ -239,7 +239,8 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
 - **SAW**: FUSE-relay F (point-blank tooth from the impact) · CONTACT F ·
   TIMER F · TWIN F · BEAM C-P2 4m chainsaw · burstCam: plain burst F,
   laser-burst S · RETURN **T "YO-YO NO"** (life 0.16 < stall 0.55 — the tooth
-  dies before it turns; 6⚡ for nothing) · SEEKER F (barely turns, honest) ·
+  dies before it turns; 6⚡ for nothing — the PROJECTILE; the saw THREAD under
+  BEAM+RETURN arcs fine: C-B1's 4m hand-width halo) · SEEKER F (barely turns, honest) ·
   DRILL F · RICOCHET F · SPLINTER F (dust storm) · HUSH F (4⚡ silent teeth) ·
   MASS F · SWIFT F (THE reach knob) · HURT+ F · frame-level: SAW+SLUG
   **T "THE WOODCHIPPER"** (order law: floor 0.06 then +0.45 → 0.51s cycle —
@@ -288,7 +289,11 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   owner's ask, verbatim; on a shared thread CHAOS's 40° arc bias replaces
   SEEKER's 12° bend) · burstCam pulses
   C-P5 · GRIP/PICK threads S (stay straight) · RETURN F (return leg immune —
-  the way home flies true) · WARP F (drunken blink, self-priced) · BOOM F
+  the way home flies true) · RETURN-arc threads F (v22 P-beamB: CHAOS wobbles
+  the loop's bulge W ±40%/stack and the aim wanders — no jagged joints on arcs
+  BY RULE, the loop IS the multi-seg) · chaos joints and B2 shards share the
+  flash pool (declared starve order: aim thread > extra strands > joints >
+  shards) · WARP F (drunken blink, self-priced) · BOOM F
   **"LOUD BARGAIN"** (accepted: an instant blast has no flight, so no wobble
   to pay — but since v22 P-balance the shooter feels all of a 49.3-dmg blast
   1.2m from their own nose; self-priced) · dmg +45%/stack (cap ×1.9)
@@ -331,6 +336,24 @@ With CHAOS the wider 40° chain-lightning bias (`chaosBias`) takes over instead
 — both consume homing on threads; the 7⚡ prices through the beam's
 per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
 10.25⚡/s).
+
+**RETURN×BEAM / SPLINTER×BEAM (v22 P-beamB):** RETURN on a damage thread was
+implicit-inert → **C-B1 return arc** (owner: "Return + beam, projectile beam
+should arc back to the player"): the thread bends into a flat D-loop.
+BOLT+BEAM+RETURN = 2+(0+8+6)·0.55 = **9.7⚡/s**; +TWIN **16.3⚡/s** — buys
+damage BESIDE and part-way behind cover, a positional sweep, not more dps.
+×CHAOS F wobbling loop (W jitter + wandering aim, free) · ×SEEKER F apex-lock
+(the `fb` bend upstream, untouched) · ×TWIN F two mirrored loops,
+flash-budget-capped at 2 (the third strand never draws NOR damages) ·
+"beam + twin + reload" read sanely: RELOAD/BELT-FEEDER is frame-level util,
+orthogonal to threads (threads drink ⚡, not lead; the belt keeps chambering
+during holds — already true, declared unaffected). SPLINTER×BEAM was I →
+**C-B2 shatter** (owner: "Beam + splinter should shatter into smaller beams
+on contact… each ray getting a splinter"): BOLT+BEAM+SPLINTER = **10.25⚡/s**;
+full stack TWIN+SPLINTER+CHAOS+BEAM+BOLT = 2+(0+12+7+6+8)·0.55 =
+**20.15⚡/s** — corridor saturation at a real battery deficit. Single-target
+honesty: shards fan wide and mostly miss one foe (3 converged shards ≈ 17.8
+dps needs a corner pocket) — the crowd verb costs the wall to use.
 
 ## Balance ledger (v22j housed payloads)
 
@@ -557,6 +580,72 @@ triggered. No new pend fields, no save impact.
 - **Fields consumed:** none added — the corridor and the heat law reuse
   `pend.twin/dmg/bleed` and the existing strand state; wave no longer reads
   `st.acc[k]` (branch replaced; acc stays consumed by spark/boom/pick/orb).
+
+## Balance ledger (v22 P-beamB: return arc + splinter shatter)
+
+Two items, both inside `runContinuousBeams` (the seg-budget geometry pack).
+ZERO GLSL edits — every visual rides the existing tracer width tiers; no
+world geometry, TWIN RULE not triggered. No new pend fields, no save impact —
+loop and shard state is frame-local. Zealots never run threads (their
+`tryShoot` filters `pend.laser` lanes), so neither verb has an enemy side.
+
+- **B1 — RETURN ARC** (owner: "Return + beam, projectile beam should arc back
+  to the player; same with beam + chaos + return, beam + twin + reload,
+  etc"): RETURN on a bolt/spark/boom/saw thread bends it into a flat D-loop —
+  muzzle → +side bulge (W = 2.5·(1 ± 0.4·chaos)) → apex (reach 14m, saw 4m: a
+  hand-width halo, allowed comedy) → −side bulge → muzzle, side sign
+  alternating per strand (+,−,+). Four segments marched in order; a segment
+  hitting the world TRUNCATES the loop there (draw to the hit, drop the rest
+  this frame — SPLINTER anchors at that first clip). Damage per SEGMENT, one
+  bite per enemy per tick (dedupe set): bolt/saw pay the full line formula
+  ((24|8+dmg)·0.55·mul)·dt with head/helm rules and the A5 cook; spark/boom
+  keep their 0.45s pulse — it fires at the APEX. Draw: all four segs FLASH
+  (dt-ttl) = exactly 4 slots per strand per frame (the persistent idiom would
+  stack ~3 deep ≈ 12 slots — flash is the honest arc price); K pre-clamped to
+  `floor(flashHeadroom()/4)` so TWIN tops out at 2 mirrored loops and a
+  strand that can't draw never damages. CPU: ≤4 short marches (≤14m) REPLACE
+  the strand's one 50m march — declared acceptable. Price: BOLT+BEAM+RETURN
+  9.7⚡/s, +TWIN 16.3⚡/s.
+- **B2 — SPLINTER SHATTER** (owner: "Beam + splinter should shatter into
+  smaller beams on contact, beam + twin is also affected, each ray getting a
+  splinter"): a damage thread with `split>0` sprays shard rays at its contact
+  point every frame it touches something — each TWIN strand at ITS OWN
+  contact, verbatim. World hit: base = reflect off `worldNormalJS(end)`,
+  origin nudged +0.06 off the face; flesh hit: base = dir, THROUGH-shatter
+  shrapnel (distinct from DRILL's single full line); arcs shed at their first
+  world clip only — an unclipped loop sheds nothing. Per shard per frame:
+  `jitterDir(base,·,5)` (0.2–0.4 rad, re-rolled — the sparkler), march 6m
+  (saw parent 2.7m), own chest/head intercept (head ×2, helm `_helmT` tick),
+  tick = 0.45·(24+dmg)·0.55·mul·dt — bolt-shards regardless of parent kind
+  (the `splinterBurst` frags-become-bolts precedent) — plus A5 burn=hurt and
+  bleed refresh. Budget FIRST: nSh = min(3, round(split),
+  flashHeadroom()−(K−1−k)) — one flash reserved per remaining strand;
+  declared starve order aim thread > extra strands > chaos joints > shards
+  (later strands' shards starve first); a shard that can't draw doesn't march
+  or hurt. Draw: one flash seg per shard, parent col ×0.8 (bolt sum 3.84 →
+  hairline laser tier). Worst case aim thread + 2 flash strands + ≤9 shards,
+  all flash-gated — the 2-slot projectile floor and the RLIM.TRACERS upload
+  cap hold by construction. Price: BOLT+BEAM+SPLINTER 10.25⚡/s; full stack
+  TWIN+SPLINTER+CHAOS+BEAM+BOLT 20.15⚡/s.
+- **ADAPTATION (declared):** `chaosMul` now rides arc-line and shard ticks
+  ONCE, same as the straight thread — P-balance B1 (CHAOS +45%/stack)
+  landed after this spec was written; shards inherit the boost with no
+  double dip, the `splinterBurst` frag precedent (`chaos:0` on frags).
+- **Verified (node probe, real extracted `runContinuousBeams`/`applyStatus`):**
+  4 flash segs per loop · bulge-side bite at 13.2·dt with burn=hurt · one
+  bite per enemy though out+home segs both graze him · truncation at a wall
+  + 3 reflected shards that never pierce the face · planted-on-ray shard
+  bite at 0.45× with burn=hurt · unclipped loop sheds nothing · TWIN 3 → 2
+  mirrored loops at 0.65× · spark arc pulses at the apex · straight-thread
+  reflect + flesh through-shatter · saw 4m halo, 2.7m shards · wave corridor
+  untouched under RETURN. 28/28.
+- **WATCHED:** arc TTK vs crowds behind low cover (the loop's whole point);
+  knob = W 2.5→2.0 or loop reach 14→11, one line each. Degradation ORDER
+  (aim > strands > joints > shards) needs the in-browser eyeball — damage-
+  follows-draw is the invariant to test (no invisible damage).
+- **Fields consumed:** none added — B1 reads `pend.boomerang`, B2 reads
+  `pend.split` (both long-standing pend fields, already consumed by the
+  projectile paths); `loopClip`/`arcApex` are per-strand frame locals.
 
 ## Zealot availability
 
