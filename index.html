@@ -2967,7 +2967,7 @@ const ITEM_DEFS={
   bandAid:    ()=>{ const it=new Item('Band-Aid',1,1,'#c9b78f'); it.bandAid=true; return it; },
   aloe:       ()=>{ const it=new Item('Aloe Vera',1,1,'#57764a'); it.aloe=true; return it; },
   // ---- armor (stats provisional) ----
-  rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6}),
+  rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6,zoneOpen:true}),
   beltBasic:  ()=>new Armor('Web Belt',2,1,'#4a4436','belt',{invCols:1,invRows:1,slotMode:true}),
   holster1:   ()=>new Armor('Hip Holster',1,2,'#4e4030','holster',{invCols:1,invRows:1,slotMode:true,zoneOpen:true}),
   holster2:   ()=>new Armor('Twin Holster',1,2,'#54432c','holster',{invCols:2,invRows:1,slotMode:true,zoneOpen:true}),
@@ -3133,13 +3133,15 @@ function invZones(){
                  external:true}];
   return playerZones();
 }
-// harness + settings devices + holster FOLD — [X] on the rig item opens/closes their
-// zone. Session-only state on the item (itemToJSON never sees zoneOpen); harness and
-// devices default CLOSED to save space. The holster defaults OPEN — it is the target
-// of the Triangle wield-swap, and hiding it every session would tax the core verb
-// (its def carries zoneOpen:true). d-pad cycling reads holster.inv directly and never
-// cares. The rucksack and the belt slot-rack never fold.
-const FOLD_SLOTS=['harness','goggles','headphones','holster'];
+// harness + settings devices + holster + rucksack FOLD — [X] on the rig item opens/
+// closes their zone. Session-only state on the item (itemToJSON never sees zoneOpen);
+// harness and devices default CLOSED to save space. The holster and the rucksack
+// default OPEN (defs carry zoneOpen:true) — one is the Triangle wield-swap's target,
+// the other is the main bag; hiding either every session would tax a core verb.
+// d-pad cycling reads holster.inv directly and never cares; autoplace/reload/ammo
+// counts walk storageZones (playerZones(true)) and see folded pockets fine.
+// The belt slot-rack never folds.
+const FOLD_SLOTS=['harness','goggles','headphones','holster','rucksack'];
 const zoneFolds=it=>!!it&&FOLD_SLOTS.includes(it.armorType);
 const zoneShut=it=>zoneFolds(it)&&!it.zoneOpen;
 function playerZones(all){
