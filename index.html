@@ -4876,10 +4876,10 @@ function explode(pr){
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
     const d=en.position.distanceTo(pr.pos);
-    if(d<R){ en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner); applyStatus(en,pr); }
+    if(d<R){ const fall=1-d/R; en.hurt(pr.dmg*fall*1.6, pr.owner); applyStatus(en,{burn:(pr.burn||0)+Math.round(pr.dmg*fall*0.35), bleed:pr.bleed}); }   // the blast SEARS — dose scales with the hurt at range
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); applyStatus(playerPos,pr);   // same flesh math the enemies eat — armor shaves it after
+  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); applyStatus(playerPos,{burn:(pr.burn||0)+Math.round(pr.dmg*(1-pd/R)*0.35), bleed:pr.bleed});   // same flesh math the enemies eat — armor shaves it after; the blast SEARS both sides
     playerPos.viewKick=Math.min(1,playerPos.viewKick+0.7); cameraPitch-=0.02*(1-pd/R); }   // the blast kicks — self-splash must READ
   for(const w of worldItems){
     const d=w.pos.distanceTo(pr.pos);
