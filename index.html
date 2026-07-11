@@ -273,6 +273,9 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
     Pads pair through your system's Bluetooth, then press any button here — the engine listens for it.<br>
     Settings live as objects: the <b>Pocket Watch</b> tells time on your HUD while carried · the <b>Compass</b> points to the beacon ·
     the <b>Optics Dial</b> cycles render fidelity · the <b>Volume Knob</b> cycles sound. Lose them, lose the setting.<br>
+    In the pockets <b>△</b> speaks in order: a rig piece folds its zone · a pocketed container opens its pockets ·
+    a usable is used where it lies (food eaten from the cell; a LIT core counts down and blows from whoever carries it) ·
+    an empty cell beds the wielded tool. In hand, a <b>tap</b> opens a carried thing's pockets; a long <b>hold</b> stows a tool.<br>
     Bindings hold for this session only. Close with the same key that opened this.<br>
     With <b>GRIP fed by a BEAM</b> the triggers trade jobs — <b>LT/LMB</b> casts the thread and carries,
     <b>RT/RMB</b> pins the carried load mid-air until gripped again. Other Tools keep the standard layout.
@@ -457,7 +460,7 @@ const ACTIONS = [
   {id:'aim',      label:'Aim (hold)',          kb:'Mouse2',      pad:6},   // L2
   {id:'interact', label:'Grab / reload / place',kb:'KeyE',       pad:2},   // square
   {id:'throwHeld',label:'Hurl carried (alt)',  kb:'KeyG',        pad:null},
-  {id:'flash',    label:'Lantern',             kb:'KeyF',        pad:3},   // triangle
+  {id:'flash',    label:'Lantern / use · open held', kb:'KeyF',  pad:3},   // triangle
   {id:'leanL',    label:'Lean left',           kb:'KeyQ',        pad:4},   // L1
   {id:'leanR',    label:'Lean right',          kb:'KeyX',        pad:5},   // R1
   {id:'cycleL',   label:'Holster · prev tool', kb:null,          pad:14},  // d-left
@@ -3491,18 +3494,20 @@ function interactInventory(){
   playSound('click');
 }
 
+// the fold verb, shared by [X] and [△] on the rig column
+function toggleZoneFold(it){
+  it.zoneOpen=!it.zoneOpen;
+  clampZone();                                      // the stack changed shape — never strand the cursor
+  toast(it.name.toUpperCase()+(it.zoneOpen?' · OPEN':' · CLOSED')); playSound('click');
+  refreshInvUI();
+}
 // [X] — inspect · activate. Magazines & spare tools open their own pockets.
 function activateAtCursor(){
   const f=focusGrid();
-  if(f.equipCol){                                       // X on the rig: fold a harness/device zone open·closed
+  if(f.equipCol){                                       // X on the rig: fold a harness/device/rucksack zone open·closed
     clampCursor(f);
     const it=cellAt(f);
-    if(it&&zoneFolds(it)){
-      it.zoneOpen=!it.zoneOpen;
-      clampZone();                                      // the stack changed shape — never strand the cursor
-      toast(it.name.toUpperCase()+(it.zoneOpen?' · OPEN':' · CLOSED')); playSound('click');
-      refreshInvUI(); return;
-    }
+    if(it&&zoneFolds(it)){ toggleZoneFold(it); return; }
     if(inspectItem) closeInspect();
     return;
   }
@@ -3557,9 +3562,21 @@ function renderInspect(){
   }else body.innerHTML='';
 }
 
-// right-click / [F] — the analog "use" verb
+// right-click / [F/△] — the analog "use" verb. Owner-approved precedence:
+// container → toggle its submenu/fold · usable → useItem · empty cell → stow
+// the wielded tool (existing). The wield-swap (△ on a pocketed Tool) and the
+// magazine verbs (unload · feed) keep their old seats — a Tool's "use" IS the
+// wield, a mag's IS its rounds; their panels stay on [X].
 function quickUse(){
-  const f=focusGrid(); if(!f.grid&&!f.rack) return;
+  const f=focusGrid();
+  if(f.equipCol){                          // △ on the rig folds like [X]: the rig item IS its zone
+    clampCursor(f);
+    const it=cellAt(f);
+    if(it&&zoneFolds(it)) toggleZoneFold(it);
+    else playSound('click');
+    return;
+  }
+  if(!f.grid&&!f.rack) return;
   clampCursor(f);
   const cell=cellAt(f);
   if(!cell && activeTool && currentFocus===0 && f.grid && !f.equipCol && !f.rack && !f.external && !f.locked){
@@ -3577,6 +3594,10 @@ function quickUse(){
   }
   if(!cell && !f.rack) return;            // rack verbs (unchain/strip) work on empty cells
   if(cell instanceof Tool && currentFocus===0){ wieldTool(cell,f); return; }
+  if(cell && cell.inv && currentFocus!==2){               // container → its pockets, toggled (same panel [X] opens)
+    if(inspectItem===cell){ closeInspect(); return; }
+    menuInspect(cell); playSound('click'); return;
+  }
   if(cell instanceof Magazine && cell.loaded>0 && !heldWorld){   // F: shake the rounds out into your hand
     const rounds=new Ammunition(cell.acceptedType+' rounds','#a07c2c',cell.acceptedType,cell.loaded);
     cell.loaded=0;
@@ -3593,7 +3614,7 @@ function quickUse(){
       playSound('reload'); refreshInvUI(); return;
     }
   }
-  if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
+  if(cell){ useItem(cell,{f}); return; }   // usable → the ONE use verb, spent from this very cell
   playSound('click');
 }
 function wieldTool(tool,src){
@@ -4114,51 +4135,66 @@ function describeSequence(res){
 // pockets-detached over the world, menus closed (renderInspect's held-item gate).
 // The held Magazine's old dump/refill verb yields to the panel: pour/unload/sip
 // still cover it from the grids.
-let _pillArm=0, _pillDeath=false;
+let _pillDeath=false;
 function heldUse(it){
   if(it instanceof Tool || it instanceof Magazine || it.inv){
     if(inspectItem===it){ closeInspect(); return; }
     menuInspect(it); playSound('click'); return;
   }
+  useItem(it,{hand:true});
+}
+// ---- ONE use verb, two rooms (v22n): the hand's △ tap and the inventory's △
+// ---- both land here — a hand effect IS a pocket effect. ctx names the item's
+// ---- home: {hand:true} spends from the hands (consumeHeld), {f} spends from
+// ---- the focused cell. One object one home — consumed exactly once.
+// ---- The pill's two-press arm lives ON the item (it._pillArm), so a first
+// ---- press in the hand and a second in the bag still read as one resolve.
+function useItem(it,ctx){
+  const spend=()=>{ if(ctx.hand) consumeHeld();
+    else if(ctx.f.rack) writeRef(refAt(ctx.f),null);
+    else removeFromGrid(it,ctx.f.grid); };
   if(it.ration){
     playerPos.health=Math.min(effMaxHP(), playerPos.health+14);
     toast('TASTES LIKE THE WAR');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.gummies){
     playerPos.health=Math.min(effMaxHP(), playerPos.health+30);
     toast('SUGAR ON A DEAD TONGUE');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.bandAid){
     playerPos.status.bleedT=0; playerPos.status.bleedN=0;
     toast('PRESSURE HELD');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.aloe){
     playerPos.status.burn=0; playerPos.burnedMax=0;
     toast('THE SKIN FORGIVES');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.pill){
     const now=performance.now();
-    if(_pillArm && now-_pillArm<3000){
-      _pillArm=0; _pillDeath=true;
+    if(it._pillArm && now-it._pillArm<3000){
+      it._pillArm=0; _pillDeath=true;
       toast('BITTER ALMONDS.');
       playerPos.health=0;
       onDeath();
     }else{
-      _pillArm=now;
+      it._pillArm=now;
       toast('BITE DOWN? PRESS AGAIN TO END THE RUN.');
       playSound('click');
     }
     return;
   }
-  if(it instanceof Gadget){ useGadget(it); return; }
+  if(it instanceof Gadget){ useGadget(it); refreshInvUI(); return; }
   if(it instanceof Battery){ toast('BATTERY · '+(battFunctional(it)?it.charge.toFixed(0)+'/'+it.cap+'\u26a1':'DEPLETED')); playSound('click'); return; }
   if(it instanceof ToolMod && it.effect && it.effect.kind==='boom'){
-    if(it._armT==null){ it._armT=5; toast('LIT — FIVE'); playSound('click'); }
-    else { toast('IT IS LIT'); playSound('empty'); }     // no fingers un-pull a pin
+    if(it._armT!=null){ toast('IT IS LIT'); playSound('empty'); return; }   // no fingers un-pull a pin
+    // it arms in the hand or anywhere ON the body (tickInvArm's walk) — never in
+    // a box the tick can't reach: a stash/crate grenade would smoulder forever
+    if(!ctx.hand && !itemOnPlayer(it)){ toast('LIGHT IT ON YOUR BACK, NOT IN A BOX'); playSound('empty'); return; }
+    it._armT=5; toast('LIT — FIVE'); playSound('click');
     return;
   }
   if(it instanceof ToolMod && it.effect && it.effect.laser){
@@ -7210,9 +7246,50 @@ function updatePlayer(dt){
   }
 }
 
+// ---- the LIT core's POCKET twin: updateWorldItems only walks the WORLD list,
+// ---- so a core armed in the bag (useItem, owner's law: it detonates wherever
+// ---- it is) needs its own clock. The walk is the body — every equipped storage
+// ---- zone (folded too), pockets inside pocketed containers, racked cells of
+// ---- pocketed AND wielded AND carried tools. fn(it, grid, ref): exactly one of
+// ---- grid/ref names the home, so the blast can vacate it with one write.
+function invArmWalk(fn){
+  const seen=new Set(), grids=[], tools=[];
+  for(const z of storageZones()) grids.push(z.grid);
+  if(activeTool) tools.push(activeTool);
+  const hw=heldWorld&&heldWorld.w.item;    // the held thing itself ticks as a world item —
+  if(hw){ if(hw.inv) grids.push(hw.inv);   // only its INSIDES are ours to walk
+          if(hw instanceof Tool) tools.push(hw); }
+  for(const g of grids)
+    for(const row of g) for(const c of row){
+      if(!c||c.widget||seen.has(c)) continue; seen.add(c);
+      fn(c,g,null);
+      if(c.inv) for(const r2 of c.inv) for(const c2 of r2){
+        if(c2&&!c2.widget&&!seen.has(c2)){ seen.add(c2); fn(c2,c.inv,null); } }
+      if(c instanceof Tool) tools.push(c);
+    }
+  for(const t of tools) for(const c of toolColumns(t).cells){
+    const m=c.ref?readRef(c.ref):null;
+    if(m&&!seen.has(m)){ seen.add(m); fn(m,null,c.ref); }
+  }
+}
+function itemOnPlayer(q){ let on=false; invArmWalk(it=>{ if(it===q) on=true; }); return on; }
+function tickInvArm(dt){
+  invArmWalk((it,g,ref)=>{
+    if(it._armT==null) return;
+    it._armT-=dt;
+    it._beepT=(it._beepT||0)-dt;
+    if(it._beepT<=0){ it._beepT=it._armT>1.6?0.55:0.2; playSound('click'); }   // it ticks THROUGH the canvas
+    if(it._armT<=0){
+      if(g) removeFromGrid(it,g); else writeRef(ref,null);   // gone from its one home BEFORE the blast
+      explode({pos:new Vec3(playerPos.x,playerPos.y+0.9,playerPos.z), kind:'boom', dmg:34, owner:'player'});   // you wore it
+      refreshInvUI();
+    }
+  });
+}
 function updateWorldItems(dt){
   for(let wi=worldItems.length-1;wi>=0;wi--){ const w=worldItems[wi];
-    // ---- a LIT boom core counts down wherever it is — pinned, resting, or in hand
+    // ---- a LIT boom core counts down wherever it is — pinned, resting, or in
+    // ---- hand (a POCKETED one ticks in tickInvArm, the walk above)
     const li=w.item;
     if(li&&li._armT!=null){
       li._armT-=dt;
@@ -7401,6 +7478,7 @@ function frame(){
 
     updateProjectiles(dt);
     updateWorldItems(dt);
+    tickInvArm(dt);        // the bagged grenade keeps its word
 
     highestDetection=0;
     for(const en of enemies){
