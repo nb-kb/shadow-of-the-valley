@@ -63,22 +63,19 @@ Last reviewed: 2026-07-10 (build v22m).
 - **Dead-code orphan** (pre-existing, harmless): `showTooltip_DEAD` calls
   undefined `positionTooltip()` — the function is never invoked. Delete both
   on the next tooltip pass.
-- **Fog mixes toward the full sky — celestial bleed-through** (diagnosed
-  v22p, owner chose removal over a shader fix). The one fog blend
-  (`col = mix(col, skyColor(rayDir), 1-exp(-uFog·d))`) targets the FULL
-  directional sky, sun disk (`pow(sd,180)·2`), halo, clouds and stars
-  included — so any nonzero `uFog` composites those through geometry with
-  distance and the world reads *translucent* (sun through ridges, stars
-  through walls). The `fogDensity` slider was the only way to raise fog
-  without the weather system's mood-graying (which dims the disk 75% and
-  flattens the sky, masking the artifact) — slider removed, the open
-  valley's base fog pinned 0. Residual: authored `atmos.fog`
-  (0.004/0.010) still bleeds the disk faintly at range. Proper fix later:
-  fog toward a celestial-free sky (or attenuate the disk term by fogAmt),
-  GLSL-only, no twin risk.
 
 ## Recently fixed
 
+- **v22r** — Fog translucency fixed at the blend target (diagnosed v22p). The
+  one fog blend composited `skyColor(rayDir)` — the FULL directional sky, sun
+  disk (`pow(sd,180)·2`), halo, clouds, stars — through geometry, so any nonzero
+  `uFog` read *translucent* (sun through ridges, stars through walls). Now
+  `col = mix(col, uSkyLo, fogAmt)`: `uSkyLo` is the celestial-free horizon
+  endpoint (`skyColor`'s own low floor), so distance haze is opaque horizon tint
+  with no disk/halo/cloud/star bleed. GLSL-only, no twin risk (fog is
+  render-only); the sky-*miss* path still renders full `skyColor(rayDir)`.
+  Subsumes the old authored-`atmos.fog` disk-bleed residual — the disk is no
+  longer in the blend target for any fog source.
 - **v22o** — Death mid-frame faulted the engine: `ENGINE FAULT: pr is undefined`
   at `pr.stuck` in `updateProjectiles`. A killing hit processed INSIDE a
   per-frame loop (enemy bolt → `damagePlayer` → `onDeath` → `deployTo` →
