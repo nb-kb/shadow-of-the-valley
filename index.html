@@ -3955,12 +3955,17 @@ function releaseHeld(hurl){
 function stowHeldTool(){
   const t=heldWorld.w.item;
   consumeHeld();
+  // Owner's order: belt, then harness, then rucksack, then the floor. storageZones()
+  // walks playerZones(true) — the FOLD-BLIND view — so a CLOSED harness or a folded
+  // rucksack still takes the tool (the old chain skipped the harness entirely and only
+  // ever tried belt · holster · rucksack). One object one home: consumeHeld above, then
+  // exactly one write — a slot/grid placement or the feet-drop.
   const zs=storageZones().filter(z=>!z.external);
-  for(const id of ['belt','holster']){
-    const z=zs.find(z=>z.id===id);
-    if(z&&slotPlace(t,z)){ toast('STOWED · '+z.label); playSound('place'); refreshInvUI(); return; }
+  for(const id of ['belt','harness','rucksack']){
+    const z=zs.find(z=>z.id===id); if(!z) continue;
+    const ok=z.slotMode ? slotPlace(t,z) : autoPlace(t,z.grid,z.cols,z.rows);
+    if(ok){ toast('STOWED · '+z.label); playSound('place'); refreshInvUI(); return; }
   }
-  if(autoPlace(t,bagGrid,BAG_COLS,BAG_ROWS)){ toast('STOWED · RUCKSACK'); playSound('place'); refreshInvUI(); return; }
   dropItemToWorld(t,0.4,0.6);                        // no pocket would take it — it rests at the feet
   toast('NO ROOM — DROPPED'); playSound('drop'); refreshInvUI();
 }
