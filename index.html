@@ -3275,7 +3275,9 @@ function menuSet(view){
 }
 function menuInspect(item){
   Menus.inspect=item; inspectItem=item;
-  if(item instanceof Tool || (item && item.inv)) setFocus(2);   // pockets are pockets
+  // pockets are pockets — but a world-side open (menus closed, carried item) has
+  // no cursor to send: the panel is for the eyes until a menu comes up under it
+  if((item instanceof Tool || (item && item.inv)) && uiMenusOpen()) setFocus(2);
   else if(!item && currentFocus===2) setFocus(Menus.view==='tool'?1:0);
   refreshInvUI();
 }
@@ -3355,6 +3357,7 @@ function handHold(item){
 // the held item leaves the world (it went into a pocket)
 function consumeHeld(){
   const wi=worldItems.indexOf(heldWorld.w); if(wi>=0) worldItems.splice(wi,1);
+  if(!uiMenusOpen()&&inspectItem===heldWorld.w.item) menuInspect(null);   // world-side pockets leave with the hands
   heldWorld.w.held=false; heldWorld=null;
   document.getElementById('crosshair').classList.remove('carrying');
 }
@@ -3535,7 +3538,9 @@ function activateAtCursor(){
 function closeInspect(){ menuInspect(null); playSound('click'); }
 function renderInspect(){
   const ui=document.getElementById('inspectUI');
-  if(!inspectItem || !uiMenusOpen()){ ui.classList.add('hidden'); return; }
+  // menus open — or the carried item's own pockets, drawn over the world (△ tap)
+  const carriedOpen=heldWorld&&heldWorld.w.item===inspectItem;
+  if(!inspectItem || !(uiMenusOpen()||carriedOpen)){ ui.classList.add('hidden'); return; }
   ui.classList.remove('hidden');
   document.getElementById('inspectTitle').textContent=inspectItem.name.toUpperCase()+' — POCKETS';
   const body=document.getElementById('inspectBody');
@@ -3872,6 +3877,7 @@ function grabWorld(idx,dist,mode){
 function releaseHeld(hurl){
   if(!heldWorld) return;
   const w=heldWorld.w; w.held=false;
+  if(!uiMenusOpen()&&inspectItem===w.item) menuInspect(null);   // thrown/dropped: its world-side pockets shut
   if(hurl){
     const f=camForward();
     w.vel.set(f.x*20,f.y*20+2.0,f.z*20);
@@ -4102,9 +4108,18 @@ function describeSequence(res){
   }).join('<br>');
 }
 
-// triangle, hand full: the held item does its thing
+// triangle, hand full: the held item does its thing. Anything with a submenu —
+// a Tool's rack, a Magazine's round count, a container's pockets, a settings
+// device's dials — opens it instead (tap again shuts it); the panel renders
+// pockets-detached over the world, menus closed (renderInspect's held-item gate).
+// The held Magazine's old dump/refill verb yields to the panel: pour/unload/sip
+// still cover it from the grids.
 let _pillArm=0, _pillDeath=false;
 function heldUse(it){
+  if(it instanceof Tool || it instanceof Magazine || it.inv){
+    if(inspectItem===it){ closeInspect(); return; }
+    menuInspect(it); playSound('click'); return;
+  }
   if(it.ration){
     playerPos.health=Math.min(effMaxHP(), playerPos.health+14);
     toast('TASTES LIKE THE WAR');
@@ -4138,27 +4153,6 @@ function heldUse(it){
       playSound('click');
     }
     return;
-  }
-  if(it instanceof Magazine){
-    if(it.loaded>0){                                     // dump the rounds into the rucksack
-      const rounds=new Ammunition(it.acceptedType+' rounds','#a07c2c',it.acceptedType,it.loaded);
-      it.loaded=0;
-      if(!autoPlaceAny(rounds)) dropItemToWorld(rounds,0.8,1.2);
-      toast('DUMPED '+rounds.count+' ROUNDS'); playSound('reload');
-    }else{                                               // refill from rucksack ammo
-      let took=0;
-      for(let r=0;r<BAG_ROWS&&it.loaded<it.maxCapacity;r++) for(let c=0;c<BAG_COLS&&it.loaded<it.maxCapacity;c++){
-        const b=bagGrid[r][c];
-        if(b instanceof Ammunition && b.ammoType===it.acceptedType && b.x===c && b.y===r){
-          const take=Math.min(b.count,it.maxCapacity-it.loaded);
-          b.count-=take; it.loaded+=take; took+=take;
-          if(b.count<=0) removeFromGrid(b,bagGrid);
-        }
-      }
-      toast(took?('LOADED '+took+' ROUNDS'):'NO '+it.acceptedType.toUpperCase()+' IN THE BAG');
-      playSound(took?'reload':'empty');
-    }
-    refreshInvUI(); return;
   }
   if(it instanceof Gadget){ useGadget(it); return; }
   if(it instanceof Battery){ toast('BATTERY · '+(battFunctional(it)?it.charge.toFixed(0)+'/'+it.cap+'\u26a1':'DEPLETED')); playSound('click'); return; }
