@@ -686,7 +686,7 @@ uniform vec4  uGlobs[10];   // xyz center · w radius
 uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uHasTool;
-uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w unused
+uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w melee whip phase 0→1
 uniform float uExposure;    // 0..1 player light exposure — dims the viewmodel in cover
 
 uniform int   worldItemCount;
@@ -1427,6 +1427,20 @@ vec2 map(vec3 p){
       if(g<res.x) res=vec2(g,20.0);
       float arm=sdCapsule(vl, vec3(0.14,-0.30,-0.36), vec3(0.005,-0.10,-0.055), 0.052);
       if(arm<res.x) res=vec2(arm,21.0);
+    }
+    else if(uToolCfg.w>0.001){
+      // EMPTY HANDS — the whip snap. Phase w runs 0→1 over 0.3s; ease-in-out lives in
+      // the pose curves. 3 prims, the tool's own mats (20/21) — uExposure dims them free.
+      float ph=uToolCfg.w;
+      float sw=ph*ph*(3.0-2.0*ph);                                          // master ease
+      float snap=smoothstep(0.25,0.5,ph)*(1.0-smoothstep(0.55,1.0,ph));     // fling, then settle
+      vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame
+      float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050);
+      if(warm<res.x) res=vec2(warm,21.0);
+      vec3 wtip=hd+mix(vec3(0.05,0.14,0.02), vec3(-0.02,-0.03,0.55), snap); // curled overhead → flung long
+      float lash=sdCapsule(vl, hd, wtip, mix(0.026,0.011,snap));
+      lash=min(lash, length(vl-wtip)-0.020);                                // the cracker bead
+      if(lash<res.x) res=vec2(lash,20.0);
     }
   }
   return res;
@@ -4244,12 +4258,17 @@ const _colsBuf=new Float32Array(32);
 // smooth both ways. Pitch climb pays out over ~4 frames instead of stepping.
 function addKick(p){ playerPos.pitchPend+=p; playerPos.kickV+=17; }
 let fireCooldown=0, reloadTimer=0;
+let meleeT=0, meleeHit=false;   // the whip: swing clock + one-strike latch
 let BARE_RES=null;
 function bareRes(){ return BARE_RES||(BARE_RES=resolveTool(null)); }
 function tryFirePlayer(dt){
   const res=activeTool?activeTool._res:bareRes();
   if(fireCooldown>0) return;
   const clicked = res.auto ? fireDownEff() : firePressedEff();
+  if(clicked && !activeTool && !heldWorld){            // EMPTY HANDS ARE A WEAPON — the whip
+    if(meleeT<=0){ meleeT=0.001; meleeHit=false; fireCooldown=0.7; playSound('drop'); }
+    return;
+  }
   if(!clicked || !activeTool || heldWorld) return;
 
   const o=camPos(), f=camForward();
@@ -4325,6 +4344,39 @@ function tryFirePlayer(dt){
   if(loudest>0) addNoise(playerPos.x,playerPos.y,playerPos.z,loudest);
   fireCooldown=res.fireRate;
   updateToolReadout();
+}
+
+// THE WHIP — bare fire snaps a 0.3s swing; the CRACK lands at phase 0.45.
+function tickMelee(dt){
+  if(meleeT<=0) return;
+  meleeT+=dt;
+  if(!meleeHit && meleeT>=0.135){ meleeHit=true; meleeStrike(); }   // the CRACK lands mid-snap
+  if(meleeT>=0.3) meleeT=0;
+}
+function meleeStrike(){
+  const o=camPos(), f=camForward();
+  let best=null, bd=2.2;
+  for(const en of enemies){
+    if(en.health<=0||en._dormant) continue;
+    const dx=en.position.x-o.x, dy=(en.position.y+0.95)-o.y, dz=en.position.z-o.z;
+    const d=Math.hypot(dx,dy,dz);
+    if(d>bd) continue;
+    if((dx*f.x+dy*f.y+dz*f.z)/Math.max(0.001,d)<0.7) continue;                     // narrow arc
+    if(!losClearJS(o.x,o.y,o.z,en.position.x,en.position.y+0.95,en.position.z)) continue;   // no whipping through walls
+    best=en; bd=d;
+  }
+  if(!best){ addNoise(playerPos.x,playerPos.y,playerPos.z,6); return; }            // a whiff still cracks air
+  const bx=playerPos.x-best.position.x, bz=playerPos.z-best.position.z, b2=Math.hypot(bx,bz);
+  const behind=(Math.sin(best.yaw)*bx+Math.cos(best.yaw)*bz)/Math.max(0.001,b2)<-0.25;   // same cone math as their eyes, reversed
+  if(best.state===0 && behind && bd<1.6){
+    best.hurt(400,'player');                        // STEALTH TAKEDOWN: unsuspecting, from behind, close — the quiet kill
+    addNoise(playerPos.x,playerPos.y,playerPos.z,3); playSound('hit'); toast('SILENCED');
+  }else{
+    best.hurt(18,'player');                         // whip-snap: two swipes fell a bare zealot
+    best.velocity.addScaledVector(f,6); best.stagger=Math.max(best.stagger,0.25);
+    addNoise(playerPos.x,playerPos.y,playerPos.z,10); playSound('hit');            // the crack CARRIES
+  }
+  addKick(0.008);                                   // P-ease spring — the snap tugs the view
 }
 
 // CONTINUOUS BEAMS — a BEAM-fed core doesn't fire, it FLOWS. Hold the trigger
@@ -5650,7 +5702,7 @@ let isTerminalOpen=false;
 function teardownWorld(){
   worldItems.length=0; enemies.length=0; projectiles.length=0;
   beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
-  _swing=null; playerPos.swinging=false; playerPos.velX=0; playerPos.velZ=0;
+  _swing=null; playerPos.swinging=false; playerPos.velX=0; playerPos.velZ=0; meleeT=0;
   SDF_EDITS.length=0; dynLights.length=0;
   _beamLanes.clear(); _laserBursts.length=0;
   if(heldWorld){ heldWorld=null; document.getElementById('crosshair').classList.remove('carrying'); }
@@ -7130,6 +7182,7 @@ function frame(){
     if(!uiMenusOpen()){
       updateInteract(dt);
       tryFirePlayer(dt);
+      tickMelee(dt);
       runBurstLasers(dt);
       runContinuousBeams(dt);
       runTacLaser(dt);
@@ -7245,7 +7298,7 @@ function frame(){
   gl.uniform1i(U.flashlightOn,(playerPos.flashlightOn&&resT&&resT.flashlight)?1:0);
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
-  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, 0);
+  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.3):0);
   gl.uniform1f(U.uExposure, playerPos.exposure);
 
   // items (nearest first) — cull follows the fog wall in: past uFar nothing uploads
