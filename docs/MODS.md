@@ -48,12 +48,12 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | key | name | effect | base ⚡ | behavior | GPU |
 |---|---|---|---|---|---|
 | `boltCore` | BOLT | `{kind:'bolt', base:0}` | 0 (+1 round) | Kinetic slug from the magazine. | cheap |
-| `sparkCore` | SPARK | `{kind:'spark', base:18, burn:15}` | 18 | Bursting ember — the fire rides the blast now. Base dmg 10 + 15 burn dose. Niche: blast-first with a real side of fire. | cheap |
+| `sparkCore` | SPARK | `{kind:'spark', base:18, burn:15}` | 18 | Bursting ember — the fire rides the blast now. Base dmg 10 + 15 burn dose; v22 P-balance: the blast itself sears another `0.35×dmg-at-range` (~+4) on top. Niche: blast-first with a real side of fire. | cheap |
 | `emberCore` | EMBER | `{kind:'spark', base:22, burn:28}` | 22 | Fire that keeps eating — commit-to-burn. 28 of the 30-cap pool ≈ 14s of 2 hp/s. Niche: +4⚡ over SPARK buys the near-full pool. | cheap |
 | `pickCore` | PICK | `{kind:'pick', base:14}` | 14 | Eats stone (SDF carve), spares flesh. Base dmg 14. | uEdits (capped) |
 | `gripField` | GRIP | `{kind:'grip', base:6}` | 6 | Glue glob; sticks to world + kin. Behind BEAM → physgun. | cheap |
 | `decoyCore` | LURE | `{kind:'decoy', base:10}` | 10 | Chirping puck — sticks where it lands, sings to the camp for 12s. | cheap |
-| `boomCore` | BOOM | `{kind:'boom', base:26}` | 26 | THE BLAST PRIMITIVE — no flight, no tracer slot: it detonates the frame it is cast (R 4.5, dmg 34+pend, ×1.6 vs flesh w/ falloff — hurts the shooter too). Bare muzzle fire goes off ~1.2m out: survivable, stupid. Relay/contact-cast (`atPoint`) it goes off AT the cast point — [CONTACT,BOLT,BOOM] = explosive rounds, [FUSE,X,BOOM] = X's death detonates. FUSE on the boom ITSELF restores the lob (flies heavy, sticks, blows after the fuse — the timed charge). TWIN pools, never fans: ONE blast ×1.4 radius. BEAM-fed: a drum of small charges (see the beam notes). | cheap |
+| `boomCore` | BOOM | `{kind:'boom', base:26}` | 26 | THE BLAST PRIMITIVE — no flight, no tracer slot: it detonates the frame it is cast (R 4.5, dmg 34+pend, ×1.6 vs flesh w/ falloff — BOTH sides since v22 P-balance: the shooter eats the same ×1.6, armor shaves after, plus a view kick so the hit READS). Every explosion also SEARS: burn dose = own `burn` + `round(0.35×dmg-at-range)` into the 30-cap pool, both sides (bare BOOM: 12 at the epicentre, ~7 at 2m). Bare muzzle fire goes off ~1.2m out: survivable, stupid — and now felt (unarmored ~30, ceramic+steel ~16, plus ~9 burn). Relay/contact-cast (`atPoint`) it goes off AT the cast point — [CONTACT,BOLT,BOOM] = explosive rounds, [FUSE,X,BOOM] = X's death detonates. FUSE on the boom ITSELF restores the lob (flies heavy, sticks, blows after the fuse — the timed charge). TWIN pools, never fans: ONE blast ×1.4 radius. BEAM-fed: a drum of small charges (see the beam notes). | cheap |
 | `waveCore` | WAVE | `{kind:'wave', base:10}` | 10 | Wide slow wall of pressure: 10 m/s, dmg 16, washes a ~1.8m swath, each foe pays ONCE (`pr.hit`/`pr.hitPl` sets), shove 7 + stagger. Never impact-dies on flesh (pierce inert on it BY DESIGN); the world still kills it. Enemy-fired = flat 16, dodgeable. | 1 tracer slot (perp-bar) |
 | `sawCore` | SAW | `{kind:'saw', base:1}` | 1 | Teeth, not reach: unlocks the WHOLE tool's cycle to the 0.06 floor; its own bite dmg 8, life 0.16s ≈ 4m at speed 26 (SWIFT is THE reach knob). 16.7⚡/s vs regen 16 + wearRoll per tooth: self-governing attrition. | cheap (~3 live teeth) |
 | `warpCore` | WARP | `{kind:'warp', base:15}` | 15 | You arrive where it dies — impact, fuse, or the end of its arc. Speed 40, dmg 6. Arrival is LOUD (noise 18 + muzzle flare) unless HUSH-fed (noise 4, both ends). Sheds threads at resolve. Player-only: zealots never roll it AND `warpArrive` owner-guards. Rare loot tier. | cheap |
@@ -76,11 +76,12 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's FIRST TOUCH (world or flesh) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. TWIN first-copy rule applies (copies don't chain). v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
 | `slowFuse` | TIMER | `{fuseAdd:1.5}` | 3 | `pend.fuse += 1.5` — more patience on the same fuse; stacks, and extends FUSE's 1.2s | cheap |
 | `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (3889) | cheap |
+| `serrated` | SERRATED | `{bleed:true, surcharge:5}` | 5 | `pend.bleed` → `pr.bleed` → `applyStatus`: opens a wound — wounds STACK (`status.bleedN`, cap 5), 1 hp/s per stack, `bleedT` runs 15s from the freshest cut (resists shave the clock). Both sides, same rate. Blast kinds pass the flag through the explosion dose — once. | cheap |
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
 | `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. BEAM-fed (v22i): the damage thread BENDS fully onto the nearest mark within a ~12° cone of the aim (`seekBias`, 45m, no LOS — the cone is the clamp); twin strands share the one mark; grip/pick never bend; its 7⚡ prices through the thread's per-second rate. | cheap |
 | `beamCore` | BEAM | `{laser:true}` | 8 | shot → continuous thread; alone → tac laser | cheap |
-| `refundMod` | REFUND | `{refund:true, surcharge:10}` | 10 (never waived) | `pend.refund` → resolveLane cost formula (waives next core's base ⚡) + `roundsFor()` (waives lead). Its own 10⚡ rides `pend.surchargeHard` — the one no core forgives, POWDER included. Idempotent flag: REFUND+REFUND = 20⚡ of nothing. | cheap |
-| `chaoticMod` | CHAOS | `{chaos:1, surcharge:6}` | 6 | `pend.chaos` → `pr.chaos` steer wobble (2.4·chaos rad/s, return leg immune); threads arc like lightning (endpoint wander ×(1+0.6·chaos) + 3-joint strand render); pulses jitter. With SEEKER on threads: arcs bite the nearest warm thing (chain lightning). Stacks: wider wander. GRIP/PICK threads stay straight BY RULE. Zealots CAN roll it — white-blue tracer telegraphs the wobble. | 3 one-frame flash segs per strand, gated on `flashHeadroom()>=3` (degrades to 1 straight) |
+| `refundMod` | REFUND | `{refund:true, surcharge:1}` | 1 (never waived) | `pend.refund` → resolveLane cost formula (waives next core's base ⚡) + `roundsFor()` (waives lead). Its own 1⚡ rides `pend.surchargeHard` — the one no core forgives, POWDER included. Idempotent flag: REFUND+REFUND = 2⚡ of nothing. v22 P-balance: 10→1 by owner decree — the real price is the rack cell + loot rarity; watch knob 2–3⚡, never a mechanic change. | cheap |
+| `chaoticMod` | CHAOS | `{chaos:1, surcharge:6}` | 6 | `pend.chaos` → `pr.chaos` steer wobble (2.4·chaos rad/s, return leg immune); threads arc like lightning (endpoint wander ×(1+0.6·chaos) + 3-joint strand render); pulses jitter. With SEEKER on threads: arcs bite the nearest warm thing (chain lightning). Stacks: wider wander. v22 P-balance: hits **+45% per stack, cap ×1.9** (`chaosMul` at all five damage assemblies — instant boom, projectile literal, hitscan, beam thread, both beam drums); frags inherit the boosted parent dmg and never re-multiply. GRIP/PICK threads stay straight BY RULE. Zealots CAN roll it — white-blue tracer telegraphs the wobble AND the heavier hand (WATCHED). | 3 one-frame flash segs per strand, gated on `flashHeadroom()>=3` (degrades to 1 straight) |
 
 ## Stat mods (`cat: stat`) — order-free, whole-tool
 
@@ -132,8 +133,16 @@ adds/multiplies its field; a proj core copies `pend`, then it resets.
 - `surchargeHard` — consumed at the resolveLane cost formula: the un-waivable
   slice of the surcharge pool. Only REFUND writes it; POWDER cannot touch it.
 - `chaos` — consumed at `emitProjectile` (→`pr.chaos` steer wobble),
-  `runContinuousBeams` (arc render + endpoint wander + homing bias), and
-  `runBurstLasers`/`fireHitscan` (pulse jitter + jagged flash).
+  `runContinuousBeams` (arc render + endpoint wander + homing bias),
+  `runBurstLasers`/`fireHitscan` (pulse jitter + jagged flash), and — v22
+  P-balance — `chaosMul` (+45% dmg per stack, cap ×1.9) at the five damage
+  assemblies (instant boom, projectile literal, hitscan, beam thread, both
+  beam drums).
+- `bleed` — consumed at `applyStatus` (v22 P-balance rework): each dose stacks
+  `status.bleedN` (cap 5) and refreshes `bleedT` to 15s·resist; both DoT ticks
+  (player status block, zealot update) drain 1 hp/s per stack and zero `bleedN`
+  when the clock runs out. Every `bleedT=0` site (bandAid, hideout stanch, run
+  resets, enemy reset, player death) zeroes `bleedN` with it — no orphan stacks.
 
 Effect-only flags (never land on `pend`): `powder` (read in the resolveLane proj
 branch cost formula), `beltFeed` (foldFrame → `out.beltFeed` → `tickBeltFeed`).
@@ -232,8 +241,8 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   SWIFT F (longer blink) · HURT+ F · BOOM via FUSE F "BREACH-AND-ENTER"
   ([FUSE,BOOM,WARP]: the blast opens the wall, the warp carries you through).
 - **POWDER**: all sequence feeders F with surcharges waived (the point) ·
-  REFUND C-P1 (lead waived instead of base; 10⚡/0rd sidearm — pockets-empty
-  tech) · BEAM **T** (waiver refuses threads — you built a budget laser and
+  REFUND C-P1 (lead waived instead of base; 1⚡/0rd sidearm — pockets-empty
+  tech, priced by loot rarity since the v22 decree) · BEAM **T** (waiver refuses threads — you built a budget laser and
   got a full-price one) · FUSE-relay F (cycle gate keeps it honest) · TWIN F
   (0⚡ doubling; rack cells + cap 3 + lead are the price).
 - **SLUG**: FUSE-relay F + relay-housed exemption (the "in trigger" rule) ·
@@ -244,9 +253,9 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   SPLINTER F (32-dmg frags — watched) · HUSH F · MASS F (mortar slug) ·
   SWIFT F · HURT+ F (additive AFTER ×3, declared).
 - **REFUND**: energy cores F (base→0) · ballistic C-P1 (lead→0) · BEAM-fed I
-  (base already discounted by rate math; its 10 inflates the rate —
-  anti-synergy, documented) · REFUND+REFUND T (idempotent flag, 20⚡ of
-  nothing) · TWIN F (12 stands — guardrail).
+  (base already discounted by rate math; its 1 barely moves the rate —
+  anti-synergy shrunk to a rounding error, documented) · REFUND+REFUND T
+  (idempotent flag, 2⚡ of nothing) · TWIN F (12 stands — guardrail).
 - **BELT-FEEDER**: orthogonal util — F with everything · SLUG note: 1.1rd/s
   trickle vs 3rd/shot, honest · suppressor/silenced gates its tick noise ·
   zealots excluded.
@@ -255,10 +264,15 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   owner's ask, verbatim; on a shared thread CHAOS's 40° arc bias replaces
   SEEKER's 12° bend) · burstCam pulses
   C-P5 · GRIP/PICK threads S (stay straight) · RETURN F (return leg immune —
-  the way home flies true) · WARP F (drunken blink, self-priced) · everything
+  the way home flies true) · WARP F (drunken blink, self-priced) · BOOM F
+  **"LOUD BARGAIN"** (accepted: an instant blast has no flight, so no wobble
+  to pay — but since v22 P-balance the shooter feels all of a 49.3-dmg blast
+  1.2m from their own nose; self-priced) · dmg +45%/stack (cap ×1.9)
+  everywhere the charge lands — the wild path is the price · everything
   else F.
 - **BOOM** (instant since v22i — the blast primitive): bare fire F-but-dumb
-  (blast 1.2m off your own muzzle, self-damage stands) · CONTACT-carrier F
+  (blast 1.2m off your own muzzle; self-damage truly stands since v22
+  P-balance — ×1.6 flesh both sides, view kick, burn dose) · CONTACT-carrier F
   **"EXPLOSIVE ROUNDS"** ([CONTACT,BOLT,BOOM]: every hit detonates AT the
   wound/wall) · FUSE on the boom itself F (restores the lob: flies, sticks,
   timed charge; TIMER does too — ANY fuse time buys the flight back;
@@ -319,7 +333,7 @@ per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
 - **Waiver edges, decided:** REFUND on the carrier waives the carrier's OWN
   base/lead only — the housed chain's addition stands (rack REFUND as the
   housed core's feeder to waive that link instead: [CONTACT,BOLT,REFUND,BOOM]
-  = 15⚡). POWDER as carrier still waives only MOD surcharges, never housed
+  = 6⚡ since the v22 REFUND decree — was 15⚡ at REFUND 10). POWDER as carrier still waives only MOD surcharges, never housed
   core bases ([CONTACT,POWDER,BOOM] = 26⚡ + 1rd). burstCam casts the chain per
   burst copy at one ⚡ price — the same accepted T-soft as its stacked blasts.
 - **BEAM carriers exempt, deliberately:** threads never cast `relayNext` (only
@@ -345,10 +359,12 @@ per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
 
 ## Free-lunch audit (all closed)
 
-1. POWDER+REFUND → refund's 10 rides in `surchargeHard`, powder can't waive it
-   → floor 10⚡/0rd. CLOSED.
-2. REFUND+TWIN → refund waives BASE only; TWIN's 12 stands → twin BOOM = 22⚡
-   not 12. CLOSED.
+1. POWDER+REFUND → refund's surcharge rides in `surchargeHard`, powder can't
+   waive it — and the floor is now **1⚡/0rd BY DECREE** ("Refund mod should be
+   1 energy"). REFUND's real price is the rack cell + loot rarity; watch knob
+   if it sours: surcharge 2–3, never a mechanic change. CLOSED (as priced).
+2. REFUND+TWIN → refund waives BASE only; TWIN's 12 stands → twin BOOM = 13⚡
+   not 12 (was 22⚡ at REFUND 10). CLOSED.
 3. POWDER feeding a relay chain → relay casts stay free at cast time, and
    (superseded v22j) the cycle gate is GONE for housed payloads — the carrier
    now pre-pays the chain's bases/rounds instead, and POWDER's waiver never
@@ -364,6 +380,41 @@ per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
    free pulses. CLOSED.
 7. SAW spam → 16.7⚡/s vs regen 16 + wearRoll per tooth: self-governing
    attrition. CLOSED.
+
+## Balance ledger (v22 P-balance: CHAOS hand · bleed stacks · REFUND decree · honest blasts)
+
+Five items landed (B1–B5): CHAOS +45%/stack (cap ×1.9) · BLEED stacking rework ·
+REFUND 10→1 · self-splash honesty · explosion sear. ZERO GLSL edits — no world
+geometry touched, the TWIN RULE was never triggered. No SAVE_VER bump (no
+serialized shape changed; `status.bleedN` is runtime-only).
+
+- **B1 CHAOS damage** — `chaosMul(ch)=1+0.45·min(2,ch)` applied at all five
+  damage assemblies; frags inherit boosted `pr.dmg`, no double dip. Enemy CHAOS
+  rolls get it too — the white-blue wobble tracer IS the telegraph. **WATCHED**;
+  one-line fallback: halve `chaosMul` for `owner!=='player'`, or drop
+  `chaoticMod` from `MOD_KEYS`.
+- **B2 BLEED** — one cut = 15 dmg potential (was 20 over 30s at 0.67 hp/s);
+  three quick cuts = 3 hp/s; cap 5 governs every multi-hit source (TWIN,
+  SPLINTER frags, burst-laser 1 stack/pulse — each dose paid for). Same rate
+  both sides per owner; enemy SERRATED rolls (`MOD_KEYS`) now stack against the
+  player too. HUD `bleedTick` unchanged (keys off `bleedT>0`).
+- **B4 self-splash root cause** — the player-splash path always existed (since
+  BOOM landed, git 4785f40); the FELT bug was the missing ×1.6 flesh multiplier
+  (enemies got it, the shooter didn't) buried under plates(0.6–0.75) ×
+  helmet(0.88–0.94). Fixed by symmetry, not a new mechanism; only literal-zero
+  gates in the file are the dbgGod checkbox and `gameState!=='play'`. View kick
+  + pitch dip added so the hit READS. Boom-drum siege now bites its user up to
+  ~19 dps inside 1.8m — declared, the 20.7⚡/s deficit already prices the verb.
+- **B5 explosion sear** — `explode()` doses `burn = own burn +
+  round(0.35×dmg-at-range)` through the existing `applyStatus` lite-object
+  path, both sides; the 30-cap pool, resists, and the single-dose rule
+  (direct-hit `applyStatus` already skipped for spark/boom) all stand.
+  Boom-drum ~4–5 burn/pulse saturates the pool in ~3s of sustained thread —
+  **WATCHED**, the ⚡ deficit prices it. Bare-muzzle self-splash → ~9 burn ≈ +9
+  scar toward the `maxHealth−10` floor: the LOUD BARGAIN is self-priced.
+- **B3 REFUND decree** — worked prices updated above; the 1⚡/0rd bolt sidearm
+  collapses most of the lead economy wherever the mod drops. Decreed; loot
+  rarity is now REFUND's entire price. Watch knob: surcharge 2–3.
 
 ## Zealot availability
 
