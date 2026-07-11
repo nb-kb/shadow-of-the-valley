@@ -3957,7 +3957,7 @@ function resolveLane(col,out){
         // shot's assembled cost (base + its own feeders' ⚡ — REFUND/POWDER
         // already folded per shot above) rides the chain root. Chains recurse:
         // a housed shot's own relay is housed too, billed to the same root.
-        // BEAM carriers are EXEMPT — threads never cast relayNext (only wave/orb
+        // BEAM carriers are EXEMPT — threads never cast relayNext (only orb
         // trains do, per emitted copy), so under a laser the old cycle-gate
         // stands: the payload keeps its cycle seat and pays at its own turn.
         if(!prev.pend.laser){
@@ -4406,11 +4406,12 @@ function runContinuousBeams(dt){
     // TWIN SPLIT — a twinned damage thread frays into round(twin) strands (cap 3),
     // each wandering off the aim, each 0.65×: three on one mark ≈ ×1.95, priced by
     // TWIN's ⚡12 already in the rate. grip/pick don't fray — splitting a physgun
-    // or a carving stream is nonsense. wave/orb don't fray EITHER: their trains twin
-    // at the EMIT (emitProjectile fans round(twin) copies) — a split thread would
-    // square TWIN (K strands × K copies = 9 walls a tick, priced once). Strands draw
-    // one-frame segs; when the tracer pool runs dry the EXTRA strands drop first
-    // (damage too), the aim thread never.
+    // or a carving stream is nonsense. wave doesn't fray EITHER: the corridor POOLS
+    // width (CW 1.5→2.1, boom-rMul precedent) — TWIN's ⚡12 buys WIDE, never strands.
+    // orb keeps the train rationale: its pearls twin at the EMIT (emitProjectile
+    // fans round(twin) copies) — a split thread would square TWIN (K strands × K
+    // copies, priced once). Strands draw one-frame segs; when the tracer pool runs
+    // dry the EXTRA strands drop first (damage too), the aim thread never.
     let K=(sh.kind==='grip'||sh.kind==='pick'||sh.kind==='wave'||sh.kind==='orb')?1:Math.max(1,Math.round(sh.pend.twin));
     if(K>1) K=Math.max(1,Math.min(K,flashHeadroom()));
     const mul=K>1?0.65:1;
@@ -4421,15 +4422,17 @@ function runContinuousBeams(dt){
     const chaos=dmgKind?(sh.pend.chaos||0):0;
     // SEEKER bends the damage thread (12° lock — priced by its 7⚡ already in the
     // rate); with CHAOS it becomes chain lightning instead (40° arc bias). GRIP/
-    // PICK stay true BY RULE; wave/orb trains seek as PROJECTILES, never as aim.
+    // PICK stay true BY RULE; orb trains seek as PROJECTILES, never as aim.
     const fb=(chaos&&sh.pend.homing>0)?chaosBias(o,f):(dmgKind&&sh.pend.homing>0?seekBias(o,f):f);
     for(let k=0;k<K;k++){
       const dir=chaos?jitterDir(fb,_jDir,1+0.6*chaos):(K>1?jitterDir(fb,_jDir):fb);   // chaos: the aim WANDERS even at K===1 — that is the price; strands wander around the (possibly bent) aim
       let t=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);
       if(sh.kind==='saw') t=Math.min(t,4.0);          // CHAINSAW: the teeth die at arm's length
+      if(sh.kind==='wave') t=Math.min(t,10.0);        // PRESSURE CORRIDOR: short, wide, continuous
       // enemies intercept the thread — head tested above the body, same ray foot
+      // (wave skips this: the corridor washes THROUGH — flesh never clamps t, only the world does)
       let hitEn=null, hitHead=false;
-      for(const en of enemies){
+      if(sh.kind!=='wave') for(const en of enemies){
         if(en.health<=0||en._dormant) continue;
         const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
         const tt=rx*dir.x+ry*dir.y+rz*dir.z;
@@ -4448,7 +4451,7 @@ function runContinuousBeams(dt){
           if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
           else bdmg*=2;
         }
-        hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
+        hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,{burn:bdmg,bleed:sh.pend.bleed});   // THREAD HEAT LAW (A5): line ticks COOK — burn dose = tick hurt (pool 30, resists apply); bleed rides through
       }
       if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
       if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
@@ -4472,7 +4475,30 @@ function runContinuousBeams(dt){
           }
         }
       }
-      if(sh.kind==='wave'&&st.acc[k]>0.55){ st.acc[k]=0; emitProjectile('player',muzzleWorld(),dir,sh,res); }   // WAVE TRAIN: a wall every 0.55s, priced by the rate — you're locked in
+      if(sh.kind==='wave'){
+        // PRESSURE CORRIDOR (v22 A1) — the train is gone: the thread IS the wall.
+        // Every live foe in the corridor (0.3..t along the ray, within CW of it)
+        // pays per tick and is pressed back (≈ one wave-shove per 0.3s of contact).
+        // TWIN pools WIDTH (boom-rMul precedent): CW 1.5→2.1, K stays 1 — the 12⚡
+        // buys wide, never strands. NO stagger BY RULE: the rate is regen-positive
+        // (11.9 < 16) and a stagger-locking corridor at surplus ⚡ is free crowd
+        // god-mode — the press is the paid verb. Burn law A5: dose = tick hurt.
+        const CW=Math.round(sh.pend.twin)>1?2.1:1.5;
+        const wdmg=(16+sh.pend.dmg)*0.55*dt;
+        for(const en of enemies){
+          if(en.health<=0||en._dormant) continue;
+          const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
+          const tt=rx*dir.x+ry*dir.y+rz*dir.z;
+          if(tt>0.3&&tt<t){
+            const d=Math.hypot(en.position.x-(o.x+dir.x*tt),(en.position.y+0.95)-(o.y+dir.y*tt),en.position.z-(o.z+dir.z*tt));
+            if(d<CW){
+              en.hurt(wdmg,'player');
+              applyStatus(en,{burn:wdmg,bleed:sh.pend.bleed});
+              en.velocity.addScaledVector(dir,24*dt);
+            }
+          }
+        }
+      }
       if(sh.kind==='orb'){
         // THE THREAD NOSES IT: a live pearl obeys the aim point — the physgun for
         // your own ordnance. No pearl aloft: the thread lays one every 0.7s.
@@ -4493,6 +4519,10 @@ function runContinuousBeams(dt){
       else if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
       else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
       if(k===0) addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
+      if(sh.kind==='wave'){                            // the WIDE read: one flash-tier perp bar spans the corridor's end (sum 1.45 → fat 0.035)
+        const cw=Math.round(sh.pend.twin)>1?2.1:1.5, pl=Math.hypot(dir.z,dir.x)||1;
+        beamSegs.push({a:new Vec3(end.x+dir.z/pl*cw,end.y,end.z-dir.x/pl*cw),b:new Vec3(end.x-dir.z/pl*cw,end.y,end.z+dir.x/pl*cw),col:[0.45,0.4,0.6],ttl:dt+0.001,flash:lastT});
+      }
     }
   }
   if(!any) _endBeams();
@@ -5870,7 +5900,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.kind==='bolt') rows.push('+1 round per shot');
     if(e.kind==='decoy') rows.push('sticks · chirps every 1.5s for 12s · lures the unalarmed');
     if(e.kind==='boom'){ rows.push('no flight — detonates as cast: bare fire blasts ~1.2m out (it WILL hurt you)'); rows.push('relay/contact-cast: the blast lands AT the point · FUSE-fed: flies, sticks, timed charge'); rows.push('TWIN: one blast, ×1.4 radius · BEAM-fed: a drum of small charges at the dot'); }
-    if(e.kind==='wave') rows.push('a wide slow wall · ~1.8m swath · shoves · each foe pays once');
+    if(e.kind==='wave'){ rows.push('a wide slow wall · ~1.8m swath · shoves · each foe pays once'); rows.push('beam-fed: a short wide pressure thread — ~10m, everything in the corridor pays and is pressed back · TWIN widens it'); }
     if(e.kind==='saw') rows.push('whole tool: cycle floor 0.06s · its own teeth die at ~4m · SWIFT stretches them');
     if(e.kind==='warp'){ rows.push('you arrive where it dies — impact, fuse, or the end of its arc'); rows.push('arrival is LOUD · HUSH-fed: a whisper, both ends'); }
     if(e.kind==='slug') rows.push('3 rounds per shot · fat, slow, ×3 tool hurt · whole tool +0.45s cycle unless relay-housed');
@@ -5895,7 +5925,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
     if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
-    if(e.laser) rows.push('laser · ⚡+'+(e.surcharge||0));
+    if(e.laser){ rows.push('laser · ⚡+'+(e.surcharge||0)); rows.push('threads COOK: per-tick line hurt doses equal burn (pool 30, resists apply)'); }
     return {kind,rows};
   }
   if(it instanceof Magazine) return {kind:'MAGAZINE · '+it.acceptedType,

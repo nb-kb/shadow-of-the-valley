@@ -30,7 +30,7 @@ Legend: **cat** = category, drives resolver semantics. **⚡** = `surcharge`
   the carrier waives the carrier's own base/lead only — the housed addition
   stands (feed REFUND to the housed core itself to waive that link). POWDER
   waives mod surcharges only, never housed core bases. **BEAM carriers are
-  exempt**: threads never cast `relayNext` (only wave/orb trains do), so under
+  exempt**: threads never cast `relayNext` (only orb trains do), so under
   a laser the old cycle-gate stands — the payload keeps its cycle seat and pays
   at its own turn. **The family reads:** CONTACT = last touch · TIMER = bell or
   touch · FUSE = stick, then the bell. Every cast leaves along the struck FACE
@@ -64,7 +64,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `gripField` | GRIP | `{kind:'grip', base:6}` | 6 | Glue glob; sticks to world + kin. Behind BEAM → physgun. | cheap |
 | `decoyCore` | LURE | `{kind:'decoy', base:10}` | 10 | Chirping puck — sticks where it lands, sings to the camp for 12s. | cheap |
 | `boomCore` | BOOM | `{kind:'boom', base:26}` | 26 | THE BLAST PRIMITIVE — no flight, no tracer slot: it detonates the frame it is cast (R 4.5, dmg 34+pend, ×1.6 vs flesh w/ falloff — BOTH sides since v22 P-balance: the shooter eats the same ×1.6, armor shaves after, plus a view kick so the hit READS). Every explosion also SEARS: burn dose = own `burn` + `round(0.35×dmg-at-range)` into the 30-cap pool, both sides (bare BOOM: 12 at the epicentre, ~7 at 2m). Bare muzzle fire goes off ~1.2m out: survivable, stupid — and now felt (unarmored ~30, ceramic+steel ~16, plus ~9 burn). Relay/contact-cast (`atPoint`) it goes off AT the cast point — [CONTACT,BOLT,BOOM] = explosive rounds, [FUSE,X,BOOM] = X's death detonates. FUSE on the boom ITSELF restores the lob (flies heavy, sticks, blows after the fuse — the timed charge). TWIN pools, never fans: ONE blast ×1.4 radius. BEAM-fed: a drum of small charges (see the beam notes). | cheap |
-| `waveCore` | WAVE | `{kind:'wave', base:10}` | 10 | Wide slow wall of pressure: 10 m/s, dmg 16, washes a ~1.8m swath, each foe pays ONCE (`pr.hit`/`pr.hitPl` sets), shove 7 + stagger. Never impact-dies on flesh (pierce inert on it BY DESIGN); the world still kills it. Enemy-fired = flat 16, dodgeable. | 1 tracer slot (perp-bar) |
+| `waveCore` | WAVE | `{kind:'wave', base:10}` | 10 | Wide slow wall of pressure: 10 m/s, dmg 16, washes a ~1.8m swath, each foe pays ONCE (`pr.hit`/`pr.hitPl` sets), shove 7 + stagger. Never impact-dies on flesh (pierce inert on it BY DESIGN); the world still kills it. Enemy-fired = flat 16, dodgeable. BEAM-fed (v22 P-beamA): no train — a pressure corridor thread (10m, ±1.5m, per-tick wash+press, TWIN pools width to ±2.1, 11.9⚡/s). | 1 tracer slot (perp-bar); thread: axis+bar |
 | `sawCore` | SAW | `{kind:'saw', base:1}` | 1 | Teeth, not reach: unlocks the WHOLE tool's cycle to the 0.06 floor; its own bite dmg 8, life 0.16s ≈ 4m at speed 26 (SWIFT is THE reach knob). 16.7⚡/s vs regen 16 + wearRoll per tooth: self-governing attrition. | cheap (~3 live teeth) |
 | `warpCore` | WARP | `{kind:'warp', base:15}` | 15 | You arrive where it dies — impact, fuse, or the end of its arc. Speed 40, dmg 6. Arrival is LOUD (noise 18 + muzzle flare) unless HUSH-fed (noise 4, both ends). Sheds threads at resolve. Player-only: zealots never roll it AND `warpArrive` owner-guards. Rare loot tier. | cheap |
 | `powderCore` | POWDER | `{kind:'bolt', base:0, powder:true}` | 0 (+1 round) | A bolt that pays in lead: its feeders' ⚡ surcharges are waived — except REFUND's own (`surchargeHard`), and never under a thread (BEAM keeps full price — the named trap). | cheap |
@@ -89,7 +89,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `serrated` | SERRATED | `{bleed:true, surcharge:5}` | 5 | `pend.bleed` → `pr.bleed` → `applyStatus`: opens a wound — wounds STACK (`status.bleedN`, cap 5), 1 hp/s per stack, `bleedT` runs 15s from the freshest cut (resists shave the clock). Both sides, same rate. Blast kinds pass the flag through the explosion dose — once. | cheap |
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). | cheap |
 | `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. BEAM-fed (v22i): the damage thread BENDS fully onto the nearest mark within a ~12° cone of the aim (`seekBias`, 45m, no LOS — the cone is the clamp); twin strands share the one mark; grip/pick never bend; its 7⚡ prices through the thread's per-second rate. | cheap |
-| `beamCore` | BEAM | `{laser:true}` | 8 | shot → continuous thread; alone → tac laser | cheap |
+| `beamCore` | BEAM | `{laser:true}` | 8 | shot → continuous thread; alone → tac laser. THREAD HEAT LAW (v22 P-beamA A5): every per-tick LINE hurt (bolt/saw threads, wave corridor) doses EQUAL burn via `applyStatus` (pool cap 30, resists apply) — threads COOK; spark/boom tip pulses stay discrete blasts dosing `pend.burn` via `explode`, unchanged | cheap |
 | `refundMod` | REFUND | `{refund:true, surcharge:1}` | 1 (never waived) | `pend.refund` → resolveLane cost formula (waives next core's base ⚡) + `roundsFor()` (waives lead). Its own 1⚡ rides `pend.surchargeHard` — the one no core forgives, POWDER included. Idempotent flag: REFUND+REFUND = 2⚡ of nothing. v22 P-balance: 10→1 by owner decree — the real price is the rack cell + loot rarity; watch knob 2–3⚡, never a mechanic change. | cheap |
 | `chaoticMod` | CHAOS | `{chaos:1, surcharge:6}` | 6 | `pend.chaos` → `pr.chaos` steer wobble (2.4·chaos rad/s, return leg immune); threads arc like lightning (endpoint wander ×(1+0.6·chaos) + 3-joint strand render); pulses jitter. With SEEKER on threads: arcs bite the nearest warm thing (chain lightning). Stacks: wider wander. v22 P-balance: hits **+45% per stack, cap ×1.9** (`chaosMul` at all five damage assemblies — instant boom, projectile literal, hitscan, beam thread, both beam drums); frags inherit the boosted parent dmg and never re-multiply. GRIP/PICK threads stay straight BY RULE. Zealots CAN roll it — white-blue tracer telegraphs the wobble AND the heavier hand (WATCHED). | 3 one-frame flash segs per strand, gated on `flashHeadroom()>=3` (degrades to 1 straight) |
 
@@ -230,7 +230,8 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
 - **WAVE**: FUSE-relay F (wall sticks, casts; or carrier chain) · CONTACT F
   (the wall casts onward where it dies on the WORLD — flesh never triggers it,
   the wave washes through by design) · TIMER F · TWIN F (2-3 walls, 1 tracer slot each) · BEAM
-  C-P3 wave train · burstCam F (3 stacked walls) · RETURN F (the tide comes
+  C-A1 pressure corridor (10m, ±1.5m, per-tick wash+press, TWIN pools width,
+  11.9⚡/s) · burstCam F (3 stacked walls) · RETURN F (the tide comes
   back) · SEEKER F (homing wall) · DRILL I (wave never impact-dies on flesh —
   pierce unread on it) · RICOCHET F (sweeps back off the wall) · SPLINTER F
   (dies on wall → 3 bolts) · HUSH F · MASS F · SWIFT F · HURT+ F ·
@@ -324,7 +325,8 @@ inert — the owner asked for it: "beam should home with seeker." `pend.homing`
 on a damage thread (bolt/spark/boom/saw) now bends the aim onto the nearest
 live, non-dormant mark within a **12° cone** (cos 0.978, 45m, no LOS —
 `seekBias`, full lock, the cone gate IS the bend clamp; twin strands share the
-one mark, grip/pick stay true, wave/orb trains keep seeking as projectiles).
+one mark, grip/pick stay true, orb trains keep seeking as projectiles; the
+wave corridor never seeks — it is aim, v22 P-beamA).
 With CHAOS the wider 40° chain-lightning bias (`chaosBias`) takes over instead
 — both consume homing on threads; the 7⚡ prices through the beam's
 per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
@@ -361,7 +363,8 @@ per-second formula either way (e.g. SEEKER+BEAM+BOLT: 2+(0+7+8)·0.55 =
   core bases ([CONTACT,POWDER,BOOM] = 26⚡ + 1rd). burstCam casts the chain per
   burst copy at one ⚡ price — the same accepted T-soft as its stacked blasts.
 - **BEAM carriers exempt, deliberately:** threads never cast `relayNext` (only
-  wave/orb thread-trains do, per emitted copy), so under a laser carrier the
+  the orb thread-train does, per emitted copy — the wave train is GONE since
+  v22 P-beamA, see that ledger for the declared interim), so under a laser carrier the
   old cycle-gate stands — the payload keeps its cycle seat and its own price.
   Housing it would either bill a never-cast payload into the thread rate (bolt
   threads: a 26⚡ trap) or underprice a train's repeated casts (free lunch).
@@ -512,6 +515,49 @@ or resting. ZERO GLSL edits — no world geometry, TWIN RULE not triggered.
 - **Fields consumed:** `it._armT` (heldUse arm + updateWorldItems tick + stow
   gate), `w._beepT` (beep cadence 0.55s → 0.2s under 1.6s). No SAVE_VER bump.
 
+## Balance ledger (v22 P-beamA: pressure corridor + thread heat law)
+
+Two items, both inside `runContinuousBeams`. ZERO GLSL edits — every visual
+rides the existing tracer width tiers; no world geometry, TWIN RULE not
+triggered. No new pend fields, no save impact.
+
+- **A1 — BEAM+WAVE pressure corridor** (owner: "Beam+wave, should make a
+  short wide continuous beam"): the 0.55s wave TRAIN is REPLACED by a short
+  wide corridor thread — range clamped 10m, half-width CW ±1.5m, TWIN POOLS
+  width to ±2.1 (boom-rMul precedent; K stays 1, the 12⚡ buys wide, never
+  strands). Every live non-dormant foe in the corridor pays
+  `(16+pend.dmg)·0.55·dt` per tick (8.8 dps/foe base, 14.3 with HURT+; no
+  headshots — pressure has no point) and is pressed `dir·24·dt` (≈ one old
+  wave-shove per 0.3s of contact). NO stagger BY RULE: 11.9⚡/s is
+  regen-positive (< 16) and a stagger-locking corridor at surplus ⚡ is free
+  crowd god-mode — the press is the paid verb. The corridor washes THROUGH
+  (flesh never clamps t, only the world does). Price: WAVE+BEAM 11.9⚡/s;
+  +TWIN 18.5⚡/s (deficit 2.5/s). Draw: standard k=0 axis thread + ONE
+  one-frame perp bar at the end (col sum 1.45 → fat 0.035 tier, the WIDE
+  read) — strictly cheaper than the old 4-5-wall train.
+- **DECLARED INTERIM (designer risk 1):** the train's emitted walls used to
+  carry `relayNext` per copy — between P-beamA and P-beamC, a
+  [CONTACT/FUSE, …, WAVE-under-BEAM, X] chain casts NOTHING (X keeps its
+  cycle seat, fires at its own turn — old exemption). Accepted; C2 restores
+  payload casting better-defined (housed + drummed).
+- **A5 — THREAD HEAT LAW** (owner: "Beam should do burn damage equal to
+  hurt"): every per-tick LINE hurt doses equal burn through `applyStatus`
+  (resists apply) — bolt/saw thread ticks and the A1 corridor now; B1 arc /
+  B2 shard ticks when P-beamB lands. NOT spark/boom tip pulses — discrete
+  blasts keep dosing `pend.burn` via `explode`, unchanged. Numbers: bolt
+  thread 13.2 hurt/s → 13.2 burn-dose/s → the 30-cap pool fills in ~2.3s →
+  ≤30 banked afterburn at 2 hp/s (~15s cook, free hurtFlash telegraph); saw
+  4.4/s → pool in ~6.8s; HURT+ adds 5.5/s; bare-head ticks double (dose =
+  hurt by law); helm/plates `resist('burn')` shave the dose. Old per-tick
+  full-pend dosing dies with it (bolt/saw pend.burn is 0 today — nothing
+  lost). Player-side exposure: none — zealots never run threads. Price: no ⚡
+  change — the 30-pool + 2hp/s drain self-limit; this is the beam identity.
+  **WATCHED:** bolt-thread TTK in playtest; declared knob = dose ×0.5 in the
+  synthetic pr, one line.
+- **Fields consumed:** none added — the corridor and the heat law reuse
+  `pend.twin/dmg/bleed` and the existing strand state; wave no longer reads
+  `st.acc[k]` (branch replaced; acc stays consumed by spark/boom/pick/orb).
+
 ## Zealot availability
 
 `MOD_KEYS` += `waveCore`, `chaoticMod`, `boomerangMod`, `homingMod` (enemy
@@ -586,5 +632,5 @@ boom there either).
   SEEKER's 7⚡ through the beam rate: SEEKER+BEAM+BOLT = **10.25⚡/s** (bolt
   thread alone: 6.4). CHAOS still outranks it on a shared thread (chain
   lightning, 40°). Twin strands bend to the SAME mark by design — readable
-  over lethal. Grip/pick threads never bend; wave/orb trains already seek as
-  projectiles.
+  over lethal. Grip/pick threads never bend; orb trains already seek as
+  projectiles (the wave corridor never seeks — v22 P-beamA).
