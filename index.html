@@ -7246,11 +7246,11 @@ function frame(){
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
       if(pressed('cycleL')) cycleHolster(-1);   // d-pad ◀ — draw the previous holstered tool
       if(pressed('cycleR')) cycleHolster(1);    // d-pad ▶ / [T] — draw the next
-    }else _endBeams();   // bag/tool/crate don't pause the world — rummaging drops the rope, the beam-held item, and the lanes' drain state; the old `beamActive` gate was a flag nothing ever raised (free infinite skyhook)
+    }else _endBeams();   // bag/tool/crate don't pause the world — rummaging drops the rope, the beam-held item, and the lanes' drain state (the old gate here tested a flag nothing ever raised: a free infinite skyhook)
     updateHeldPhysics(dt);
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
     if(fireCooldown>0) fireCooldown-=dt;
-    if(activeTool) regenBatteries(activeTool,dt);   // regen always ran — the old !beamActive guard tested a flag nothing raised; thread drain in runContinuousBeams is priced against this
+    if(activeTool) regenBatteries(activeTool,dt);   // regen always ran (the old guard tested a flag nothing raised); thread drain in runContinuousBeams is priced against this
     if(activeTool&&activeTool._res&&activeTool._res.beltFeed) tickBeltFeed(dt);
 
     updateProjectiles(dt);
