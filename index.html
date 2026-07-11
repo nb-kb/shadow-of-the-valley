@@ -2968,7 +2968,7 @@ const ITEM_DEFS={
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it OFF the face it stuck to · +4⚡'),
   contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core casts the core ABOVE it from its LAST touch — RICOCHET banks first, flesh triggers any time; the cast leaves along the struck face. Nothing above: plain impact. FUSE outranks it on the same core · +5⚡'),
   slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{fuseAdd:1.5,surcharge:3},'Next core waits +1.5s more on the fuse · +3⚡'),
-  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
+  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact — under CONTACT the shards carry the payload to where THEY land (each extra delivery draws a third of the chain) · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core hunts the nearest warm thing ahead of it — hard turns, honest ones. Cover still works · +7⚡'),
   refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +1⚡, never waived'),
@@ -4885,6 +4885,9 @@ function splinterBurst(pr){
       dmg:Math.max(2,Math.round(pr.dmg*0.45)),
       bounces:pr.bounces, pierce:pr.pierce, grav:6,
       fuse:0, split:0, stuck:false,                      // fragments never re-split
+      contact:!!(pr.contact&&pr.relay), relay:pr.relay||null,
+      rdir:pr.rdir?pr.rdir.clone():null, rbase:pr.rbase||null, src:pr.src||null,
+      _relayPaid:true, chaos:0,                          // parent's terminal was the free cast — every shard delivery draws its third
       burn:Math.round((pr.burn||0)*0.45), bleed:!!pr.bleed,
       col:pr.col, silent:pr.silent,
     });
