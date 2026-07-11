@@ -4571,7 +4571,7 @@ function runContinuousBeams(dt){
                   if(en.helm){ en._helmT=(en._helmT||0)+dt; if(en._helmT>=0.4){ en._helmT-=0.4; crackHelm(en); } }
                   else bdmg*=2;
                 }
-                en.hurt(bdmg,'player',hh?'head':undefined); applyStatus(en,{burn:bdmg,bleed:sh.pend.bleed});   // A5: arc line ticks COOK too
+                en.hurt(bdmg,'player',hh?'head':undefined); applyStatus(en,{burn:bdmg,bleed:threadCut(en,sh.pend.bleed,dt)});   // A5: arc line ticks COOK too; bleed banks on the cut cadence
               }
             }
           }
@@ -4606,7 +4606,7 @@ function runContinuousBeams(dt){
           if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
           else bdmg*=2;
         }
-        hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,{burn:bdmg,bleed:sh.pend.bleed});   // THREAD HEAT LAW (A5): line ticks COOK — burn dose = tick hurt (pool 30, resists apply); bleed rides through
+        hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,{burn:bdmg,bleed:threadCut(hitEn,sh.pend.bleed,dt)});   // THREAD HEAT LAW (A5): line ticks COOK — burn dose = tick hurt (pool 30, resists apply); bleed banks on the cut cadence
       }
       if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
       if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
@@ -4636,8 +4636,12 @@ function runContinuousBeams(dt){
       }
       if(sh.kind==='wave'){
         // PRESSURE CORRIDOR (v22 A1) — the train is gone: the thread IS the wall.
-        // Every live foe in the corridor (0.3..t along the ray, within CW of it)
-        // pays per tick and is pressed back (≈ one wave-shove per 0.3s of contact).
+        // Every live foe in the corridor (0.3..t along the ray, within CW of it,
+        // LOS-checked from the ray foot — the world blocks the wash sideways)
+        // pays per tick and is pressed back: a steady 2.2 m/s displacement in
+        // the zealot's own move step — patrol (1.4) loses ground, a 2.6 charger
+        // still crawls through. Slower than every walk speed's ceiling = held,
+        // never locked.
         // TWIN pools WIDTH (boom-rMul precedent): CW 1.5→2.1, K stays 1 — the 12⚡
         // buys wide, never strands. NO stagger BY RULE: the rate is regen-positive
         // (11.9 < 16) and a stagger-locking corridor at surplus ⚡ is free crowd
@@ -4651,9 +4655,10 @@ function runContinuousBeams(dt){
           if(tt>0.3&&tt<t){
             const d=Math.hypot(en.position.x-(o.x+dir.x*tt),(en.position.y+0.95)-(o.y+dir.y*tt),en.position.z-(o.z+dir.z*tt));
             if(d<CW){
+              if(!losClearJS(o.x+dir.x*tt,o.y+dir.y*tt,o.z+dir.z*tt,en.position.x,en.position.y+0.95,en.position.z)) continue;   // washes through FLESH, never sideways through WORLD — only the center ray was marched, and ruin walls are 0.3m thin
               en.hurt(wdmg,'player');
-              applyStatus(en,{burn:wdmg,bleed:sh.pend.bleed});
-              en.velocity.addScaledVector(dir,24*dt);
+              applyStatus(en,{burn:wdmg,bleed:threadCut(en,sh.pend.bleed,dt)});
+              en._prX=dir.x; en._prZ=dir.z;              // the press lands in the zealot's own move step, AFTER pathing writes velocity — a chaser used to stomp this shove flat
             }
           }
         }
@@ -4717,7 +4722,7 @@ function runContinuousBeams(dt){
       if(dmgKind&&sh.pend.split>0){
         const wHit=arc?!!loopClip:t<(sh.kind==='saw'?3.99:49.9);
         if(wHit||(!arc&&hitEn)){
-          const room=flashHeadroom()-(K-1-k);
+          const room=flashHeadroom()-(arc?4:1)*(K-1-k);   // reserve what a remaining strand actually draws: arc loops FLASH 4 segs each — a 1-slot reserve let strand-0 shards eat the projectile-tracer floor
           const nSh=Math.max(0,Math.min(3,Math.round(sh.pend.split),room));
           if(nSh>0){
             const sO=new Vec3(), sB=new Vec3();       // shard origin · base dir
@@ -4756,7 +4761,7 @@ function runContinuousBeams(dt){
                   if(sEn.helm){ sEn._helmT=(sEn._helmT||0)+dt; if(sEn._helmT>=0.4){ sEn._helmT-=0.4; crackHelm(sEn); } }
                   else sd*=2;
                 }
-                sEn.hurt(sd,'player',sHead?'head':undefined); applyStatus(sEn,{burn:sd,bleed:sh.pend.bleed});   // A5: shard ticks COOK too
+                sEn.hurt(sd,'player',sHead?'head':undefined); applyStatus(sEn,{burn:sd,bleed:threadCut(sEn,sh.pend.bleed,dt)});   // A5: shard ticks COOK too; bleed banks on the cut cadence
               }
               beamSegs.push({a:sO,b:new Vec3(sO.x+ds.x*ts,sO.y+ds.y*ts,sO.z+ds.z*ts),col:scol,ttl:dt+0.001,flash:lastT});
             }
@@ -5237,6 +5242,12 @@ function explode(pr){
     if(d<R){ const f=new Vec3().subVectors(w.pos,pr.pos).normalize(); w.vel.addScaledVector(f,(1-d/R)*14); w.vel.y+=3; }
   }
 }
+// THREAD CUT CADENCE — a cut is a WOUND, not a frame: continuous-thread ticks
+// (bolt/saw line, arc bites, wave corridor, shards) bank one bleed stack per
+// 0.5s of contact per target; the first touch cuts at once. Projectile hits
+// keep 1 cut per landed shot; DRILL's 0.1s in-body ticks keep their declared
+// ledger. Without this a SERRATED thread kiss stacked to cap 5 in ~83ms.
+function threadCut(en,on,dt){ if(!on) return false; en._cutT=(en._cutT===undefined?0.5:en._cutT)+dt; if(en._cutT<0.5) return false; en._cutT-=0.5; return true; }
 // ---- statuses: burn POOLS (capped) · bleed STACKS (cap 5), 15s from the freshest cut ----
 function effMaxHP(){ return playerPos.maxHealth-playerPos.burnedMax; }   // burned health stays burned until treated
 function applyStatus(t,pr){
@@ -5534,6 +5545,7 @@ class Zealot{
       this.yaw+=clamp(d,-3*dt,3*dt);
     }
     this.position.addScaledVector(this.velocity,dt);
+    if(this._prX||this._prZ){ this.position.x+=this._prX*2.2*dt; this.position.z+=this._prZ*2.2*dt; this._prX=0; this._prZ=0; }   // WAVE press (paid verb): applied AFTER pathing wrote velocity, so chasers feel it too — no stagger, settle() keeps it out of walls
     this.settle(dt);
     if(this.reloadT>0){ this.reloadT-=dt; if(this.reloadT<=0){ const m=toolMagazine(this.tool);
       if(m){ const take=Math.min(this.reserve,m.maxCapacity); m.loaded=take; this.reserve-=take; } } }
