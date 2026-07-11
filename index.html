@@ -4879,7 +4879,8 @@ function explode(pr){
     if(d<R){ en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner); applyStatus(en,pr); }
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)); applyStatus(playerPos,pr); }
+  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); applyStatus(playerPos,pr);   // same flesh math the enemies eat — armor shaves it after
+    playerPos.viewKick=Math.min(1,playerPos.viewKick+0.7); cameraPitch-=0.02*(1-pd/R); }   // the blast kicks — self-splash must READ
   for(const w of worldItems){
     const d=w.pos.distanceTo(pr.pos);
     if(d<R){ const f=new Vec3().subVectors(w.pos,pr.pos).normalize(); w.vel.addScaledVector(f,(1-d/R)*14); w.vel.y+=3; }
