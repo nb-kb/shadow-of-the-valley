@@ -1999,7 +1999,7 @@ function marchWorldJS(ox,oy,oz,dx,dy,dz,maxDist){
 const playerPos={
   x:2.5,y:0,z:2.5, velY:0, onGround:true, coyoteT:0, jumpBufT:0,
   health:100,maxHealth:100,
-  status:{burn:0,bleedT:0}, burnedMax:0,     // BURN pools · BLEED runs a clock · fire scars the ceiling
+  status:{burn:0,bleedT:0,bleedN:0}, burnedMax:0,     // BURN pools · BLEED stacks cuts on a clock · fire scars the ceiling
   eyeHeight:1.32, baseHeight:1.32,          // a child's eye line
   isAiming:false,isSprinting:false,isCrouching:false,
   lean:0,currentLean:0,currentFov:1.0,
@@ -2943,7 +2943,7 @@ const ITEM_DEFS={
   heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6,surcharge:5},'Next core arcs and lands harder · +5⚡'),
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
-  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core opens a wound · 1 hurt / 1.5s for 30s · +5⚡'),
+  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core opens a wound — wounds STACK: 1 hp/s each for 15s, five cuts max · +5⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
   gummies:    ()=>{ const it=new Item('Gummies',1,1,'#a04a5e'); it.gummies=true; return it; },
@@ -4038,7 +4038,7 @@ function heldUse(it){
     consumeHeld(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.bandAid){
-    playerPos.status.bleedT=0;
+    playerPos.status.bleedT=0; playerPos.status.bleedN=0;
     toast('PRESSURE HELD');
     consumeHeld(); playSound('reload'); refreshInvUI(); return;
   }
@@ -4885,13 +4885,15 @@ function explode(pr){
     if(d<R){ const f=new Vec3().subVectors(w.pos,pr.pos).normalize(); w.vel.addScaledVector(f,(1-d/R)*14); w.vel.y+=3; }
   }
 }
-// ---- statuses: burn POOLS (capped), bleed REFRESHES (never stacks) ----
+// ---- statuses: burn POOLS (capped) · bleed STACKS (cap 5), 15s from the freshest cut ----
 function effMaxHP(){ return playerPos.maxHealth-playerPos.burnedMax; }   // burned health stays burned until treated
 function applyStatus(t,pr){
   if(!t.status) return;
   const pl=t===playerPos;                              // worn resists shave the dose — both sides
   if(pr.burn)  t.status.burn=Math.min(30, t.status.burn+pr.burn*(pl?playerResist('burn'):t.resist?t.resist('burn'):1));
-  if(pr.bleed) t.status.bleedT=Math.max(t.status.bleedT, 30*(pl?playerResist('bleed'):t.resist?t.resist('bleed'):1));
+  if(pr.bleed){ const r=(pl?playerResist('bleed'):t.resist?t.resist('bleed'):1);
+    t.status.bleedN=Math.min(5,(t.status.bleedN||0)+1);
+    t.status.bleedT=Math.max(t.status.bleedT, 15*r); }   // 15s from the freshest cut; resists shave the clock
 }
 // ---- a worn piece absorbs a point per hit; at 0 it breaks off the rig for good
 function armorWear(slot){
@@ -4970,7 +4972,7 @@ class Zealot{
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
-    this.status={burn:0,bleedT:0};
+    this.status={burn:0,bleedT:0,bleedN:0};
     this.muzzle=0; this.hurtFlash=0;
     this.targetPoint=this.newPatrolTarget();
     this.buildTool();
@@ -5089,7 +5091,7 @@ class Zealot{
       this.status.burn-=b; this.health-=b;
       this.hurtFlash=Math.max(this.hurtFlash,0.35);  // the body shows the fire — free telegraph
     }
-    if(this.status.bleedT>0){ this.status.bleedT-=dt; this.health-=dt/1.5; }
+    if(this.status.bleedT>0){ this.status.bleedT-=dt; this.health-=dt*(this.status.bleedN||1); if(this.status.bleedT<=0) this.status.bleedN=0; }   // 1 hp/s per stack · 15s
     if(this.health<=0){ this.die(); return; }
     if(this.stagger>0){ this.stagger-=dt; this.position.addScaledVector(this.velocity,dt*0.4); this.settle(dt); return; }
 
@@ -5229,7 +5231,7 @@ class Zealot{
     this.startPos=this.position.clone();
     this.health=34; this.detection=0; this.state=0; this.investigate=null;
     this._helmT=0;
-    this.status.burn=0; this.status.bleedT=0;
+    this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
     this.buildTool();
     this.rollGear();
   }
@@ -5310,7 +5312,7 @@ function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
-  playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
+  playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
   for(const k of EQUIP_SLOTS) equip[k]=null;   // you start with NOTHING on the body — the stash holds the kit
   activeTool=null; holsterCur=-1;
   syncBagAlias(); clampZone();
@@ -5337,7 +5339,7 @@ function onDeath(){
     if(!activeLevel) depth=1;                // the ring count died with the run — the next OPEN VALLEY starts at I
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
-    playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
+    playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
     showBanner('THE VALLEY KEPT EVERYTHING');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
@@ -5388,7 +5390,7 @@ function deployTo(levelId){
     seedLevelSpawns(L);
     if(L.lights) for(const li of L.lights)
       dynLights.push({pos:{x:li.x,y:li.y,z:li.z},col:li.col,intensity:li.intensity,ttl:Infinity});
-    if(levelId==='hideout'){ playerPos.status.burn=0; playerPos.status.bleedT=0; }  // home stanches open wounds — the burn scar still wants aloe
+    if(levelId==='hideout'){ playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; }  // home stanches open wounds — the burn scar still wants aloe
     gameState = levelId==='hideout' ? 'hideout' : 'play';
   }else{
     activeLevel=null; levelBake=null;
@@ -6633,10 +6635,10 @@ function updatePlayer(dt){
       st.burn-=b; dot+=b;
       playerPos.burnedMax=Math.min(playerPos.maxHealth-10, playerPos.burnedMax+b);
     }
-    if(st.bleedT>0){ st.bleedT=Math.max(0,st.bleedT-dt); dot+=dt/1.5; }   // 1 hurt / 1.5s · 30s
+    if(st.bleedT>0){ st.bleedT=Math.max(0,st.bleedT-dt); dot+=dt*(st.bleedN||1); if(st.bleedT<=0) st.bleedN=0; }   // 1 hp/s per stack · 15s
     if(dot>0){
       playerPos.health=Math.max(0, Math.min(playerPos.health,effMaxHP())-dot);
-      if(playerPos.health<=0){ st.burn=0; st.bleedT=0; onDeath(); }
+      if(playerPos.health<=0){ st.burn=0; st.bleedT=0; st.bleedN=0; onDeath(); }
     }
   }
 }
