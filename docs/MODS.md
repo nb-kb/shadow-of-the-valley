@@ -485,8 +485,10 @@ serialized shape changed; `status.bleedN` is runtime-only).
 - **B2 BLEED** — one cut = 15 dmg potential (was 20 over 30s at 0.67 hp/s);
   three quick cuts = 3 hp/s; cap 5 governs every multi-hit source (TWIN,
   SPLINTER frags, burst-laser 1 stack/pulse — each dose paid for). Same rate
-  both sides per owner; enemy SERRATED rolls (`MOD_KEYS`) now stack against the
-  player too. HUD `bleedTick` unchanged (keys off `bleedT>0`).
+  both sides per owner — the machinery is symmetric (`applyStatus` + both DoT
+  ticks), but `serrated` sits in no zealot roll (`MOD_KEYS` nor the barrel
+  slot list), so no enemy source exists today; adding it is the one-word knob.
+  HUD `bleedTick` unchanged (keys off `bleedT>0`).
 - **B4 self-splash root cause** — the player-splash path always existed (since
   BOOM landed, git 4785f40); the FELT bug was the missing ×1.6 flesh multiplier
   (enemies got it, the shooter didn't) buried under plates(0.6–0.75) ×

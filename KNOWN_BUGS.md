@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-10 (build v22l).
+Last reviewed: 2026-07-10 (build v22m).
 
 ## Open
 
@@ -46,9 +46,34 @@ Last reviewed: 2026-07-10 (build v22l).
 - **ORB tracer-slot hoarding** — a live orb holds a tracer slot for its full 6s
   aloft (cap 4 orbs). Capped, flagged "monitor" in MODS.md; revisit if tracers
   starve during orb play.
+- **v22m WATCHED knobs** (consciously deferred, all single-line fallbacks —
+  details in docs/MODS.md ledgers): enemy CHAOS heavy hand (+45%/stack rides
+  `MOD_KEYS` rolls; knob: halve `chaosMul` for non-player) · bolt-thread TTK
+  under the A5 burn=hurt law (knob: dose ×0.5) · boom-drum burn saturating the
+  30-pool in ~3s (⚡ deficit prices it) · enemy TIMER airbursts + DRILL
+  pass-through + relay extras = collective difficulty bump (knobs: drop
+  `slowFuse`/`pierce` from `MOD_KEYS`) · RETURN-arc TTK vs crowds behind low
+  cover (knob: W 2.5→2.0 or reach 14→11) · WAVE contact-drum tracer load
+  (knob: cadence 0.5→0.7s) · REFUND at 1⚡ collapses the lead economy where it
+  drops (knob: surcharge 2–3, never a mechanic change).
+- **Manual browser pass owed** (no browser in the loop this wave): burstCam+
+  POWDER+BEAM mint gate (mag −3/pull), hitscan pulse feel/converge, drum beats
+  landing at the dot, thread-degradation draw order (damage-follows-draw — no
+  invisible damage), grapple swing feel, whip takedown reads.
+- **Dead-code orphan** (pre-existing, harmless): `showTooltip_DEAD` calls
+  undefined `positionTooltip()` — the function is never invoked. Delete both
+  on the next tooltip pass.
 
 ## Recently fixed
 
+- **v22m** — BOOM proximity self-damage was a paper tiger: the player-splash
+  path always existed (since BOOM landed), but the shooter was missing the
+  ×1.6 flesh multiplier enemies ate, and armor (plates 0.6–0.75 × helmet
+  0.88–0.94) buried the rest — point-blank blasts read as free. Fixed by
+  symmetry: `explode()` now runs the same `dmg·falloff·1.6` math both sides
+  (armor shaves AFTER), plus a view kick + pitch dip so the hit READS, and the
+  blast sears both sides (`burn = own + round(0.35·dmg-at-range)`). Bare-muzzle
+  BOOM: unarmored ~30 + ~9 burn — survivable, stupid, felt.
 - **v22l** — Endless-valley crates were **decorative**: only the 6 authored
   origin crates were registered as lootable — the hash-scattered cell crates
   existed solely in the GLSL/JS SDF twins, with no registry entry to loot. A
