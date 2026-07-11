@@ -372,7 +372,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22o';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22p';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -401,6 +401,7 @@ const PARAMS = {
   nightFloor:  {v:0.012,min:0.002,max:0.06,step:0.002,label:'night ambient'},
 };
 const P = k => PARAMS[k].v;
+const PARAM_DEFAULTS={}; for(const k in PARAMS) PARAM_DEFAULTS[k]=PARAMS[k].v;   // boot literals — NEW GAME and slots without a value land here
 
 const FLAGS = { god:false, noclip:false, seeAll:false };
 
@@ -5839,6 +5840,7 @@ function startRun(){
   playerPos.health=playerPos.maxHealth;
   playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
   clearHudFx();                                // a fresh run starts with a clean visor
+  applyDebugTuning(null,null);                 // debug knobs are per-save now — a fresh run starts stock
   for(const k of EQUIP_SLOTS) equip[k]=null;   // you start with NOTHING on the body — the stash holds the kit
   activeTool=null; holsterCur=-1;
   syncBagAlias(); clampZone();
@@ -6169,7 +6171,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash. v2 blobs load as an empty stash.
+const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash; + params/flags (additive — absent reads as defaults). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
@@ -6233,8 +6235,10 @@ function saveGame(slot){
     const ch=stashInv[r][c];
     if(ch&&!seen.has(ch)&&ch.x===c&&ch.y===r){ seen.add(ch); stash.push(itemToJSON(ch)); }
   }
+  const params={}; for(const k in PARAMS) params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
-              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash};
+              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash,
+              params, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll}};
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
   const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
@@ -6254,6 +6258,17 @@ function saveMeta(slot){
     return {stamp:b.stamp, items:n};
   }catch(e){ return null; }
 }
+// debug tuning rides the slots additively: known keys only, clamped to their
+// rails; anything missing or foreign reads as the boot default — corruption
+// still means "empty", never a crash. NEW GAME walks this with no blob at all.
+function applyDebugTuning(bp,bf){
+  for(const k in PARAMS) PARAMS[k].v=PARAM_DEFAULTS[k];
+  if(bp) for(const k in PARAMS) if(typeof bp[k]==='number'&&isFinite(bp[k]))
+    PARAMS[k].v=clamp(bp[k],PARAMS[k].min,PARAMS[k].max);
+  FLAGS.god=!!(bf&&bf.god); FLAGS.noclip=!!(bf&&bf.noclip); FLAGS.seeAll=!!(bf&&bf.seeAll);
+  resize();                                               // renderScale may have moved with the rest
+  syncDebugPanel();                                       // the once-built knobs go stale otherwise
+}
 function loadGame(slot){
   const ls=_ls(); const meta=saveMeta(slot);
   if(!ls||!meta){ toast('EMPTY SLOT'); return; }
@@ -6271,12 +6286,14 @@ function loadGame(slot){
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
       else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
     }
+    applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
   }catch(e){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
     for(const row of stashInv) row.fill(null);
     _retuneOrphans.length=0;
     syncBagAlias(); clampZone();
+    applyDebugTuning(null,null);                          // a corrupt slot is an empty one — stock knobs
     toast('SLOT '+(slot+1)+' CORRUPT — READ AS EMPTY'); playSound('empty');
     refreshInvUI();
     return;
@@ -7050,6 +7067,12 @@ function buildDebugPanel(){
     DBG_PARAMS.push({k,row,inp,val});
   }
   dbgPaint();
+}
+function syncDebugPanel(){                     // knobs follow PARAMS/FLAGS — loads and NEW GAME re-aim them
+  document.getElementById('dbgGod').checked=FLAGS.god;
+  document.getElementById('dbgNoclip').checked=FLAGS.noclip;
+  document.getElementById('dbgSeeAll').checked=FLAGS.seeAll;
+  for(const u of DBG_PARAMS){ const p=PARAMS[u.k]; u.inp.value=p.v; u.val.textContent=dbgFmt(p); }   // empty until first open — later builds read live PARAMS anyway
 }
 let dbgWatchT=0;
 function updateDebugWatch(dt){
