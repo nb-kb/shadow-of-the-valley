@@ -1704,7 +1704,7 @@ void main(){
     }
     if(m>19.5 && m<21.5) col *= mix(0.35, 1.0, smoothstep(0.0, 0.8, uExposure)); // hands darken with the cover you stand in — viewmodel only
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
-    col = mix(col, skyColor(rayDir), fogAmt);            // aerial perspective, one truth
+    col = mix(col, uSkyLo, fogAmt);                      // opaque distance haze: horizon tint, NOT skyColor (no sun/stars/clouds bleed through geometry)
   }else{
     col = skyColor(rayDir);   // a true miss is sky; the ground march owns the land
   }
