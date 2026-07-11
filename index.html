@@ -3814,12 +3814,17 @@ function updateInteract(dt){
     setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow'+stowing,true);
   }else if(hover.idx>=0 && worldItems[hover.idx]){
     const it=worldItems[hover.idx].item;
-    setPrompt(prompt,'<b>E</b> grab '+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
+    setPrompt(prompt,'<b>E</b> '+(!activeTool&&it instanceof Tool?'take up ':'grab ')+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
   }else setPrompt(prompt,'',false);
 
   if(pressed('interact')){
     if(heldWorld){ releaseHeld(false); }
-    else if(hover.idx>=0 && worldItems[hover.idx]){ grabWorld(hover.idx, clamp(hover.t,1.2,2.6), 'hands'); sipFromHeld(); }
+    else if(hover.idx>=0 && worldItems[hover.idx]){
+      // empty hands + a TOOL on the ground: E takes it straight to the wield — no
+      // pin-hold detour. With a wield already up, the grab stays a grab, as ever.
+      if(!activeTool && worldItems[hover.idx].item instanceof Tool) wieldFromWorld(hover.idx);
+      else { grabWorld(hover.idx, clamp(hover.t,1.2,2.6), 'hands'); sipFromHeld(); }
+    }
     else tryReload();
   }
 }
@@ -3890,6 +3895,16 @@ function stowHeldTool(){
   if(autoPlace(t,bagGrid,BAG_COLS,BAG_ROWS)){ toast('STOWED · RUCKSACK'); playSound('place'); refreshInvUI(); return; }
   dropItemToWorld(t,0.4,0.6);                        // no pocket would take it — it rests at the feet
   toast('NO ROOM — DROPPED'); playSound('drop'); refreshInvUI();
+}
+// EMPTY HANDS + a ground TOOL: [E] wields it on the spot instead of the pin-hold
+// carry. One object one home: out of the WORLD list, then the single wield write.
+function wieldFromWorld(idx){
+  const t=worldItems[idx].item;
+  worldItems.splice(idx,1);
+  _endBeams(); reloadTimer=0;                        // wieldTool's teardown idiom
+  meleeT=0; meleeHit=false;                          // the whip stands down — the hand is full now
+  activeTool=t;
+  playSound('pickup'); refreshInvUI(); updateToolReadout();
 }
 // pin + hinge: a spring pins the grabbed point to the crosshair ray;
 // its off-centre pull becomes torque, so the item swings on the hinge
