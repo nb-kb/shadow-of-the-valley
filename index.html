@@ -3599,7 +3599,7 @@ function wieldTool(tool,src){
   reloadTimer=0;                                     // the half-fed reload dies with the swap
   const old=activeTool;
   activeTool=tool;
-  if(src&&src.id==='holster') holsterCur=sy*src.cols+sx;   // d-pad cycling resumes from the drawn slot
+  if(src&&src.id==='holster'){ holsterCur=sy*src.cols+sx; holsterDir=0; }   // d-pad cycling resumes from the drawn slot, direction unset
   if(old){
     const back=src&&src.grid&&!src.external;         // never stow into a take-only crate
     if(back&&src.slotMode&&!src.grid[sy][sx]){ src.grid[sy][sx]=old; old.x=sx; old.y=sy; }
@@ -3612,13 +3612,19 @@ function wieldTool(tool,src){
 // without opening a menu. The outgoing wield drops into the slot the incoming
 // tool came from; empty and non-tool slots are skipped; the walk wraps. An empty
 // holster answers with a soft click, nothing more.
-let holsterCur=-1;              // slot the current wield was drawn from — session-only
+let holsterCur=-1, holsterDir=0;   // slot the current wield was drawn from + the walk's last direction — session-only
 function cycleHolster(dir){
   const h=equip.holster, inv=h?h.inv:null;
   if(inv){
     const cols=h.invCols, n=cols*h.invRows;
     const start=holsterCur>=0?holsterCur:(dir>0?-1:n);   // fresh hands enter from the near edge
-    for(let s=1;s<=n;s++){
+    // TURNABOUT — the swap parks the LAST wield in holsterCur itself, and the scan
+    // used to start one step PAST it, so reversing never took that tool back; on a
+    // 2-slot rack +1 and -1 land on the SAME slot mod 2 and both buttons walked one
+    // loop. A direction change starts the scan ON holsterCur: ◀ after ▶ is a true
+    // "previous", on racks of any size.
+    const s0=(holsterCur>=0&&holsterDir&&dir!==holsterDir)?0:1;
+    for(let s=s0;s<=n;s++){
       const i=(((start+dir*s)%n)+n)%n, r=(i/cols)|0, c=i%cols;
       const inc=inv[r][c];
       if(!(inc instanceof Tool)) continue;
@@ -3627,7 +3633,7 @@ function cycleHolster(dir){
       inv[r][c]=activeTool||null;        // the wield takes the incoming tool's slot
       if(activeTool){ activeTool.x=c; activeTool.y=r; }
       activeTool=inc;
-      holsterCur=i;
+      holsterCur=i; holsterDir=dir;
       playSound('pickup'); refreshInvUI(); return;
     }
   }
