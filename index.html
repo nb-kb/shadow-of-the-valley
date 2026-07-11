@@ -7176,7 +7176,7 @@ let stepAcc=0;
 let heldUseArm=null;           // △ tap-vs-hold: {t,subj} while the button rides a carried item OR the wielded gun
 let sprintIdleT=0;             // a stopped run lets the sprint toggle go after a beat
 const SLIDE_DUR=0.9;           // SLIDE — crouch pressed at sprint speed rides the run's momentum out
-let slideT=0, slideV0=0, slideDX=0, slideDZ=1, slideStand=false, slideVcur=0;   // slideVcur = the slide's live speed this frame — a mid-slide jump launches at exactly it
+let slideT=0, slideV0=0, slideDX=0, slideDZ=1, slideStand=false, slideVcur=0, slideHopSpd=0;   // slideVcur = live (decaying) slide speed; slideHopSpd = the launch floor a slide-hop holds through its whole airborne arc
 const _c1=new Vec3(), _c2=new Vec3();
 
 function updatePlayer(dt){
@@ -7259,6 +7259,7 @@ function updatePlayer(dt){
       playerPos.velX+=(rx*mx+fx*mz)*8*dt; playerPos.velZ+=(rz*mx+fz*mz)*8*dt;
       const _hs=Math.hypot(playerPos.velX,playerPos.velZ);
       if(_hs>16){ playerPos.velX*=16/_hs; playerPos.velZ*=16/_hs; }
+      else if(slideHopSpd>0&&_hs<slideHopSpd&&_hs>1e-4){ const s=slideHopSpd/_hs; playerPos.velX*=s; playerPos.velZ*=s; }   // no bleed below the launch — air-control steers, it never stalls the fling
       stepX=playerPos.velX*dt; stepZ=playerPos.velZ*dt;
     }else{
       stepX=(rx*mx+fx*mz)*speed*dt; stepZ=(rz*mx+fz*mz)*speed*dt;
@@ -7352,7 +7353,7 @@ function updatePlayer(dt){
       if(sy>playerPos.y-0.38){                 // a step down, not a cliff
         playerPos.y=sy;                        // exact: the ground is the ground
         playerPos.onGround=true; playerPos.velY=0;
-        if(playerPos.launched){ playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; }   // slide-hop momentum spends on landing
+        if(playerPos.launched){ playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0; }   // slide-hop momentum spends on landing
       }else playerPos.onGround=false;
     }
     else playerPos.onGround=false;
@@ -7367,8 +7368,9 @@ function updatePlayer(dt){
     playerPos.jumpBufT = Math.max(0,playerPos.jumpBufT-dt);
     if(pressed('jump')&&!menus) playerPos.jumpBufT=0.12;
     if(playerPos.jumpBufT>0&&playerPos.coyoteT>0&&(!playerPos.isCrouching||slideT>0)&&!menus){
-      if(slideT>0){   // SLIDE-HOP: carry the slide's live horizontal velocity into the jump instead of zeroing momentum
-        playerPos.velX=slideDX*slideVcur; playerPos.velZ=slideDZ*slideVcur; playerPos.launched=true;
+      if(slideT>0){   // SLIDE-HOP: fling at the CAPTURED run momentum (slideV0), NOT the bled-down slideVcur — a late hop must leap as hard as an early one (the prior fix launched at the decayed speed, so a real-timing jump felt like a plain hop)
+        slideHopSpd=Math.max(slideV0,slideVcur);   // slideV0>=slideVcur always: the run's full, undecayed speed
+        playerPos.velX=slideDX*slideHopSpd; playerPos.velZ=slideDZ*slideHopSpd; playerPos.launched=true;
         slideT=0; slideStand=false; playerPos.isCrouching=false;   // the stance ends — standing, airborne — but the momentum carries
       }
       playerPos.velY=P('jumpVel'); playerPos.onGround=false;
