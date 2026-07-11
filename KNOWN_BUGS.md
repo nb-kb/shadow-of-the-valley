@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-11 (build v22s).
+Last reviewed: 2026-07-11 (build beta 1.0.1).
 
 ## Open
 
@@ -63,6 +63,16 @@ Last reviewed: 2026-07-11 (build v22s).
 - **Dead-code orphan** (pre-existing, harmless): `showTooltip_DEAD` calls
   undefined `positionTooltip()` — the function is never invoked. Delete both
   on the next tooltip pass.
+
+## Recently improved
+
+- **beta 1.0.1** — Long first load froze the title card. One ~860-line fragment
+  shader was compiling synchronously on the boot thread, so the intro art sat
+  locked until the driver finished. Now the compile is non-blocking (parallel
+  via `KHR_parallel_shader_compile`, polled off the boot thread) behind an
+  honest, animated loading screen, and a cheap PREVIEW shader renders first so
+  the player can move immediately while the full shader finishes and hot-swaps
+  in behind it. Perceived first-load stall is gone.
 
 ## Recently fixed
 
