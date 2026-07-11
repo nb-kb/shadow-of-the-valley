@@ -194,6 +194,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #debugUI label{display:flex;gap:6px;align-items:center;color:var(--dust);}
 #errBanner{position:absolute;left:0;right:0;bottom:0;z-index:200;background:#3a0d06;color:#ffd9d0;
   font-size:14px;padding:8px 12px;display:none;white-space:pre-wrap;font-family:monospace;}
+#igpuBanner{position:absolute;left:0;right:0;top:0;z-index:205;background:#3a2c06;color:#ffe9b0;
+  font-size:14px;padding:8px 12px;display:none;white-space:pre-wrap;font-family:monospace;cursor:pointer;letter-spacing:.05em;}
 </style>
 </head>
 <body>
@@ -354,6 +356,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </div></div>
 
 <div id="errBanner"></div>
+<div id="igpuBanner"></div>
 <script type="text/plain" id="gameSrc">
 'use strict';
 // ============================================================
@@ -367,7 +370,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22m';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22n';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1720,8 +1723,25 @@ canvas.addEventListener('webglcontextlost', e=>{
   b.style.display='block';
   b.textContent='GPU CONTEXT LOST — the driver reset (usually the frame was too heavy for this GPU). Reload to retry; if it repeats, close other GPU apps or try another browser.';
 });
-const gl = canvas.getContext('webgl2');
+const gl = canvas.getContext('webgl2',{powerPreference:'high-performance'});   // Optimus laptops: ask for the real GPU, not the Intel chip
 if(!gl) fatal('WebGL2 unavailable — this engine needs it.');
+// GPU identity — the hint above is only a hint; name what we actually got.
+const glRenderer=(()=>{ try{
+  const x=gl.getExtension('WEBGL_debug_renderer_info');                        // may be null (Firefox etc.)
+  return String(gl.getParameter(x?x.UNMASKED_RENDERER_WEBGL:gl.RENDERER)||'?');
+}catch(e){ return '?'; } })();
+// integrated-GPU tripwire — conservative on purpose: Intel HD/UHD/Iris only, so a
+// discrete chip never matches. A hit on a gaming laptop = dual-GPU miss. Warn once,
+// never block boot, never touch renderScale.
+if(/intel.*(hd|uhd|iris)/i.test(glRenderer) && !(_ls()&&_ls().getItem('sotv_igpu_ack'))){
+  const b=document.getElementById('igpuBanner');
+  b.textContent='RUNNING ON INTEGRATED GRAPHICS — '+glRenderer+'. If this machine has a gaming GPU: Windows Settings → Display → Graphics → your browser → High performance. — click to dismiss';
+  b.style.display='block';
+  b.addEventListener('mousedown',e=>e.stopPropagation());                      // the ack click must not double as "any key"
+  b.addEventListener('click',e=>{ e.stopPropagation(); b.style.display='none';
+    const ls=_ls(); if(ls) try{ ls.setItem('sotv_igpu_ack','1'); }catch(_){}
+  });
+}
 // slow driver compiles (ANGLE/D3D) can take a while — say so instead of black
 { const b=document.getElementById('errBanner');
   b.style.display='block'; b.style.background='rgba(20,24,18,0.85)';
@@ -6970,6 +6990,7 @@ function updateDebugWatch(dt){
     ['items world', ''+worldItems.length],
     ['projectiles', ''+projectiles.length],
     ['zealots', enemies.filter(e=>e.health>0).length+'/'+enemies.length],
+    ['gpu', glRenderer],
   ];
   document.getElementById('dbgWatch').innerHTML=
     rows.map(r=>'<div class="drow"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>').join('');
