@@ -7025,6 +7025,7 @@ let DBG_KEYS=[], dbgSel=0;
 // the pad cursor walks the WHOLE console: item grid → buttons → sliders → flags.
 // Mouse and keyboard handlers are untouched — the cursor only drives them.
 let dbgZone='grid', dbgBtnSel=0, dbgParSel=0, dbgFlagSel=0, dbgFocusedEl=null;
+let dbgSlewT=0, dbgSlewAcc=0, dbgSlewDir=0;   // hold-to-slew on PARAMS dials (held ◀▶ / analog-X ramp) — session-only, never serialized
 let DBG_BTNS=[], DBG_PARAMS=[], DBG_FLAGS=[];   // buildDebugPanel fills these once
 function dbgSpawnToHand(key){
   if(heldWorld){ toast('HANDS FULL'); playSound('empty'); return; }
@@ -7061,7 +7062,7 @@ function dbgPaint(){
     if(dbgFocusedEl.scrollIntoView) dbgFocusedEl.scrollIntoView({block:'nearest'}); }
   renderDebugItems();
 }
-function dbgNav(){
+function dbgNav(dt){
   if(INPUT.rawPad[1]){ toggleDebug(); return; }              // ○ backs out — Esc stays with frame()
   const nav=navEdges(), take=nav.confirm||INPUT.rawPad[2];   // E · □ — press what the cursor rides
   let moved=false;
@@ -7086,6 +7087,28 @@ function dbgNav(){
     if((nav.left||nav.right)&&u){                            // ◀▶ ride the slider one step,
       nav.left ? u.inp.stepDown() : u.inp.stepUp();          // through the same 'input' path the mouse drags
       u.inp.dispatchEvent(new Event('input')); moved=true;
+    }
+    // HOLD-TO-SLEW — held ◀▶ / d-pad 14·15 / left-stick X ramps the dial continuously.
+    // Tap = one step (edge block above); continuous only past the tap window. No sound/dbgPaint here:
+    // the knob+value update through the native 'input' event, so we skip moved (avoids click-spam + grid rebuild).
+    { const ax=INPUT.padAxes[0]||0;
+      const dRight=INPUT.keys['ArrowRight']||INPUT.padButtons[15];
+      const dLeft =INPUT.keys['ArrowLeft'] ||INPUT.padButtons[14];
+      let sdir=0, smag=1, digital=true;
+      if(dRight&&!dLeft) sdir=1; else if(dLeft&&!dRight) sdir=-1;
+      else if(ax!==0){ sdir=ax<0?-1:1; smag=clamp((Math.abs(ax)-0.16)/0.84,0.05,1); digital=false; }
+      if(sdir!==0&&u){
+        if(sdir!==dbgSlewDir){ dbgSlewDir=sdir; dbgSlewT=0; dbgSlewAcc=0; } else dbgSlewT+=dt;
+        const gate=digital?0.22:0;                              // digital: tap window; analog: respond now
+        if(dbgSlewT>=gate){
+          const f=clamp((dbgSlewT-gate)/1.4,0,1);               // ease-in ramp, 1.4s to full coarse
+          const rate=(6+54*f*f)*smag;                           // 6→60 steps/s, ×analog magnitude
+          dbgSlewAcc+=rate*dt;
+          if(dbgSlewAcc>=1){ const n=Math.floor(dbgSlewAcc); dbgSlewAcc-=n;
+            sdir>0?u.inp.stepUp(n):u.inp.stepDown(n);           // native min/max/step clamp+snap; dt-cap bounds n≤3
+            u.inp.dispatchEvent(new Event('input')); }
+        }
+      }else{ dbgSlewDir=0; dbgSlewT=0; dbgSlewAcc=0; }
     }
   }else{                                                     // flags
     if(nav.left) { dbgFlagSel=Math.max(dbgFlagSel-1,0); moved=true; }
@@ -7646,7 +7669,7 @@ function frame(){
     if(pressed('tool')&&!isDebugOpen&&!isTerminalOpen) toolMenuVerb();   // terminal owns ○ while open — termNav's back, not the rack
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
-    if(isDebugOpen) dbgNav();
+    if(isDebugOpen) dbgNav(dt);
     if(isTerminalOpen) termNav();
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
