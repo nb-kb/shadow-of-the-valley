@@ -29,10 +29,13 @@ Legend: **cat** = category, drives resolver semantics. **⚡** = `surcharge`
   (base + its own feeders' ⚡) plus its rounds (`roundsFor` recurses). REFUND on
   the carrier waives the carrier's own base/lead only — the housed addition
   stands (feed REFUND to the housed core itself to waive that link). POWDER
-  waives mod surcharges only, never housed core bases. **BEAM carriers are
-  exempt**: threads never cast `relayNext` (only orb trains do), so under
-  a laser the old cycle-gate stands — the payload keeps its cycle seat and pays
-  at its own turn. **The family reads:** CONTACT = last touch · TIMER = bell or
+  waives mod surcharges only, never housed core bases. **CONTACT-thread
+  carriers house and DRUM (v22 P-beamC C2)**: the thread fires half-size casts
+  of the housed payload at its contact point every 0.5s — priced through the
+  rate (root.cost folds the chain in), ballistic beats bill their lead per
+  beat. **FUSE-only BEAM carriers keep the old exemption**: a thread can't
+  stick, so the payload keeps its cycle seat and pays at its own turn (FUSE's
+  wiring under a thread stays a priced vent). **The family reads:** CONTACT = last touch · TIMER = bell or
   touch · FUSE = stick, then the bell. Every cast leaves along the struck FACE
   (world) or RADIALLY out of the wound (flesh) — stored flight dir only for
   mid-air expiries (TIMER bell, orb/warp life-end). **EXTRA CASTS COST A THIRD
@@ -67,7 +70,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `waveCore` | WAVE | `{kind:'wave', base:10}` | 10 | Wide slow wall of pressure: 10 m/s, dmg 16, washes a ~1.8m swath, each foe pays ONCE (`pr.hit`/`pr.hitPl` sets), shove 7 + stagger. Never impact-dies on flesh (pierce inert on it BY DESIGN); the world still kills it. Enemy-fired = flat 16, dodgeable. BEAM-fed (v22 P-beamA): no train — a pressure corridor thread (10m, ±1.5m, per-tick wash+press, TWIN pools width to ±2.1, 11.9⚡/s). | 1 tracer slot (perp-bar); thread: axis+bar |
 | `sawCore` | SAW | `{kind:'saw', base:1}` | 1 | Teeth, not reach: unlocks the WHOLE tool's cycle to the 0.06 floor; its own bite dmg 8, life 0.16s ≈ 4m at speed 26 (SWIFT is THE reach knob). 16.7⚡/s vs regen 16 + wearRoll per tooth: self-governing attrition. | cheap (~3 live teeth) |
 | `warpCore` | WARP | `{kind:'warp', base:15}` | 15 | You arrive where it dies — impact, fuse, or the end of its arc. Speed 40, dmg 6. Arrival is LOUD (noise 18 + muzzle flare) unless HUSH-fed (noise 4, both ends). Sheds threads at resolve. Player-only: zealots never roll it AND `warpArrive` owner-guards. Rare loot tier. | cheap |
-| `powderCore` | POWDER | `{kind:'bolt', base:0, powder:true}` | 0 (+1 round) | A bolt that pays in lead: its feeders' ⚡ surcharges are waived — except REFUND's own (`surchargeHard`), and never under a thread (BEAM keeps full price — the named trap). | cheap |
+| `powderCore` | POWDER | `{kind:'bolt', base:0, powder:true}` | 0 (+1 round) | A bolt that pays in lead: its feeders' ⚡ surcharges are waived — except REFUND's own (`surchargeHard`). Under BEAM (v22 P-beamC C1 — the old named trap REDEEMED by owner order): a rounds-powered HITSCAN laser — the lane never threads, it pulses through `fireHitscan` on the pull path, 1 round + 0⚡ per pulse, fire-rate governed, every lane mod live (DRILL pierce, SEEKER 12° lock, CHAOS jag, TWIN fan headroom-gated at 1rd total, HUSH). | cheap |
 | `slugCore` | SLUG | `{kind:'slug', base:0}` | 0 (+3 rounds) | Three rounds, one fat blow: ×3 TOOL hurt (`base.dmg*3 + pend.dmg` — HURT+ additive AFTER the ×3), speed 48, fat radii (0.9 vs flesh, 0.30 vs world). Whole tool +0.45s cycle unless relay-housed (some shot's `relayNext`). Sheds threads at resolve. | cheap |
 | `orbCore` | ORB | `{kind:'orb', base:8}` | 8 | Just an orb: 6 m/s, dmg 6, 6s aloft then its payload pops. The blank canvas — it becomes what you feed it. Cap 4 player orbs live; the 5th pops the oldest. BEAM noses it (puppeteer). | hoards tracer slots 6s — capped, monitor |
 
@@ -83,7 +86,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `twin` | TWIN | `{twin:2}` | 12 | shot count `round(twin)`, **cap 3** | cheap |
 | `silentMod` | HUSH | `{silent:true}` | 3 | suppresses shot noise (3654) | cheap |
 | `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane **OFF the face it stuck to** (v22 P-grammar: `rdir` set to the surface normal at stick time — a stuck FUSE is a directional mine; `relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT. v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
-| `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's **LAST TOUCH** (v22 P-grammar: RICOCHET spends its banks first on the world; flesh triggers any time) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick; the cast leaves along the struck face / radially out of the wound. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. Under DRILL: the payload delivers EVERY in-body tick (see THE AUGER, extras billed). TWIN first-copy rule applies (copies don't chain). v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
+| `contactMod` | CONTACT | `{contact:true}` | 5 | FUSE-relay's instant sibling: on the charged core's **LAST TOUCH** (v22 P-grammar: RICOCHET spends its banks first on the world; flesh triggers any time) it casts the NEXT core in the lane from the hit point (`relayNext`) — no timer, no stick; the cast leaves along the struck face / radially out of the wound. The carrier's own impact stays normal (damage, decal). No next core in the lane → plain impact, the mod vents (like FUSE with nothing above it, the cast is empty). CONTACT+FUSE on one core: FUSE governs (stick+timer), CONTACT vents — its 5⚡ still paid. Under DRILL: the payload delivers EVERY in-body tick (see THE AUGER, extras billed). TWIN first-copy rule applies (copies don't chain). v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger). BEAM-fed (v22 P-beamC C2): a CONTACT thread HOUSES its payload and DRUMS half-size casts of it at the contact point every 0.5s — per lane, aim strand only (TWIN never multiplies the drum); ballistic beats bill their lead per beat at the mag, a dry mag HOLDS the beat until lead arrives; the ⚡ is already in the thread rate. | cheap |
 | `slowFuse` | TIMER | `{timer:1.5}` | 3 | v22 P-grammar rework: **a clock, not glue** — `pend.timer` (stacks). The next core triggers at the bell (`pr.timerT`, 1.5s in flight) OR on first touch, whichever first, casting its payload either way — no stick. TIMER is the third relay trigger (wires `relayNext`, housed + carrier-pays identically). Feeding a core that also has FUSE: merged at resolve (`pend.fuse += timer`, timer zeroed) — patience, not a second clock. [TIMER,BOOM] = the flak shell (flies, blows at the bell or first touch). defKey `slowFuse` unchanged (saves serialize by defKey). | cheap |
 | `splinter` | SPLINTER | `{split:3}` | 7 | shatters into 3 on impact (`splinterBurst`). v22 P-grammar: split now routes through `triggerPayload` on flesh too — a TIMER/FUSE relay casts even when the shot shatters (the old split-branch silently dropped the relay: declared fix). Under CONTACT the shards CARRY the payload to where THEY land (frags inherit `relay`/`rdir`/`rbase`, `_relayPaid:true`) — the parent's terminal was the free cast, every shard delivery draws `ceil(chain ⚡/3)` + lead (see CLUSTER WRIT). BEAM-fed (v22 P-beamB B2, I→C): a damage thread's contact point sprays up to 3 shard rays EVERY frame it touches something — world hits reflect off the face, flesh shatters THROUGH (forward shrapnel, distinct from DRILL's one full line); shards are bolt-shards regardless of parent (0.45× the bolt line, 6m, saw parent 2.7m, own chest/head intercept, A5 cook); every TWIN strand shatters at ITS OWN contact; RETURN arcs shed only at their first world clip; flash-budgeted, shards starve first. grip/pick/wave/orb threads stay inert (7⚡ priced). | cheap |
 | `serrated` | SERRATED | `{bleed:true, surcharge:5}` | 5 | `pend.bleed` → `pr.bleed` → `applyStatus`: opens a wound — wounds STACK (`status.bleedN`, cap 5), 1 hp/s per stack, `bleedT` runs 15s from the freshest cut (resists shave the clock). Both sides, same rate. Blast kinds pass the flag through the explosion dose — once. | cheap |
@@ -160,7 +163,9 @@ Each modifier adds/multiplies its field; a proj core copies `pend`, then it rese
   resets, enemy reset, player death) zeroes `bleedN` with it — no orphan stacks.
 
 Effect-only flags (never land on `pend`): `powder` (read in the resolveLane proj
-branch cost formula), `beltFeed` (foldFrame → `out.beltFeed` → `tickBeltFeed`).
+branch cost formula; since v22 P-beamC also stamped onto the shot as
+`shot.powder` — consumed by the beam skip, `burstLaser`, the pull routing/pulse
+and the seq chip), `beltFeed` (foldFrame → `out.beltFeed` → `tickBeltFeed`).
 New `pr` fields: `chaos` (steer block), `hit`/`hitPl` (wave once-per-foe),
 and — v22 P-grammar — `timerT` (the flight bell), `_dHit` (DRILL per-body 0.1s
 bill map), `_relayPaid` (castRelay: first delivery pre-paid, extras billed),
@@ -267,8 +272,13 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   ([FUSE,BOOM,WARP]: the blast opens the wall, the warp carries you through).
 - **POWDER**: all sequence feeders F with surcharges waived (the point) ·
   REFUND C-P1 (lead waived instead of base; 1⚡/0rd sidearm — pockets-empty
-  tech, priced by loot rarity since the v22 decree) · BEAM **T** (waiver refuses threads — you built a budget laser and
-  got a full-price one) · FUSE-relay F (cycle gate keeps it honest) · TWIN F
+  tech, priced by loot rarity since the v22 decree) · BEAM **C-C1** (was T —
+  REDEEMED by owner order: a rounds-powered HITSCAN laser — the lane never
+  threads, pulses ride the pull path through `fireHitscan`, 1rd + 0⚡ each,
+  all lane mods live; REFUND'd: 1⚡ hard, 0rd; the burstCam 0⚡/0rd volley
+  mint is closed by routing — powder never enters `_laserBursts`, burstCam
+  powder fires 3 honest hitscans for 3 rounds) · FUSE-relay F (cycle gate
+  keeps it honest) · TWIN F
   (0⚡ doubling; rack cells + cap 3 + lead are the price).
 - **SLUG**: FUSE-relay F + relay-housed exemption (the "in trigger" rule) ·
   CONTACT F · TIMER F · TWIN F (3 fat slugs, still 3 rounds total — copies
@@ -315,6 +325,9 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   it vents; put CONTACT on the carrier) · SPLINTER F (blast + 3 frags from the
   fire) · burstCam T-soft (three stacked blasts in your own face for one ⚡
   price — three doses of your own medicine) · BEAM C (the drum, see ledger) ·
+  CONTACT-carrier BEAM C-C2 (the GENERALIZED drum: any CONTACT thread drums a
+  half-size housed BOOM at the dot every 0.5s, ~17+0.5·dmg, R×0.75 — the
+  direct BEAM+BOOM 0.45s branch is untouched) ·
   hitscan/burst-laser BOOM F (unchanged: full blast at the ray's end per
   pulse, ceil(34/3)=12⚡ each) · zealots: never rolled, see availability. 1. BEAM noses it C-P3
   (puppeteer) · 2. life-expiry pops its payload C-P3 (one shared line with
@@ -385,12 +398,18 @@ dps needs a corner pocket) — the crowd verb costs the wall to use.
   = 6⚡ since the v22 REFUND decree — was 15⚡ at REFUND 10). POWDER as carrier still waives only MOD surcharges, never housed
   core bases ([CONTACT,POWDER,BOOM] = 26⚡ + 1rd). burstCam casts the chain per
   burst copy at one ⚡ price — the same accepted T-soft as its stacked blasts.
-- **BEAM carriers exempt, deliberately:** threads never cast `relayNext` (only
-  the orb thread-train does, per emitted copy — the wave train is GONE since
-  v22 P-beamA, see that ledger for the declared interim), so under a laser carrier the
-  old cycle-gate stands — the payload keeps its cycle seat and its own price.
-  Housing it would either bill a never-cast payload into the thread rate (bolt
-  threads: a 26⚡ trap) or underprice a train's repeated casts (free lunch).
+- **BEAM carriers (rewritten v22 P-beamC C2):** CONTACT-thread carriers now
+  HOUSE their payload and the thread DRUMS half-size casts of it at the
+  contact point every 0.5s — the old "26⚡ trap" objection is VOID because the
+  payload actually casts, repeatedly, and the pricing is automatic:
+  `root.cost += shot.cost` folds the chain into the carrier and the thread
+  rate formula reads carrier cost. Worked: [CONTACT,BEAM,BOLT]+BOOM — carrier
+  0+5+8 = 13, +26 housed → rate 2+39·0.55 = **23.45⚡/s** (vs the hand-tuned
+  direct boom-thread's 20.7 — dearer, and it keeps the bolt thread's own
+  13.2 dps: correct). FUSE-only beam carriers keep the old exemption (a
+  thread can't stick; FUSE under a thread stays a priced vent) — the payload
+  keeps its cycle seat and its own price. Direct BEAM+BOOM (boom IS the
+  thread) keeps its dedicated 0.45s branch untouched.
 - **HUD honesty:** housed chips read '⌂ housed' (their ⚡/lead already on the
   carrier chip), tipBrief marks a racked housed core, the FREE tag hides on a
   carrier billing a chain, and pips/rack ▶ never rest on a housed entry. No
@@ -405,7 +424,9 @@ dps needs a corner pocket) — the crowd verb costs the wall to use.
 | THE WOODCHIPPER | SAW+SLUG | a fat machine gun | order law: floor 0.06 then +0.45 → 0.51s cycle, a slow drum-mugging |
 | YO-YO NO | RETURN+SAW | a boomerang blade | tooth life 0.16 < stall 0.55 — it dies before it turns; 6⚡ for nothing |
 | DRUM-EATER | burstCam+SLUG | triple fat blows | 9 rounds a pull; partial-burst break mirrors bolt |
-| POWDER+BEAM | POWDER under a thread | a budget laser | the waiver refuses threads — full price under BEAM |
+
+(The POWDER+BEAM trap is GONE — redeemed by owner order into the C-C1 hitscan
+laser, see the P-beamC ledger.)
 
 ## Free-lunch audit (all closed)
 
@@ -423,8 +444,14 @@ dps needs a corner pocket) — the crowd verb costs the wall to use.
    under the housed model.
 4. BELT-FEEDER+SLUG → trickle 1.1 rd/s < 3 rd/shot; the belt moves lead,
    never mints it. CLOSED.
-5. POWDER+BEAM → waiver disabled under `pend.laser` (else 2⚡/s lead-free
-   thread). CLOSED. (Also the named POWDER trap.)
+5. POWDER+BEAM → SUPERSEDED (v22 P-beamC C1, owner order): the waiver under a
+   laser is re-opened BECAUSE a powder lane never threads — it PULSES on the
+   pull path, and every pulse pays a round (the 2⚡/s lead-free thread this
+   item closed can no longer exist). The one real mint in the redeem —
+   burstCam+POWDER+BEAM volleys riding `_laserBursts` at 0⚡ AND 0 lead (the
+   volley walk's `rds=bl?0:` line) — is closed by routing: `burstLaser`
+   excludes powder, so burstCam powder fires 3 hitscans through the plain
+   burst loop, 3 rounds, honest. CLOSED (as re-priced in lead).
 6. SLUG/WARP + BEAM/burstCam → laser stripped at resolve + burstLaser excludes
    new kinds → no round-free fat threads, no 60m hitscan blinks, no ×3-dmg
    free pulses. CLOSED.
@@ -562,7 +589,9 @@ triggered. No new pend fields, no save impact.
   carry `relayNext` per copy — between P-beamA and P-beamC, a
   [CONTACT/FUSE, …, WAVE-under-BEAM, X] chain casts NOTHING (X keeps its
   cycle seat, fires at its own turn — old exemption). Accepted; C2 restores
-  payload casting better-defined (housed + drummed).
+  payload casting better-defined (housed + drummed). **RESOLVED — P-beamC C2
+  landed:** a CONTACT wave-thread now houses X and drums half-size casts of
+  it at the corridor's end every 0.5s; FUSE-only wave-threads keep the seat.
 - **A5 — THREAD HEAT LAW** (owner: "Beam should do burn damage equal to
   hurt"): every per-tick LINE hurt doses equal burn through `applyStatus`
   (resists apply) — bolt/saw thread ticks and the A1 corridor now; B1 arc /
@@ -646,6 +675,85 @@ loop and shard state is frame-local. Zealots never run threads (their
 - **Fields consumed:** none added — B1 reads `pend.boomerang`, B2 reads
   `pend.split` (both long-standing pend fields, already consumed by the
   projectile paths); `loopClip`/`arcApex` are per-strand frame locals.
+
+## Balance ledger (v22 P-beamC: powder hitscan + contact drum)
+
+Two items — the economy/resolver pack (`resolveLane` + `tryFirePlayer` +
+`burstLaser` + `emitProjectile` + the `runContinuousBeams` drum). ZERO GLSL
+edits; no world geometry, TWIN RULE not triggered. No new pend fields, no
+save impact — `powder`/`small` live on resolve-time shot objects, `dAcc` on
+lane state.
+
+- **C1 — POWDER HITSCAN** (owner: "Powder core + beam should work to make
+  beams cost ballistics. Hitscan laser gun w/ all effects of mods in
+  barrel"): the named POWDER+BEAM trap is REDEEMED. A powder lane never
+  threads (`runContinuousBeams` skips it) — it PULSES on the pull path:
+  fire-rate-governed `fireHitscan` pulses, each 1 round + 0⚡, POWDER's
+  waiver now standing under the laser. All lane mods live, mirroring the
+  burst-laser aim block: SEEKER `seekBias` 12° lock, CHAOS bias+tilt, TWIN
+  fan (headroom-gated; copies don't eat lead — projectile parity), DRILL
+  pierce-all, HUSH/suppressor silence, autoSear = hitscan hose at 1rd/pulse.
+  Damage `res.dmg+pend.dmg` (24 base — a bolt's paper dps, buying true
+  hitscan + perfect converge + wall-mark). **REFUND+POWDER+BEAM = 1⚡ hard,
+  0rd** (ADAPTATION: the spec said 10⚡ hard — the P-balance REFUND decree
+  10→1 landed first; the hard surcharge still can't be waived, the number is
+  just smaller now). The build's real price: LEAD + core loot rarity + three
+  rack cells — powerful-as-described per powder's law and the owner's
+  verbatim ask. **The mint is closed by routing:** `burstLaser` excludes
+  powder, so burstCam+POWDER+BEAM can never ride `_laserBursts` at 0⚡/0rd —
+  it fires 3 honest hitscans, 3 rounds (VERIFY in browser: mag drops by 3
+  per pull). HUD: the seq chip now shows the rd price on a powder-laser lane
+  (`!pend.laser||sh.powder` gate — pulses pay lead, the chip says so). Knob
+  if playtest hates it: pulse dmg −2, never a mechanic change.
+- **C2 — CONTACT DRUM** (owner: "Beam + contact should trigger housed status
+  for core payloads and rapidly shoot smaller payloads at contact point"):
+  the v22j BEAM exemption is NARROWED — a CONTACT+BEAM carrier now HOUSES
+  its relay payload and the thread DRUMS half-size casts of it at the
+  contact point every 0.5s (`st.dAcc`, aim strand k===0 only — TWIN
+  multiplies the thread, never the drum). The beat is
+  `{...relayNext, small:0.5, pend twin:1}` emitted `atPoint` at the thread's
+  end: `small` halves dmg (instant boom: ×0.5 + rMul 0.75 replacing twin
+  pooling; projectile path: whole dmg sum ×0.5, burn rounded ×0.5). Lead:
+  `roundsFor(relayNext)` billed per beat at the carrier's mag — a dry mag
+  HOLDS the beat (full head, fires the moment lead arrives; the thread keeps
+  flowing). ⚡ automatic through the rate. A chain hanging off the beat
+  (relayNext rides intact) casts FULL size and is priced full at the root;
+  extras bill through `castRelay` as ever. TWIN on a drummed payload:
+  I-by-design (beat forces twin:1), 12⚡ priced.
+- **Per-core beat table** (0.5s cadence, half-size, at the contact point):
+  BOOM blast at the dot ~17+0.5·dmg R×0.75 · SPARK half ember, burn ×0.5 ·
+  BOLT half-dmg slug onward, 1rd/beat (2rd/s through-shooter) · WAVE half
+  wall from the dot (≤4-5 live walls = old-train tracer class — WATCHED,
+  fallback cadence 0.7s) · ORB half pearl laid at the dot (player cap 4 pops
+  oldest — self-budgeting) · SLUG half fat blow, 3rd/beat = 6rd/s (lead is
+  the governor) · WARP relay-warp from the dot — loud rapid mobility, noise
+  per beat unless HUSH (17.4⚡/s bolt-carrier build; powerful-but-paid +
+  telegraphed, kept per the law) · PICK carve/beat (uEdits capped) · GRIP
+  glob/beat (FIFO 10) · LURE chirper/beat (noise machine, fine).
+- **Worked price:** [CONTACT,BEAM,BOLT]+BOOM = 23.45⚡/s (13 carrier + 26
+  housed through the rate) — dearer than the direct boom thread's 20.7 and
+  it keeps the bolt line's 13.2 dps. Free-lunch note: drum lead billed per
+  beat via `roundsFor` at the mag, chain priced full at the root.
+- **Zealot side:** `tryShoot` already filters `pend.laser` AND `housed`
+  lanes — a zealot rolling [CONTACT,BEAM,X,Y] simply mutes that lane's
+  payload (rare roll, cosmetic, declared — slightly widened by C2).
+- **Verified (node probe, real extracted `resolveLane`/`emitProjectile`/
+  `burstLaser`/`runContinuousBeams`/`tryFirePlayer`):** housing + 39⚡ fold +
+  23.45 rate · FUSE-only exemption stands · powder cost 0 under BEAM, REFUND
+  hard 1 · burst mint closed (no `_laserBursts` entry, 3 pulses = 3 rounds) ·
+  powder lane never threads (0 charge, 0 segs) · pulse pays 1rd/0⚡ at
+  fire-rate · TWIN fans 2 pulses on 1rd · drum beats at ~0.5s at the contact
+  point, half-dmg 17 / rMul 0.75 / spark burn 8 · TWIN carrier drums once ·
+  drummed TWIN payload pools nothing · bolt beat bills 1rd, dry mag holds,
+  fires the frame lead arrives. 52/52.
+- **Fields consumed (NO DEAD STATS):** `shot.powder` → beam skip +
+  `burstLaser` gate + pull routing/pulse + seq-chip rd display ·
+  `shot.small` → both `emitProjectile` dmg lines + rMul + burn ·
+  `st.dAcc` → the drum cadence. Nothing else added.
+- **NOT VERIFIED IN BROWSER** (no browser here): the C1-4 mint gate
+  (burstCam+POWDER+BEAM mag −3/pull), the pulse feel/converge, drum beats
+  landing at the dot, WAVE-beat tracer load — fold into the shared manual
+  pass.
 
 ## Zealot availability
 

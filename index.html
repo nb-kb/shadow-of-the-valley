@@ -2932,7 +2932,7 @@ const ITEM_DEFS={
   waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a wide slow wall of pressure — washes a ~1.8m swath, each foe pays once · 10⚡'),
   sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · teeth, not reach — the whole tool cycles at the floor; its own bite dies at arm\'s length · 1⚡'),
   warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · you arrive where it dies. Loud on arrival, unless you taught it to whisper · 15⚡'),
-  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · a slug that pays in lead — its feeders ride free. Threads refuse the discount'),
+  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · a slug that pays in lead — its feeders ride free. Under a BEAM: hitscan, still paid in lead'),
   slugCore:   ()=>new ToolMod('SLUG','#a1887f','proj',{kind:'slug',base:0},'Core · three rounds, one fat blow — ×3 tool hurt, slow hands. Housed in a relay, the tool keeps its pace'),
   orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · just an orb. Slow, patient, six seconds aloft — it becomes whatever you feed it · 8⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
@@ -3943,10 +3943,11 @@ function resolveLane(col,out){
       if(m.effect.kind==='warp'||m.effect.kind==='slug') pend.laser=false;   // these shed the thread — a feeding BEAM vents its ⚡ into the chip price
       const e=m.effect;
       // THE PRICE: REFUND waives the core's base; POWDER waives the feeders' surcharges —
-      // except REFUND's own (surchargeHard), and never under a thread (laser keeps full price).
+      // except REFUND's own (surchargeHard) — even under BEAM (v22 C1): a powder lane
+      // never threads, it PULSES hitscan on the pull path, and every pulse pays a round.
       if(pend.fuse>0&&pend.timer>0){ pend.fuse+=pend.timer; pend.timer=0; }   // TIMER feeds a standing FUSE: patience, not a second clock
-      const cost=(pend.refund?0:(e.base||0)) + ((e.powder&&!pend.laser)?pend.surchargeHard:pend.surcharge);
-      const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane};
+      const cost=(pend.refund?0:(e.base||0)) + ((e.powder)?pend.surchargeHard:pend.surcharge);
+      const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane,powder:!!e.powder};
       lane.shots.push(shot);
       const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY / CONTACT-RELAY: a fused core casts the NEXT core from its point of death; a contact core casts it from its FIRST TOUCH — no timer, no stick
       if(prev&&(prev.pend.fuse>0||prev.pend.contact||prev.pend.timer>0)&&!shot.pend.laser){
@@ -3957,10 +3958,14 @@ function resolveLane(col,out){
         // shot's assembled cost (base + its own feeders' ⚡ — REFUND/POWDER
         // already folded per shot above) rides the chain root. Chains recurse:
         // a housed shot's own relay is housed too, billed to the same root.
-        // BEAM carriers are EXEMPT — threads never cast relayNext (only orb
-        // trains do, per emitted copy), so under a laser the old cycle-gate
-        // stands: the payload keeps its cycle seat and pays at its own turn.
-        if(!prev.pend.laser){
+        // CONTACT-thread carriers HOUSE and DRUM (v22 C2): the thread fires
+        // half-size casts of the payload at its contact point every 0.5s —
+        // priced automatically (root.cost folds the housed chain into the
+        // carrier, and the thread rate reads carrier cost). FUSE-only beam
+        // carriers keep the old exemption — a thread can't stick, so FUSE's
+        // wiring under a thread stays a priced vent: the payload keeps its
+        // cycle seat and pays at its own turn.
+        if(!prev.pend.laser||prev.pend.contact){
           shot.housed=true;
           const root=prev.housed?prev.housedRoot:prev;
           shot.housedRoot=root;
@@ -4013,7 +4018,7 @@ function describeSequence(res){
         if(sh&&sh.housed) return '<span class="seqChip" style="border-color:#8e24aa;opacity:.75">'+m.name
           +'<span class="seqCost">⌂ housed</span></span>';   // fires from the carrier's impact — its ⚡/lead already ride the carrier chip
         return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
-          +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&!sh.pend.laser&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';
+          +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&(!sh.pend.laser||sh.powder)&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';   // powder pulses pay lead even under BEAM (v22 C1)
       }
       if(m.cat==='util') return '<span class="seqChip" style="border-color:#2f8f9f">'+m.name+'</span>';
       if(m.cat==='muzzle') return '<span class="seqChip" style="border-color:#c9a45a">'+m.name+'</span>';
@@ -4165,7 +4170,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
     triggerPayload({
       pos:new Vec3(origin.x+dir.x*nud,origin.y+dir.y*nud,origin.z+dir.z*nud),
       vel:new Vec3(dir.x*26,dir.y*26,dir.z*26), owner, kind:'boom',
-      dmg:(34+p.dmg)*chaosMul(p.chaos), rMul:Math.round(p.twin)>1?1.4:1, split:p.split||0,
+      dmg:(34+p.dmg)*chaosMul(p.chaos)*(shot.small||1), rMul:shot.small?0.75:(Math.round(p.twin)>1?1.4:1), split:p.split||0,   // small: a drummed half-beat (v22 C2)
       relay:shot.relayNext||null, rdir:new Vec3(dir.x,dir.y,dir.z), rbase:base,
       src:src||null, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
     });
@@ -4182,13 +4187,13 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:kind==='orb'?6.0:kind==='saw'?0.16:2.2, owner, kind,   // saw reach ≈ 4m — SWIFT is its reach knob; orb: 6s aloft, then the payload pops
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything (slug: ×3 TOOL hurt, pend added after)
-      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg)*chaosMul(p.chaos),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand
+      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg)*chaosMul(p.chaos)*(shot.small||1),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand; small: drummed half-beat (v22 C2)
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       timerT:p.timer||0,                                 // TIMER: the bell rides the flight
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
-      burn:p.burn||0, bleed:!!p.bleed, chaos:p.chaos||0,
+      burn:Math.round((p.burn||0)*(shot.small||1)), bleed:!!p.bleed, chaos:p.chaos||0,
       col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[0.75,0.75,0.55]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[0.78,0.55,0.15]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; width tiers: sum<1.5 fat, <2.8 gossamer, ≥2.8 hairline — slug brass stays under 1.5 (fat shell), saw steel rides the gossamer tier
       silent:p.silent||base.silenced,
     });
@@ -4250,7 +4255,7 @@ function tryFirePlayer(dt){
       const i=(cyc+k)%n, sh=lane.shots[i];
       if(sh.housed) continue;                            // HOUSED: never a cycle entry — it fires from its carrier's impact, already paid there
       const bl=burstLaser(res,sh);                       // burst cam: a fed damage beam volleys pulses instead of flowing
-      if(sh.pend.laser&&!bl){ passed=true; continue; }   // continuous shots belong to the held-fire path
+      if(sh.pend.laser&&!bl&&!sh.powder){ passed=true; continue; }   // continuous shots belong to the held-fire path — powder pulls, hitscan
       if(bl&&_laserBursts.some(q=>q.lane===lane)){ passed=true; continue; }   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
       const okCharge=activeTool.charge>=(bl?Math.ceil((sh.cost||0)/3):(sh.cost||0));
@@ -4269,7 +4274,20 @@ function tryFirePlayer(dt){
     for(let b=0;b<res.burst;b++){
       const rds=roundsFor(sh);
       if(rds>0){ if(!mag||mag.loaded<rds) break; mag.loaded-=rds; }
-      emitProjectile('player',origin,fireDir,sh,res);
+      if(sh.powder&&sh.pend.laser){
+        // POWDER PULSE (v22 C1) — the owner's rounds-powered hitscan laser: each
+        // pull fires a pulse through fireHitscan, 1 round + 0⚡, every lane mod
+        // live (mirrors runBurstLasers' aim block). Rounds/noise/kick/sound around
+        // this branch are UNTOUCHED — the pulse replaces only the emit.
+        let f2=fireDir; const ch=sh.pend.chaos||0;
+        if(ch){
+          if(sh.pend.homing>0) f2=chaosBias(camPos(),f2);
+          f2=tiltDir(f2,(runRng()-0.5)*0.06*ch,new Vec3(0,0,0));
+        }else if(sh.pend.homing>0) f2=seekBias(camPos(),f2);
+        let rays=Math.max(1,Math.round(sh.pend.twin));
+        if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
+        for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f2,_jDir):f2,sh,res,dt);
+      }else emitProjectile('player',origin,fireDir,sh,res);
       const silent=sh.pend.silent||res.silenced||lane.silenced;
       playSound(sh.pend.laser?'spark':sh.kind==='spark'?'spark':(silent?'silenced':'shoot'));
       loudest=Math.max(loudest,toolNoise(silent));
@@ -4394,7 +4412,7 @@ function runContinuousBeams(dt){
     const hi=cycleShotIdx(lane,lane.cycleRef.get()%n);  // the cycle skips housed payloads here too — a pull can park cycleRef on one
     if(hi<0) continue;
     const sh=lane.shots[hi];
-    if(!sh.pend.laser) continue;
+    if(!sh.pend.laser||sh.powder) continue;           // POWDER never threads — it pulses on the PULL path (v22 C1)
     if(burstLaser(res,sh)) continue;                  // burst cam owns that lane: pulses, not a thread
     const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
     if(activeTool.charge<rate*dt){ continue; }        // starved thread gutters out
@@ -4570,6 +4588,29 @@ function runContinuousBeams(dt){
           if(sp>0.001&&sp<9) orb.vel.multiplyScalar(Math.min(9,sp+18*dt)/sp);   // pump it up to a canter
         }else if(st.acc[k]>0.7){ st.acc[k]=0; emitProjectile('player',muzzleWorld(),dir,sh,res); }
       }
+      // CONTACT DRUM (v22 C2) — a CONTACT thread carrying a housed payload DRUMS
+      // half-size casts of it at the contact point every 0.5s. Per-LANE, AIM
+      // strand only (k===0): TWIN never multiplies the drum — twin already
+      // multiplies the thread. Ballistic beats bill their lead per beat at the
+      // mag (roundsFor); the ⚡ is already in the rate (root.cost folded the
+      // chain in at resolve). The beat forces twin:1 (boom pooling ignored via
+      // small's rMul) — TWIN on a drummed payload is I-by-design, 12⚡ priced.
+      // A chain hanging off the beat (relayNext rides intact) casts FULL size —
+      // and is priced full at the root.
+      if(k===0&&sh.pend.contact&&sh.relayNext&&sh.relayNext.housed){
+        st.dAcc=(st.dAcc||0)+dt;
+        if(st.dAcc>0.5){
+          const pay=roundsFor(sh.relayNext);
+          const mag=pay>0?columnMag(activeTool,lane.mountIdx,true):null;
+          if(pay>0&&(!mag||mag.loaded<pay)){ /* drum holds with a full head — fires the beat the moment lead arrives; the thread keeps flowing */ }
+          else{
+            if(pay>0) mag.loaded-=pay;
+            st.dAcc=0;
+            const beat={...sh.relayNext, small:0.5, pend:{...sh.relayNext.pend, twin:1}};
+            emitProjectile('player', end.clone(), dir, beat, res, null, true);
+          }
+        }
+      }
       // sums >2.8 land in the shader's single-ray tier; the ×1.6 heat pays for the width
       const col=sh.kind==='grip'?[0.6,2.6,3.0]:sh.kind==='spark'?[3.0,1.1,2.6]:sh.kind==='pick'?[1.1,3.0,2.6]:[3.0,0.8,1.0];
       let bEnd=end;
@@ -4716,7 +4757,7 @@ function fireHitscan(owner,origin,dir,shot,res,dt){
 // grip/pick never volley — the physgun and the carver stay continuous.
 const _laserBursts=[];                    // {lane,sh,res,left,t}
 function burstLaser(res,sh){
-  return res.burst>1&&sh.pend.laser&&sh.kind!=='grip'&&sh.kind!=='pick'&&sh.kind!=='wave'&&sh.kind!=='orb'&&sh.kind!=='saw';
+  return res.burst>1&&sh.pend.laser&&sh.kind!=='grip'&&sh.kind!=='pick'&&sh.kind!=='wave'&&sh.kind!=='orb'&&sh.kind!=='saw'&&!sh.powder;   // powder pulses walk the plain burst loop — 1 rd each, never the 0⚡/0rd volley mint
 }
 function runBurstLasers(dt){
   for(let i=_laserBursts.length-1;i>=0;i--){
@@ -6027,7 +6068,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.kind==='warp'){ rows.push('you arrive where it dies — impact, fuse, or the end of its arc'); rows.push('arrival is LOUD · HUSH-fed: a whisper, both ends'); }
     if(e.kind==='slug') rows.push('3 rounds per shot · fat, slow, ×3 tool hurt · whole tool +0.45s cycle unless relay-housed');
     if(e.kind==='orb') rows.push('slow pearl · 6s aloft, then its payload pops · weak alone — it becomes what you feed it');
-    if(e.powder) rows.push('feeders ride free — their ⚡ surcharges are waived · threads refuse: full price under BEAM');
+    if(e.powder) rows.push('feeders ride free — their ⚡ surcharges are waived · under BEAM: a hitscan laser that pays in lead — 1 round per pulse, 0⚡');
     if(e.refund) rows.push('next core: base ⚡ waived · mag-fed cores fire without lead · this +1⚡ is never waived');
     if(e.beltFeed) rows.push('chambers 1 round / 0.9s from your pockets · ticks softly — a suppressed tool feeds silent');
     if(e.chaos){ rows.push('flight forgets the straight line · threads arc like lightning'); rows.push('with SEEKER: every arc bites the nearest warm thing'); }
@@ -6043,7 +6084,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.silenced||e.silent) rows.push('silenced');
     if(e.fuse){ rows.push('fused '+e.fuse+'s — the death casts the next core in the lane from the blast point'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); }
     if(e.timer){ rows.push(e.timer+'s clock — bell or first touch, whichever first, casts the payload'); rows.push('feeding a FUSE: +'+e.timer+'s patience on it instead of a second clock'); }
-    if(e.contact){ rows.push('LAST touch casts the NEXT core in the lane — RICOCHET banks first; the cast leaves along the struck face'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
+    if(e.contact){ rows.push('LAST touch casts the NEXT core in the lane — RICOCHET banks first; the cast leaves along the struck face'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); rows.push('on a BEAM carrier: the payload is HOUSED and the thread drums half-size casts of it at the contact point every 0.5s — ballistic beats cost their lead'); }
     if(e.split){ rows.push('splinters ×'+e.split); rows.push('beam-fed: the thread shatters at its contact — up to 3 shard rays, 6m, weaker · every TWIN strand shatters'); }
     if(e.boomerang){ rows.push('returns to the hand that threw it · both passes cut'); rows.push('beam-fed: the thread arcs out and back — a standing loop that cuts beside cover · TWIN mirrors it'); }
     if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
