@@ -4500,6 +4500,18 @@ function pushJaggedSeg(a,b,col,chaos,dt){
     p=q;
   }
 }
+// MASS DROOP — a heavy thread sags like a hose of lead: walk a marched path's
+// knees and drop each by sag·s² (s = path length walked so far, drooped-chord
+// measure). ONE transform for both curve families: the straight droop chain
+// AND the B1 return arc (a drooping loop falls out of the same walk — pts[0]
+// is the muzzle anchor and never sags; a loop's home knee rides a CLONE of it).
+function droopPath(pts,sag){
+  let s=0;
+  for(let i=1;i<pts.length;i++){
+    s+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y,pts[i].z-pts[i-1].z);
+    pts[i].y-=sag*s*s;
+  }
+}
 function runContinuousBeams(dt){
   const res=activeTool?activeTool._res:null;
   if(!res||res.bare){ _endBeams(); return; }
@@ -4524,6 +4536,18 @@ function runContinuousBeams(dt){
     st.engaged=true;
     const dmgKind=sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw';
     const arc=dmgKind&&sh.pend.boomerang;             // RETURN ARC (v22 B1): the thread bends into a D-loop — grip/pick/wave/orb stay inert BY DESIGN (6⚡ priced)
+    // MASS DROOP (v22 P-mass) — grav on a damage thread SAGS it: the beam is a
+    // STREAM at its core's projectile pace (bolt 82 · spark 34 · boom/saw 26,
+    // ×SWIFT) under the projectile-MASS pull (12·grav), so drop = ½·12·grav·(s/V)²
+    // = sag·s² along the marched path (droopPath). SWIFT divides the droop by
+    // vel SQUARED — a faster stream flies flatter, physical. A level grav-1
+    // bolt thread grounds ~34m out (grav 2 ~24m; boom's 26 m/s stream ~11m —
+    // the mortar thread); the dirt hit IS the contact point (pulses, the drum
+    // and SPLINTER anchor there). Drooped paths march like the B1 arc — 4
+    // chord segs, SAME flash-budget class. GRIP/PICK never droop (a drooping
+    // physgun is nonsense) and wave/orb keep their own verbs — !dmgKind covers
+    // all four. MASS's 5⚡ is already priced through the thread rate.
+    const sag=dmgKind&&sh.pend.grav>0?6*sh.pend.grav/Math.pow((sh.kind==='bolt'?82:sh.kind==='spark'?34:26)*sh.pend.vel,2):0;
     // TWIN SPLIT — a twinned damage thread frays into round(twin) strands (cap 3),
     // each wandering off the aim, each 0.65×: three on one mark ≈ ×1.95, priced by
     // TWIN's ⚡12 already in the rate. grip/pick don't fray — splitting a physgun
@@ -4535,7 +4559,7 @@ function runContinuousBeams(dt){
     // dry the EXTRA strands drop first (damage too), the aim thread never.
     let K=(sh.kind==='grip'||sh.kind==='pick'||sh.kind==='wave'||sh.kind==='orb')?1:Math.max(1,Math.round(sh.pend.twin));
     if(K>1) K=Math.max(1,Math.min(K,flashHeadroom()));
-    if(arc) K=Math.max(1,Math.min(K,Math.floor(flashHeadroom()/4)));   // loops FLASH 4 segs each: TWIN tops at 2 loops by budget — a strand that can't draw never damages
+    if(arc||sag>0) K=Math.max(1,Math.min(K,Math.floor(flashHeadroom()/4)));   // loops AND drooped threads FLASH 4 segs each (one reservation class): TWIN tops at 2 by budget — a strand that can't draw never damages
     const mul=K>1?0.65:1;
     // CHAOS: damage threads arc like lightning — grip/pick stay straight BY RULE
     // (a jittering physgun is nausea). With SEEKER: CHAIN LIGHTNING — the arc
@@ -4547,7 +4571,7 @@ function runContinuousBeams(dt){
     const fb=(chaos&&sh.pend.homing>0)?chaosBias(o,f):(dmgKind&&sh.pend.homing>0?seekBias(o,f):f);
     for(let k=0;k<K;k++){
       const dir=chaos?jitterDir(fb,_jDir,1+0.6*chaos):(K>1?jitterDir(fb,_jDir):fb);   // chaos: the aim WANDERS even at K===1 — that is the price; strands wander around the (possibly bent) aim
-      let arcApex=null, loopClip=null;                // B1: loop apex · first world-clip (B2 shards anchor there)
+      let arcApex=null, loopClip=null, pathEnd=null, pts=null;   // B1: loop apex · first world-clip (B2 shards anchor there) · curved-path knees + terminus (arc D-loop / MASS droop)
       if(arc){
         // RETURN ARC (v22 B1) — RETURN bends the thread into a flat D-loop: out
         // along the (seek/chaos-bent, jittered) aim, bulging to one side (sign
@@ -4566,11 +4590,23 @@ function runContinuousBeams(dt){
         const sl=Math.hypot(dir.z,dir.x)||1, sgn=k%2?-1:1;
         const sx=-dir.z/sl*sgn, sz=dir.x/sl*sgn;      // side = dir×up, flat, alternating
         const W=2.5*(1+(runRng()-0.5)*0.8*(sh.pend.chaos||0));
-        const lcol=sh.kind==='spark'?[3.0,1.1,2.6]:[3.0,0.8,1.0];
         const hx=o.x+dir.x*t0*0.5, hy=o.y+dir.y*t0*0.5, hz=o.z+dir.z*t0*0.5;
         arcApex=new Vec3(o.x+dir.x*t0,o.y+dir.y*t0,o.z+dir.z*t0);
         const M=muzzleWorld();
-        const pts=[M,new Vec3(hx+sx*W,hy,hz+sz*W),arcApex,new Vec3(hx-sx*W,hy,hz-sz*W),M];
+        pts=[M,new Vec3(hx+sx*W,hy,hz+sz*W),arcApex,new Vec3(hx-sx*W,hy,hz-sz*W),sag>0?new Vec3(M.x,M.y,M.z):M];   // MASS: the home knee sags on a CLONE of M — the muzzle anchor itself never droops
+      }else if(sag>0){
+        // MASS DROOP path — 4 straight-chord knees laid along the aim, sagged by
+        // droopPath below, marched by the SAME per-seg loop as the B1 arc (world
+        // truncation, per-seg bites, 4 flash segs). Where the heavy thread
+        // grounds at range, that dirt hit IS the contact point.
+        const R=sh.kind==='saw'?4:50;                 // the thread's own reach: saw teeth die at arm's length
+        const M=muzzleWorld();
+        pts=[M];
+        for(let i=1;i<=4;i++) pts.push(new Vec3(M.x+dir.x*R*i*0.25,M.y+dir.y*R*i*0.25,M.z+dir.z*R*i*0.25));
+      }
+      if(pts){
+        if(sag>0) droopPath(pts,sag);                 // MASS sags ANY marched path — the drooping arc loop falls out of the same transform, no special case
+        const lcol=sh.kind==='spark'?[3.0,1.1,2.6]:[3.0,0.8,1.0];
         const lineBite=sh.kind==='bolt'||sh.kind==='saw';
         const bit=lineBite?new Set():null;
         for(let s=0;s<4;s++){
@@ -4601,17 +4637,19 @@ function runContinuousBeams(dt){
           }
           const E=cut?new Vec3(P.x+dx*ts,P.y+dy*ts,P.z+dz*ts):Q;
           beamSegs.push({a:P,b:E,col:lcol,ttl:dt+0.001,flash:lastT});
-          if(cut){ loopClip={x:E.x,y:E.y,z:E.z,dx,dy,dz}; break; }   // truncate: the rest of the loop dies this frame
+          pathEnd=E;
+          if(cut){ loopClip={x:E.x,y:E.y,z:E.z,dx,dy,dz}; break; }   // truncate: the rest of the path dies this frame
         }
       }
-      let t=arc?50:marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);   // arcs marched their own loop above — no straight 50m march
+      let t=pts?50:marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);   // curved paths (arc loop / drooped thread) marched their own segs above — no straight 50m march
       if(sh.kind==='saw') t=Math.min(t,4.0);          // CHAINSAW: the teeth die at arm's length
       if(sh.kind==='wave') t=Math.min(t,10.0);        // PRESSURE CORRIDOR: short, wide, continuous
       // enemies intercept the thread — head tested above the body, same ray foot
       // (wave skips this: the corridor washes THROUGH — flesh never clamps t, only
-      // the world does; arcs skip it too — the loop block owns its per-seg bites)
+      // the world does; arcs and drooped threads skip it too — the curved-path
+      // block owns its per-seg bites)
       let hitEn=null, hitHead=false;
-      if(sh.kind!=='wave'&&!arc) for(const en of enemies){
+      if(sh.kind!=='wave'&&!pts) for(const en of enemies){
         if(en.health<=0||en._dormant) continue;
         const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
         const tt=rx*dir.x+ry*dir.y+rz*dir.z;
@@ -4622,7 +4660,7 @@ function runContinuousBeams(dt){
           if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
         }
       }
-      const end=arc?arcApex:new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);   // arc: spark/boom pulses fire at the APEX
+      const end=arc?arcApex:pts?pathEnd:new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);   // arc: spark/boom pulses fire at the (sagged) APEX · drooped thread: at its terminus — the dirt hit at range
       st.acc[k]=(st.acc[k]||0)+dt;
       if((sh.kind==='bolt'||sh.kind==='saw')&&hitEn){
         let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
@@ -4727,7 +4765,7 @@ function runContinuousBeams(dt){
       if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
         else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z);
         else if(_swing) bEnd=new Vec3(_swing.ax,_swing.ay,_swing.az); }
-      if(!arc){                                       // arcs drew their four flash segs in the loop block — no straight seg, no jagged joints (B1)
+      if(!pts){                                       // arcs and drooped threads drew their flash segs in the curved-path block — no straight seg, no jagged joints (B1)
         if(chaos) pushJaggedSeg(muzzleWorld(),bEnd,col,chaos,dt);   // lightning: jointed one-frame strand, joints starve first
         else if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
         else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
@@ -4735,8 +4773,9 @@ function runContinuousBeams(dt){
       // SPLINTER SHATTER (v22 B2) — a damage thread with SPLINTER sprays shard
       // rays at its contact point every frame it touches something: a world hit
       // reflects off the face, a flesh hit shatters THROUGH (forward shrapnel —
-      // distinct from DRILL's single full line). Arc loops shed only at their
-      // first world clip; an unclipped loop sheds nothing. Shards are BOLT-shards
+      // distinct from DRILL's single full line). Arc loops and drooped threads
+      // shed only at their first world clip; an unclipped path sheds nothing.
+      // Shards are BOLT-shards
       // regardless of parent kind (the splinterBurst frags-become-bolts
       // precedent): 0.45× the bolt line, 6m (saw parent 2.7m), own chest/head
       // intercept (head ×2, helm _helmT tick), A5 cook, bleed refresh. BUDGET
@@ -4744,13 +4783,13 @@ function runContinuousBeams(dt){
       // aim thread > extra strands > chaos joints > shards (later strands'
       // shards starve first). A shard that can't draw doesn't march or hurt.
       if(dmgKind&&sh.pend.split>0){
-        const wHit=arc?!!loopClip:t<(sh.kind==='saw'?3.99:49.9);
-        if(wHit||(!arc&&hitEn)){
-          const room=flashHeadroom()-(arc?4:1)*(K-1-k);   // reserve what a remaining strand actually draws: arc loops FLASH 4 segs each — a 1-slot reserve let strand-0 shards eat the projectile-tracer floor
+        const wHit=pts?!!loopClip:t<(sh.kind==='saw'?3.99:49.9);
+        if(wHit||(!pts&&hitEn)){
+          const room=flashHeadroom()-(pts?4:1)*(K-1-k);   // reserve what a remaining strand actually draws: arc loops AND drooped threads FLASH 4 segs each — a 1-slot reserve let strand-0 shards eat the projectile-tracer floor
           const nSh=Math.max(0,Math.min(3,Math.round(sh.pend.split),room));
           if(nSh>0){
             const sO=new Vec3(), sB=new Vec3();       // shard origin · base dir
-            if(arc){
+            if(loopClip){
               worldNormalJS(loopClip.x,loopClip.y,loopClip.z,_n);
               const dn=2*(loopClip.dx*_n.x+loopClip.dy*_n.y+loopClip.dz*_n.z);
               sB.set(loopClip.dx-dn*_n.x,loopClip.dy-dn*_n.y,loopClip.dz-dn*_n.z).normalize();
@@ -6216,6 +6255,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.twin) rows.push('beam-fed: splits the thread ×'+e.twin+' · strands wander');
     if(e.pierce) rows.push('drills every body in its road — one bill per body per beat · the world or the clock ends it');
     if(e.bounce) rows.push('bounces '+e.bounce);
+    if(e.grav){ rows.push('weight — the shot arcs and falls'); rows.push('beam-fed: the thread sags — heavy light · droops to the dirt at range · SWIFT flies it flatter · GRIP/PICK stay straight'); }
     if(e.spread) rows.push('spread ×'+e.spread);
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
     if(e.burst) rows.push(e.burst+'-round burst · beam lanes: '+e.burst+'-pulse laser burst');

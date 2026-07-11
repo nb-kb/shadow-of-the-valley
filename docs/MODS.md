@@ -82,7 +82,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `velPlus` | SWIFT | `{vel:1.6}` | 4 | `pend.vel` ×= (proj speed) | cheap |
 | `bounce` | RICOCHET | `{bounce:2}` | 6 | `pr.bounces` (index.html:3599) | cheap |
 | `pierce` | DRILL | `{pierce:1}` | 8 | v22 P-grammar: **pierce-ALL** — flesh never stops the shot (`impactOrPierce` returns false first), only the world or the lifetime ends it. Call sites bill **one hit per body per 0.1s** (`pr._dHit` map keyed on the body, `pr.life` as the clock) — a fast bolt = exactly 1 bill per body ("pierces all enemies", paid by geometry); a slow core dwelling in a body ticks ~10/s, capped. Hitscan pulses take every swept body before the wall (`pierceAll`). Blast kinds under DRILL pass through flesh and resolve on the environment ([DRILL,SPARK] blasts at the backstop; WARP blinks THROUGH the crowd) — declared. Stacking DRILL = idempotent 8⚡ of nothing — declared. Price held at 8⚡: per-body single-bill is FAIRER than the old accidental in-body triple-tap. | cheap |
-| `heavy` | MASS | `{grav:1, dmg:6}` | 5 | `pr.vel.y-=grav*12*dt` (3838) | cheap |
+| `heavy` | MASS | `{grav:1, dmg:6}` | 5 | Projectiles: `pr.vel.y-=grav*12*dt`. BEAM-fed (v22 P-mass M1): a damage thread (bolt/spark/boom/saw) SAGS — the beam is a stream at its core's projectile pace (bolt 82 · spark 34 · boom/saw 26, ×SWIFT) under the same 12·grav pull: drop = 6·grav/V²·s² along the path (`droopPath`), marched as 4 chord segs in the B1 arc budget class (TWIN clamps to 2 strands). Shorter effective reach: a level grav-1 bolt thread grounds ~34m out (grav 2 ~24m; boom ~10m — the mortar thread); SWIFT ×1.6 keeps the full 50m (0.87m drop). The dirt hit IS the contact point: pulses, the C2 drum and B2 shards anchor there. GRIP/PICK/WAVE/ORB threads never droop (straight-line verbs). | cheap |
 | `twin` | TWIN | `{twin:2}` | 12 | shot count `round(twin)`, **cap 3** | cheap |
 | `silentMod` | HUSH | `{silent:true}` | 3 | suppresses shot noise (3654) | cheap |
 | `fuseMod` | FUSE | `{fuse:1.2}` | 4 | sticks, blows after 1.2s — then RELAYS: casts the next core in the lane **OFF the face it stuck to** (v22 P-grammar: `rdir` set to the surface normal at stick time — a stuck FUSE is a directional mine; `relayNext`; TWIN copies don't chain — only the first carries it). On the same core FUSE outranks CONTACT. v22j: the relay target is **HOUSED** — out of the fire cycle, its ⚡/lead billed to the carrier's pull (see ledger) | cheap |
@@ -310,6 +310,28 @@ triggered. No SAVE_VER bump — items serialize by defKey; new keys are free.
   1.2m from their own nose; self-priced) · dmg +45%/stack (cap ×1.9)
   everywhere the charge lands — the wild path is the price · everything
   else F.
+- **MASS**: BEAM **C-M1 droop** (owner: "mass + beam should affect the beam
+  downward arc"): a damage thread SAGS like a hose of lead — the beam is a
+  stream at its core's projectile pace (bolt 82 · spark 34 · boom/saw 26,
+  ×SWIFT) under the 12·grav projectile pull: drop = 6·grav/V²·s² along the
+  path (`droopPath`), 4 chord segs marched like the B1 arc (per-seg bites +
+  dedupe, A5 cook, world truncation; SAME flash reservation class — TWIN
+  clamps to 2 strands, `(pts?4:1)` shard reserve). Grounds at range from a
+  level muzzle: bolt ~34m (grav 2 ~24m), boom ~10m (the mortar thread) — the
+  dirt hit IS the contact point (spark/boom pulses, the C2 drum and B2 shards
+  all anchor there) · SWIFT F (vel² divides the droop — ×1.6 keeps the full
+  50m at 0.87m drop; the flat-shooter's knob) · RETURN F **drooping arc loop**
+  (falls out of `droopPath` on the arc's pts, no special case: comes home LOW
+  — ~0.29m off the dirt at grav 1 — a heavy loop truncates at the ground; the
+  home knee sags on a CLONE of the muzzle anchor; truncated drooping arcs keep
+  B1's apex-pulse quirk, declared) · TWIN F (each jittered strand droops its
+  own path) · SPLINTER F (shards anchor at the ground clip) · GRIP/PICK
+  threads S (straight BY RULE — a drooping physgun is nonsense; wave/orb keep
+  their own verbs; 5⚡ priced) · projectile side unchanged. Verified by node
+  probe (real extracted `droopPath`/`runContinuousBeams`, flat-world stub):
+  droop table grav 1/2, SWIFT flattening, ground termination, mortar drum at
+  the dirt, drooping loop knees, clip-anchored shards, 10-flash worst case
+  (headroom 0, floor holds), grip/pick straight, curve bites + A5. 32/32.
 - **BOOM** (instant since v22i — the blast primitive): bare fire F-but-dumb
   (blast 1.2m off your own muzzle; self-damage truly stands since v22
   P-balance — ×1.6 flesh both sides, view kick, burn dose) · CONTACT-carrier F
