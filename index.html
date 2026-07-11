@@ -370,7 +370,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22n';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='v22o';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -2546,6 +2546,10 @@ function levelSdfJS(px,py,pz){
 let gameState='intro';                        // intro | play | dead | hideout
 const worldItems=[];                          // {item,pos,vel,ry,rotVel,held}
 const projectiles=[];                         // live shots
+let _worldGen=0;                              // WORLD GENERATION — teardownWorld/resetLevel bump it. Any loop that can
+                                              // kill the world through its own body (damagePlayer→onDeath→deployTo)
+                                              // captures it at entry and bails when it moves: the arrays it held are a
+                                              // dead world's and its index is a lie (v22n fault: pr.stuck, pr undefined)
 const tracersR=[];                            // render segments {a,b,col,life}
 const decals=[];
 const dynLights=[];                           // {pos,col,intensity,ttl}
@@ -4313,11 +4317,11 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
     });
   }
   if(shot.kind==='orb'&&owner==='player'){             // FOUR PEARLS, NO MORE — the oldest pops its payload
-    const orbs=projectiles.filter(q=>q.kind==='orb'&&q.owner==='player');
+    const orbs=projectiles.filter(q=>q.kind==='orb'&&q.owner==='player'&&!q._cull);
     while(orbs.length>4){
       const old=orbs.shift();
-      triggerPayload(old); projectiles.splice(projectiles.indexOf(old),1);
-    }
+      triggerPayload(old); old._cull=true;             // popped, but MARKED not spliced — a relay can cast the 5th pearl
+    }                                                  // from INSIDE updateProjectiles, and a splice here shifts its live index
   }
 }
 function toolNoise(silent){ return silent?4:22; }
@@ -4398,7 +4402,9 @@ function tryFirePlayer(dt){
       firedAny=true; continue;
     }
     wearRoll(spendCharge(activeTool,sh.cost||0));        // price the shot, not the copies — and roll the dice
+    const gen=_worldGen;                                 // a bare BOOM / powder pulse detonates IN this loop and can kill the shooter
     for(let b=0;b<res.burst;b++){
+      if(gen!==_worldGen) break;                         // dead men fire no follow-ups into the world they respawned to
       const rds=roundsFor(sh);
       if(rds>0){ if(!mag||mag.loaded<rds) break; mag.loaded-=rds; }
       if(sh.powder&&sh.pend.laser){
@@ -4573,6 +4579,7 @@ function droopPath(pts,sag){
   }
 }
 function runContinuousBeams(dt){
+  const gen=_worldGen;                        // the drum below can splash its own gunner dead — watch for the world to die
   const res=activeTool?activeTool._res:null;
   if(!res||res.bare){ _endBeams(); return; }
   const firing=fireDownEff()&&(!heldWorld||heldWorld.mode==='beam');
@@ -4732,6 +4739,7 @@ function runContinuousBeams(dt){
       }
       if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
       if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
+      if(gen!==_worldGen) return;             // that beat killed the gunner: onDeath dropped the lanes and the wield — the next lane would read a null tool
       if(sh.kind==='pick'&&st.acc[k]>0.16){ st.acc[k]=0; carveAt({pos:end,dmg:8,r:0.55}); }
       if(sh.kind==='grip'){
         if(!_swing&&!heldWorld&&!st.gripEn&&!_pgRegrabLock){
@@ -4918,6 +4926,7 @@ function _endBeams(){
 // pays the core's FULL projectile hurt — no continuous-beam discount. Draws one
 // one-frame laser-tier flash (col sums >2.8 land in the shader's 0.004 ray).
 function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
+  const gen=_worldGen;                                 // a spark/boom pulse below can splash the shooter dead
   const p=shot.pend;
   const o=owner==='player'?camPos():origin, f=dir;
   const maxLen=60;
@@ -4957,6 +4966,7 @@ function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
     worldNormalJS(end.x,end.y,end.z,_n); addDecal(end,_n,0.14);
     addDyn(end.x,end.y,end.z,[1,0.4,0.4],1.0,0.05);
   }
+  if(gen!==_worldGen) return;                          // the blast killed the shooter — no housed sequel fired into the fresh world
   // HOUSED DELIVERY (accounting fix): the pull/pulse already PAID the folded
   // chain — spendCharge took the root-folded cost, roundsFor took the chain's
   // lead — but this path used to discard shot.relayNext. Cast the housed
@@ -4983,6 +4993,7 @@ function burstLaser(res,sh){
   return res.burst>1&&sh.pend.laser&&sh.kind!=='grip'&&sh.kind!=='pick'&&sh.kind!=='wave'&&sh.kind!=='orb'&&sh.kind!=='saw'&&!sh.powder;   // powder pulses walk the plain burst loop — 1 rd each, never the 0⚡/0rd volley mint
 }
 function runBurstLasers(dt){
+  const gen=_worldGen;                        // a boom pulse can splash its own gunner dead mid-volley
   for(let i=_laserBursts.length-1;i>=0;i--){
     const q=_laserBursts[i];
     if(!activeTool||activeTool._res!==q.res){ _laserBursts.splice(i,1); continue; }   // re-racked mid-volley: it dies with the old sequence
@@ -5000,6 +5011,7 @@ function runBurstLasers(dt){
       let rays=Math.max(1,Math.round(q.sh.pend.twin));
       if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
       for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f,_jDir):f,q.sh,q.res,dt,r===0);
+      if(gen!==_worldGen) return;            // the pulse killed the gunner — the volley (and its null wield) dies with the world
       const silent=q.sh.pend.silent||q.res.silenced||q.lane.silenced;
       playSound(silent?'silenced':'spark');
       addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
@@ -5090,8 +5102,12 @@ function steerPr(pr,tx,ty,tz,maxAng){
   pr.vel.set((vx*c+cx*s)*sp,(vy*c+cy*s)*sp,(vz*c+cz*s)*sp);
 }
 function updateProjectiles(dt){
+  const gen=_worldGen;
   for(let i=projectiles.length-1;i>=0;i--){
+    if(gen!==_worldGen) return;                          // a hit below killed the player → teardown cleared this list mid-walk
     const pr=projectiles[i];
+    if(!pr) continue;                                    // belt to the bail's braces: never chase a hole
+    if(pr._cull){ projectiles.splice(i,1); continue; }   // orb cap marked it — reaped here, at a safe index
     if(pr.stuck){                                        // FUSEd: sit, count, blow
       pr.fuseT-=dt;
       if(pr.kind==='decoy'&&pr.fuseT>0){                 // LURE: sing to the camp
@@ -5179,7 +5195,7 @@ function updateProjectiles(dt){
           }
         }else if(!pr.hitPl){
           const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-          if(d<1.9){ pr.hitPl=true; damagePlayer(pr.dmg); applyStatus(playerPos,pr); }
+          if(d<1.9){ pr.hitPl=true; damagePlayer(pr.dmg); if(gen!==_worldGen) return; applyStatus(playerPos,pr); }   // a killing wall: the dose dies with the world
         }
       }else{
       if(pr.owner!=='player'){
@@ -5190,12 +5206,14 @@ function updateProjectiles(dt){
             const last=pr._dHit.get(playerPos);
             if(last===undefined||last-pr.life>=0.1){
               pr._dHit.set(playerPos,pr.life);
-              damagePlayer(pr.dmg); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr);   // spark/boom dose rides the explosion — once
+              damagePlayer(pr.dmg); if(gen!==_worldGen) return;   // a killing tick: dose and payload die with the world
+              if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr);   // spark/boom dose rides the explosion — once
               if(pr.contact&&!(pr.fuse>0)) castRelay(pr,false,playerPos.x,playerPos.y+0.9,playerPos.z);   // DRILL+CONTACT: the payload delivers every tick in-body — zealot extras cap at 3
             }
             continue;                                    // keep flying
           }
-          damagePlayer(pr.dmg); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr,playerPos.x,playerPos.y+0.9,playerPos.z); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
+          damagePlayer(pr.dmg); if(gen!==_worldGen) return;   // the killing shot: onDeath cleaned the fresh spawn — no re-dose, no payload after it
+          if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr,playerPos.x,playerPos.y+0.9,playerPos.z); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
@@ -5347,6 +5365,7 @@ function carveAt(pr){
   playSound('spark');
 }
 function explode(pr){
+  const gen=_worldGen;                                   // self-splash can kill the maker mid-blast
   const big=pr.kind==='boom';                            // BOOM: the same blast, written larger
   playSound('boom');
   addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.5,0.2],big?9:5,big?0.45:0.25);
@@ -5358,7 +5377,8 @@ function explode(pr){
     if(d<R){ const fall=1-d/R; en.hurt(pr.dmg*fall*1.6, pr.owner); applyStatus(en,{burn:(pr.burn||0)+Math.round(pr.dmg*fall*0.35), bleed:pr.bleed}); }   // the blast SEARS — dose scales with the hurt at range
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); applyStatus(playerPos,{burn:(pr.burn||0)+Math.round(pr.dmg*(1-pd/R)*0.35), bleed:pr.bleed});   // same flesh math the enemies eat — armor shaves it after; the blast SEARS both sides
+  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); if(gen!==_worldGen) return;   // it killed its maker — sear, kick, and shove die with the world (clearHudFx already swept the screen)
+    applyStatus(playerPos,{burn:(pr.burn||0)+Math.round(pr.dmg*(1-pd/R)*0.35), bleed:pr.bleed});   // same flesh math the enemies eat — armor shaves it after; the blast SEARS both sides
     playerPos.kickV+=30; playerPos.pitchPend-=0.02*(1-pd/R); }   // the blast kicks — self-splash must READ (eased: 30/(ωe)≈0.69 peak ≈ the old +0.7 step; pitch dips DOWN)
   for(const w of worldItems){
     const d=w.pos.distanceTo(pr.pos);
@@ -5768,6 +5788,7 @@ function placeValleyExfil(){
   VALLEY_EXFIL={id:'exValley', x, z, y:Math.max(0,restOnSurface(x,30,z)), r:4.5, label:'THE WAY HOME'};   // base snapped to the dirt, same idiom as deployTo's authored snap
 }
 function resetLevel(){
+  _worldGen++;                                // same tripwire as teardownWorld — onBreach re-seeds in place
   SEED.x=Math.floor(runRng()*900)+17;
   SEED.y=Math.floor(runRng()*900)+13;
   placeGate();
@@ -5864,6 +5885,7 @@ let TRAVEL=null;                              // {dest:'area1'|'hideout'} — th
 const legDepth=()=>TRAVEL?1:depth;            // travel legs walk Ring I weather; the endless loop keeps its own count
 let isTerminalOpen=false;
 function teardownWorld(){
+  _worldGen++;                                // any loop still walking the old arrays must see the world die
   worldItems.length=0; enemies.length=0; projectiles.length=0;
   beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
   _swing=null; playerPos.swinging=false; playerPos.velX=0; playerPos.velZ=0; meleeT=0;
@@ -7286,8 +7308,9 @@ function invArmWalk(fn){
 }
 function itemOnPlayer(q){ let on=false; invArmWalk(it=>{ if(it===q) on=true; }); return on; }
 function tickInvArm(dt){
+  const gen=_worldGen;
   invArmWalk((it,g,ref)=>{
-    if(it._armT==null) return;
+    if(it._armT==null||gen!==_worldGen) return;   // the first blast may have killed you — the rest of the walk reads a wiped rig
     it._armT-=dt;
     it._beepT=(it._beepT||0)-dt;
     if(it._beepT<=0){ it._beepT=it._armT>1.6?0.55:0.2; playSound('click'); }   // it ticks THROUGH the canvas
@@ -7299,7 +7322,10 @@ function tickInvArm(dt){
   });
 }
 function updateWorldItems(dt){
-  for(let wi=worldItems.length-1;wi>=0;wi--){ const w=worldItems[wi];
+  const gen=_worldGen;
+  for(let wi=worldItems.length-1;wi>=0;wi--){
+    if(gen!==_worldGen) return;              // the grenade below can kill its owner → teardown cleared this list mid-walk
+    const w=worldItems[wi]; if(!w) continue;
     // ---- a LIT boom core counts down wherever it is — pinned, resting, or in
     // ---- hand (a POCKETED one ticks in tickInvArm, the walk above)
     const li=w.item;
@@ -7493,9 +7519,11 @@ function frame(){
     tickInvArm(dt);        // the bagged grenade keeps its word
 
     highestDetection=0;
+    const _genE=_worldGen;
     for(const en of enemies){
       if(en.health>0&&en.position.distanceTo(playerPos)>70) en.reinforce();
       en.update(dt);
+      if(_genE!==_worldGen) break;           // a dry-mag swipe killed you mid-roster — the rest belong to a dead world
       if(en.health>0) highestDetection=Math.max(highestDetection,en.detection);
     }
     updateAttachedGlobs();                 // worn glue rides its host — sync after the zealots move

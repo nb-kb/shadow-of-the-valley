@@ -66,6 +66,23 @@ Last reviewed: 2026-07-10 (build v22m).
 
 ## Recently fixed
 
+- **v22o** — Death mid-frame faulted the engine: `ENGINE FAULT: pr is undefined`
+  at `pr.stuck` in `updateProjectiles`. A killing hit processed INSIDE a
+  per-frame loop (enemy bolt → `damagePlayer` → `onDeath` → `deployTo` →
+  `teardownWorld`) cleared the very array the loop was walking; the next index
+  read undefined. Same mid-frame-teardown family as v22d/v22k — now fixed as a
+  CLASS: `_worldGen` bumps in `teardownWorld`/`resetLevel`, and every loop that
+  can kill the world through its own body (projectiles, world items, beam
+  lanes, burst volleys, the enemy roster, the bag-grenade walk, the burst-fire
+  pull) captures it at entry and bails when it moves. Post-death statement
+  leaks closed with it: the killing shot no longer re-doses burn/bleed onto the
+  stanched respawn, self-blast no longer kicks the fresh camera, and no housed
+  payload fires into the world you respawned to. The orb 4-cap also stopped
+  splicing mid-iteration (a relay casting the 5th pearl from inside
+  `updateProjectiles` shifted the live index — silently deleting the fresh orb
+  and double-triggering the spent carrier); pops are MARKED and reaped at a
+  safe index instead. Node-probed both ways: the exact TypeError reproduced on
+  v22n, clean after.
 - **v22m** — BOOM proximity self-damage was a paper tiger: the player-splash
   path always existed (since BOOM landed), but the shooter was missing the
   ×1.6 flesh multiplier enemies ate, and armor (plates 0.6–0.75 × helmet
