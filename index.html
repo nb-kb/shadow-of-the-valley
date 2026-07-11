@@ -3878,7 +3878,7 @@ function updateHeldPhysics(dt){
     releaseHeld(false); playSound('click'); toast('PINNED');
     return;
   }
-  const _rl=INPUT.wheel*0.35+(uiMenusOpen()?0:((down('reelOut')?1:0)-(down('reelIn')?1:0))*2.5*dt); if(_rl!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+_rl,1.1,heldWorld.mode==='beam'?16:3.2);
+  const _rl=uiMenusOpen()?0:(clamp(INPUT.wheel,-2,2)*0.35+((down('reelOut')?1:0)-(down('reelIn')?1:0))*2.5*dt); if(_rl!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+_rl,1.1,heldWorld.mode==='beam'?16:3.2);   // menu gate covers the WHEEL too (scrolling a list dragged the carry), same 2-notch frame cap as the rope
   const o=camPos(), f=camForward();
   const w=heldWorld.w;
   const off=itemWorldJS(heldWorld.lx,heldWorld.ly,heldWorld.lz, w.ry||0, w.pitch||0);
@@ -4184,7 +4184,6 @@ function globSlow(pos,host){                          // enemies wade through gl
   }
   return m;
 }
-let beamActive=false, beamWasHeld=false;
 
 function chaosMul(ch){ return ch?1+0.45*Math.min(2,ch):1; }   // CHAOS: wild path, heavy hand
 function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
@@ -4891,7 +4890,6 @@ function runTacLaser(dt){
   const lr=document.getElementById('laserRange');
   if(lr){ lr.textContent=t>=maxLen-0.1?'—— m':t.toFixed(1)+' m'; lr.style.opacity=1; }
 }
-function endBeam(){ beamActive=false; beamAudio(false); if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false); }
 
 // ---- HEADSHOTS: the head is a second, smaller test sphere — twin of the GLSL head.
 // ---- The center MOVES: it rides the head-look (enHeadYaw in the shader — change one,
@@ -5665,7 +5663,7 @@ function newGame(){                            // the terminal's START OVER — 
 function onDeath(){
   if(!_pillDeath && !(activeLevel&&activeLevel.id==='hideout')){   // a lost raid, not a lost life
     playSound('death');
-    endBeam();                               // a mid-beam death: kill the hum and the beam-mode grip while the world still stands
+    _endBeams();                             // a mid-beam death: drop the rope and the beam-mode grip while the world still stands
     // THE TEETH v2: everything is the valley's now — the rig, every pocket sewn to
     // it, the tool in your grip. Only the stash at home remembers.
     // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
@@ -5682,7 +5680,7 @@ function onDeath(){
   _pillDeath=false;
   gameState='dead'; timeScale=0;
   playSound('death');
-  endBeam();
+  _endBeams();
   document.getElementById('deathStats').innerHTML=
     'Ring <b>'+roman(depth)+'</b> · guards silenced <b>'+kills+'</b> · lasted <b>'+fmtTime(runClock)+'</b>';
   document.getElementById('deathScreen').classList.remove('hidden');
@@ -6899,11 +6897,17 @@ function updatePlayer(dt){
     // projection turns fall into tangent speed. Airborne x/z become VELOCITY here
     // (the only place they ever do) — everywhere else movement stays positional.
     if(_swing){
+      const _fresh=!playerPos.swinging;                  // the frame the rope takes hold — flag not yet raised
       playerPos.swinging=true;
-      if(playerPos.onGround){ playerPos.velX=(rx*mx+fx*mz)*speed; playerPos.velZ=(rz*mx+fz*mz)*speed; }  // grounded: velocity tracks the step for a clean lift-off handoff
-      _swing.len=clamp(_swing.len + INPUT.wheel*0.35 + ((down('reelOut')?1:0)-(down('reelIn')?1:0))*6*dt, 1.2, 26);   // reel: wheel notch 0.35 (holdDist verb), d-pad 6 m/s — under load the shrinking sphere PULLS you
+      // grounded: velocity tracks the step for a clean lift-off handoff. Midair ATTACH
+      // seeds it the same way — normal airborne flight IS the positional input step, so
+      // the step is the momentum: jump-and-hook keeps its run instead of halting dead.
+      // A midair RE-grab (swinging still riding) keeps its live velocity untouched.
+      if(playerPos.onGround||_fresh){ playerPos.velX=(rx*mx+fx*mz)*speed; playerPos.velZ=(rz*mx+fz*mz)*speed; }
+      _swing.len=clamp(_swing.len + clamp(INPUT.wheel,-2,2)*0.35 + ((down('reelOut')?1:0)-(down('reelIn')?1:0))*6*dt, 1.2, 26);   // reel: wheel notch 0.35 (holdDist verb), d-pad 6 m/s — under load the shrinking sphere PULLS you. Wheel capped at 2 notches a FRAME: smooth-scroll mice burst 10-30 events between frames and the taut sphere would yank metres in one step
     }
     if(playerPos.swinging&&!_swing&&playerPos.onGround){ playerPos.swinging=false; playerPos.velX=0; playerPos.velZ=0; }  // momentum spends itself on landing
+    const _sw0x=playerPos.x, _sw0y=playerPos.y, _sw0z=playerPos.z;   // pre-flight pose — the swept resolve below walks from here
     if(playerPos.swinging&&!playerPos.onGround){
       playerPos.velX+=(rx*mx+fx*mz)*8*dt; playerPos.velZ+=(rz*mx+fz*mz)*8*dt;    // air control: input is an accel now (8 m/s²), not a step
       const _hs=Math.hypot(playerPos.velX,playerPos.velZ);
@@ -6921,6 +6925,24 @@ function updatePlayer(dt){
         if(vr>0){ playerPos.velX-=vr*nx; playerPos.velY-=vr*ny; playerPos.velZ-=vr*nz; }   // strip radial-OUT only; falling toward the anchor stays free
       }
       if(cd>_swing.len+3 || mapWorldJS(_swing.ax,_swing.ay,_swing.az)>0.75) _swing=null;   // anchor carved out / glob evicted / impossible stretch — the rope lets go
+    }
+    // SWEPT SWING (anti-tunnel): only the two blocks above moved x/y/z since the
+    // capture — velocity flight (16 m/s lateral) + reel-taut projection can cover
+    // metres in one capped-dt frame, and ruin walls are 0.3m thin. Walk the whole
+    // displacement in 0.18m substeps with the same feet-sphere resolve the ground
+    // slide uses: the wall wins over the rope, no far-side eject.
+    {
+      const _mdx=playerPos.x-_sw0x, _mdy=playerPos.y-_sw0y, _mdz=playerPos.z-_sw0z;
+      const _md=Math.hypot(_mdx,_mdy,_mdz);
+      if(_md>0.18){
+        const _nS=Math.min(24,Math.ceil(_md/0.18));
+        playerPos.x=_sw0x; playerPos.y=_sw0y; playerPos.z=_sw0z;
+        for(let sI=0;sI<_nS;sI++){
+          playerPos.x+=_mdx/_nS; playerPos.y+=_mdy/_nS; playerPos.z+=_mdz/_nS;
+          _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
+          playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
+        }
+      }
     }
     const _ix=playerPos.x, _iz=playerPos.z, _wasGrounded=playerPos.onGround;
     _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
@@ -7194,11 +7216,11 @@ function frame(){
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
       if(pressed('cycleL')) cycleHolster(-1);   // d-pad ◀ — draw the previous holstered tool
       if(pressed('cycleR')) cycleHolster(1);    // d-pad ▶ / [T] — draw the next
-    }else if(beamActive) endBeam();
+    }else _endBeams();   // bag/tool/crate don't pause the world — rummaging drops the rope, the beam-held item, and the lanes' drain state; the old `beamActive` gate was a flag nothing ever raised (free infinite skyhook)
     updateHeldPhysics(dt);
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
     if(fireCooldown>0) fireCooldown-=dt;
-    if(activeTool&&!beamActive) regenBatteries(activeTool,dt);
+    if(activeTool) regenBatteries(activeTool,dt);   // regen always ran — the old !beamActive guard tested a flag nothing raised; thread drain in runContinuousBeams is priced against this
     if(activeTool&&activeTool._res&&activeTool._res.beltFeed) tickBeltFeed(dt);
 
     updateProjectiles(dt);
