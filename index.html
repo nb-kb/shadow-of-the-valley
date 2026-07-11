@@ -3541,6 +3541,19 @@ function quickUse(){
   const f=focusGrid(); if(!f.grid&&!f.rack) return;
   clampCursor(f);
   const cell=cellAt(f);
+  if(!cell && activeTool && currentFocus===0 && f.grid && !f.equipCol && !f.rack && !f.external && !f.locked){
+    // △ on an EMPTY pocket: the wield goes to bed — the reverse of the wield-swap.
+    // One object, one home (the v22j lesson): the wield lives nowhere else, so
+    // write it exactly once. Footprint-checked; take-only crates and dials refuse.
+    const t=activeTool;
+    const ok=f.slotMode ? !f.grid[cursorY][cursorX] : gridFits(t,cursorX,cursorY,f.grid,f.cols,f.rows);
+    if(!ok){ playSound('empty'); return; }
+    _endBeams(); reloadTimer=0;                       // same teardown as wieldTool
+    activeTool=null;
+    if(f.slotMode){ f.grid[cursorY][cursorX]=t; t.x=cursorX; t.y=cursorY; }
+    else placeInGrid(t,cursorX,cursorY,f.grid);
+    playSound('place'); refreshInvUI(); updateToolReadout(); return;
+  }
   if(!cell && !f.rack) return;            // rack verbs (unchain/strip) work on empty cells
   if(cell instanceof Tool && currentFocus===0){ wieldTool(cell,f); return; }
   if(cell instanceof Magazine && cell.loaded>0 && !heldWorld){   // F: shake the rounds out into your hand
