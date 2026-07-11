@@ -493,6 +493,25 @@ world geometry touched, the TWIN RULE was never triggered. No SAVE_VER bump
   (flat cap 3) ride existing `MOD_KEYS` rolls — collectively a difficulty bump;
   fallback knobs are single lines (drop `slowFuse`/`pierce` from `MOD_KEYS`).
 
+## Balance ledger (v22 P-grenade: the lit core)
+
+One item: a held BOOM core arms in-hand — [F/△] lights a 5s clock, no
+un-arming ("no fingers un-pull a pin"), it goes off wherever it is: in hand,
+thrown (the existing hurl verbs — G / hands-mode fire; no new input), pinned,
+or resting. ZERO GLSL edits — no world geometry, TWIN RULE not triggered.
+
+- **Numbers (post-B4/B5):** in-hand detonation pd≈1.2–1.4 → raw ~40, armored
+  ~21, +~9 burn — a real gamble, not a suicide. Thrown, enemies eat
+  34·falloff·1.6 + the 0.35 burn dose. Blast noise 36 via `explode`; the beeps
+  stay OFF the noise map — a lit core is not a free LURE.
+- **Stow guard:** an armed core never enters a grid (one gate at the top of
+  `interactInventory`'s held-item block — rack, belt, rucksack, swap and pour
+  all funnel through it). `_armT` is runtime-only and never serializes; if a
+  mid-raid save ever serializes worldItems, a lost `_armT` reads as a disarmed
+  dud — accepted.
+- **Fields consumed:** `it._armT` (heldUse arm + updateWorldItems tick + stow
+  gate), `w._beepT` (beep cadence 0.55s → 0.2s under 1.6s). No SAVE_VER bump.
+
 ## Zealot availability
 
 `MOD_KEYS` += `waveCore`, `chaoticMod`, `boomerangMod`, `homingMod` (enemy

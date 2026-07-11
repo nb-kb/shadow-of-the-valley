@@ -2928,7 +2928,7 @@ const ITEM_DEFS={
   beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: the shot becomes a held, continuous thread (less hurt) · alone atop a column: tactical laser'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands, sings to the camp for 12s · 10⚡'),
-  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · the blast itself — no flight: it goes off the moment it is cast, arm\'s length from the muzzle or AT a relay\'s point. FUSE restores the lob. No friends in the blast · 26⚡'),
+  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · the blast itself — no flight: it goes off the moment it is cast, arm\'s length from the muzzle or AT a relay\'s point. FUSE restores the lob. No friends in the blast · 26⚡ In hand [F/△]: LIGHT IT — five seconds, no take-backs. Throw it, or wear it.'),
   waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a wide slow wall of pressure — washes a ~1.8m swath, each foe pays once · 10⚡'),
   sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · teeth, not reach — the whole tool cycles at the floor; its own bite dies at arm\'s length · 1⚡'),
   warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · you arrive where it dies. Loud on arrival, unless you taught it to whisper · 15⚡'),
@@ -3387,6 +3387,7 @@ function interactInventory(){
 
   if(heldWorld){
     const it=heldWorld.w.item;
+    if(it._armT!=null){ toast('IT IS LIT'); playSound('empty'); return; }   // an armed core never enters a grid
     // supply crates are TAKE-ONLY: they reseed on every deploy — whatever you leave, the
     // valley eats. The stash (no external flag) is the one box that accepts.
     if(f.external){ toast('A SUPPLY CRATE — TAKE ONLY'); playSound('empty'); return; }
@@ -4085,6 +4086,11 @@ function heldUse(it){
   }
   if(it instanceof Gadget){ useGadget(it); return; }
   if(it instanceof Battery){ toast('BATTERY · '+(battFunctional(it)?it.charge.toFixed(0)+'/'+it.cap+'\u26a1':'DEPLETED')); playSound('click'); return; }
+  if(it instanceof ToolMod && it.effect && it.effect.kind==='boom'){
+    if(it._armT==null){ it._armT=5; toast('LIT — FIVE'); playSound('click'); }
+    else { toast('IT IS LIT'); playSound('empty'); }     // no fingers un-pull a pin
+    return;
+  }
   if(it instanceof ToolMod && it.effect && it.effect.laser){
     it.pointing=!it.pointing;
     toast(it.pointing?'BEAM · POINTING':'BEAM · DARK'); playSound('click'); return;
@@ -6696,7 +6702,20 @@ function updatePlayer(dt){
 }
 
 function updateWorldItems(dt){
-  for(const w of worldItems){
+  for(let wi=worldItems.length-1;wi>=0;wi--){ const w=worldItems[wi];
+    // ---- a LIT boom core counts down wherever it is — pinned, resting, or in hand
+    const li=w.item;
+    if(li&&li._armT!=null){
+      li._armT-=dt;
+      w._beepT=(w._beepT||0)-dt;
+      if(w._beepT<=0){ w._beepT=li._armT>1.6?0.55:0.2; playSound('click'); addDyn(w.pos.x,w.pos.y+0.15,w.pos.z,[1,0.3,0.15],0.6,0.05); }   // blinks red, faster near the end
+      if(li._armT<=0){
+        if(heldWorld&&heldWorld.w===w) releaseHeld(false);
+        worldItems.splice(wi,1);                            // gone BEFORE the blast shove loop runs
+        explode({pos:new Vec3(w.pos.x,w.pos.y+0.15,w.pos.z), kind:'boom', dmg:34, owner:'player'});
+        continue;
+      }
+    }
     if(w.frozen&&!w.held){                         // PINNED mid-air: no gravity, no settle —
       beamSegs.push({a:new Vec3(w.pos.x,w.pos.y+0.30,w.pos.z),   // a faint steady needle
                      b:new Vec3(w.pos.x,w.pos.y-0.06,w.pos.z),   // marks the pin
