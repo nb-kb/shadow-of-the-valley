@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-10 (build v22m).
+Last reviewed: 2026-07-11 (build v22s).
 
 ## Open
 
