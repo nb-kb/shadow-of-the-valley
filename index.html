@@ -2971,7 +2971,7 @@ const ITEM_DEFS={
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core hunts the nearest warm thing ahead of it — hard turns, honest ones. Cover still works · +7⚡'),
-  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:10},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +10⚡, never waived'),
+  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +1⚡, never waived'),
   chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core forgets the straight line. Threads arc like lightning; with SEEKER the arcs bite the nearest warm thing. Hits +45% harder per stack — two stacks cap it; the wild path is the price · +6⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
@@ -5818,7 +5818,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.kind==='slug') rows.push('3 rounds per shot · fat, slow, ×3 tool hurt · whole tool +0.45s cycle unless relay-housed');
     if(e.kind==='orb') rows.push('slow pearl · 6s aloft, then its payload pops · weak alone — it becomes what you feed it');
     if(e.powder) rows.push('feeders ride free — their ⚡ surcharges are waived · threads refuse: full price under BEAM');
-    if(e.refund) rows.push('next core: base ⚡ waived · mag-fed cores fire without lead · this +10⚡ is never waived');
+    if(e.refund) rows.push('next core: base ⚡ waived · mag-fed cores fire without lead · this +1⚡ is never waived');
     if(e.beltFeed) rows.push('chambers 1 round / 0.9s from your pockets · ticks softly — a suppressed tool feeds silent');
     if(e.chaos){ rows.push('flight forgets the straight line · threads arc like lightning'); rows.push('with SEEKER: every arc bites the nearest warm thing'); }
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
