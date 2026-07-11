@@ -4761,6 +4761,7 @@ function updateProjectiles(dt){
             if(last===undefined||last-pr.life>=0.1){
               pr._dHit.set(playerPos,pr.life);
               damagePlayer(pr.dmg); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr);   // spark/boom dose rides the explosion — once
+              if(pr.contact&&!(pr.fuse>0)) castRelay(pr,false,playerPos.x,playerPos.y+0.9,playerPos.z);   // DRILL+CONTACT: the payload delivers every tick in-body — zealot extras cap at 3
             }
             continue;                                    // keep flying
           }
@@ -4782,6 +4783,7 @@ function updateProjectiles(dt){
                 const head=hd<0.24;
                 en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');   // spark/boom dose rides the explosion — once
                 if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
+                if(pr.contact&&!(pr.fuse>0)) castRelay(pr,false,en.position.x,en.position.y+0.95,en.position.z);   // DRILL+CONTACT: the payload delivers every tick in-body — extras billed
               }
               break;                                     // keep flying
             }
@@ -4846,10 +4848,30 @@ function triggerPayload(pr){
   if(pr.kind==='warp') warpArrive(pr);
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick'&&pr.kind!=='boom') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
-  if(pr.relay){                                        // FUSE/CONTACT-RELAY: the death casts the next core — free, the relay surcharge already paid
-    const sh=pr.relay; pr.relay=null;                  // one cast per corpse
-    emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge
+  // FUSE/CONTACT-RELAY: the death casts the next core — the pull pre-paid the first delivery
+  castRelay(pr,true);
+}
+// EXTRA CASTS COST A THIRD — the pull pre-pays ONE delivery of the housed chain.
+// Every cast past the first (in-body DRILL ticks, SPLINTER frag deliveries) draws
+// ceil(chain ⚡/3) — the burst-pulse precedent — and a BALLISTIC chain's extras eat
+// their rounds from the carrier's own mag: lead is a full price (the POWDER law).
+// Can't pay either bill: the cast simply doesn't happen. Zealots pay no ⚡ — their
+// extras cap flat at 3 per projectile.
+function castRelay(pr,term,cx,cy,cz){
+  const sh=pr.relay; if(!sh) return;
+  if(cx!==undefined&&pr.rdir){ const l=Math.hypot(pr.pos.x-cx,pr.pos.y-cy,pr.pos.z-cz)||1; pr.rdir.set((pr.pos.x-cx)/l,(pr.pos.y-cy)/l,(pr.pos.z-cz)/l); }
+  if(term) pr.relay=null;                              // one TERMINAL cast per corpse stands
+  if(pr._relayPaid){
+    if(pr.owner==='player'){
+      const c=Math.ceil((sh.cost||0)/3);
+      if(!activeTool||activeTool.charge<c) return;
+      const rds=roundsFor(sh);
+      if(rds>0){ const mag=sh.lane?columnMag(activeTool,sh.lane.mountIdx,true):null; if(!mag||mag.loaded<rds) return; mag.loaded-=rds; }
+      spendCharge(activeTool,c);
+    }else if((pr._exCasts=(pr._exCasts||0)+1)>3) return;
   }
+  pr._relayPaid=true;
+  emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge
 }
 function splinterBurst(pr){
   const nFrag=Math.min(4,pr.split);
@@ -5830,7 +5852,7 @@ function tipBrief(it){                                  // the info square's row
     const rows=[];
     // racked above a FUSE/CONTACT carrier? the resolved shot knows — read it honestly
     if(it.cat==='proj'&&activeTool&&activeTool._res&&activeTool._res.shots.some(sh=>sh.core===it&&sh.housed))
-      rows.push('⌂ housed — fires from the carrier\'s impact; its ⚡ and lead ride the carrier\'s pull');
+      rows.push('⌂ housed — fires from the carrier\'s impact, bell, or in-body tick; its ⚡ and lead ride the carrier\'s pull (extra deliveries draw a third)');
     if(e.base) rows.push('⚡'+e.base+' base');
     if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
     if(e.kind==='bolt') rows.push('+1 round per shot');
