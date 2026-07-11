@@ -23,7 +23,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #crosshair::after{top:0;left:5px;width:2px;height:12px;}
 #crosshair.carrying{transform:translate(-50%,-50%) rotate(45deg);}
 #interactPrompt{position:absolute;left:50%;top:57%;transform:translateX(-50%);pointer-events:none;z-index:5;
-  font-size:11px;letter-spacing:.14em;color:var(--bone);text-shadow:0 1px 2px #000;opacity:0;transition:opacity .12s;}
+  font-size:15px;letter-spacing:.14em;color:var(--bone);text-shadow:0 1px 2px #000;opacity:0;transition:opacity .12s;}
 #interactPrompt.show{opacity:.95;}
 #interactPrompt b{color:var(--exposed);}
 
@@ -33,12 +33,12 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .panel::before,.panel::after{content:'';position:absolute;width:14px;height:14px;border:2px solid var(--dust);pointer-events:none;}
 .panel::before{top:-2px;left:-2px;border-right:none;border-bottom:none;}
 .panel::after{bottom:-2px;right:-2px;border-left:none;border-top:none;}
-.stencil{letter-spacing:.22em;text-transform:uppercase;font-weight:bold;color:var(--dust);font-size:10px;}
+.stencil{letter-spacing:.22em;text-transform:uppercase;font-weight:bold;color:var(--dust);font-size:14px;}
 .stencil b{color:var(--bone);}
 
 /* ---------- HUD ---------- */
 #hud{position:absolute;top:14px;left:14px;z-index:10;pointer-events:none;padding:10px 12px;min-width:210px;}
-#hud .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0;font-size:10px;letter-spacing:.14em;}
+#hud .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0;font-size:14px;letter-spacing:.14em;}
 .meter{width:110px;height:7px;background:#000;border:1px solid var(--line);overflow:hidden;}
 .meter>div{height:100%;width:100%;transition:width .15s linear;}
 #healthFill{background:linear-gradient(90deg,#7c2418,var(--alert));}
@@ -50,10 +50,10 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #hudClock,#hudDepth,#hudFps{color:var(--bone);}
 #gpStatus{color:var(--stealth);}
 #toolReadout{position:absolute;right:14px;bottom:14px;z-index:10;pointer-events:none;text-align:right;padding:10px 12px;}
-#toolReadout .big{font-size:13px;letter-spacing:.2em;color:var(--bone);}
-#toolReadout .sub{font-size:10px;letter-spacing:.16em;color:var(--dust);margin-top:3px;}
+#toolReadout .big{font-size:17px;letter-spacing:.2em;color:var(--bone);}
+#toolReadout .sub{font-size:14px;letter-spacing:.16em;color:var(--dust);margin-top:3px;}
 .seqVent{opacity:.38;filter:grayscale(1);}
-.seqCost{margin-left:5px;color:#cda54a;font-size:9px;letter-spacing:.05em;}
+.seqCost{margin-left:5px;color:#cda54a;font-size:12px;letter-spacing:.05em;}
 #trPips .on{color:var(--gate);} #trPips .off{color:var(--dust);opacity:.7;} #trPips span{margin-left:7px;}
 #chargeMeter{width:130px;height:5px;background:#000;border:1px solid var(--line);margin-top:5px;margin-left:auto;}
 #chargeFill{height:100%;background:var(--charge);width:100%;}
@@ -63,13 +63,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #eye{width:56px;height:26px;border:1px solid var(--line);border-radius:50%/100% 100% 0 0;margin:0 auto;
   background:radial-gradient(circle at 50% 100%, var(--exposed) 0%, #221c0c 60%, #000 100%);
   box-shadow:0 0 18px 2px rgba(255,217,138,0); transition:box-shadow .2s;}
-#eyeLbl{font-size:9px;letter-spacing:.3em;color:var(--dust);margin-top:3px;}
+#eyeLbl{font-size:12px;letter-spacing:.3em;color:var(--dust);margin-top:3px;}
 #laserRange{position:absolute;left:calc(50% + 26px);top:calc(50% + 14px);z-index:10;pointer-events:none;
-  font-size:11px;letter-spacing:.14em;color:#ff5a66;text-shadow:0 0 6px #400;opacity:0;transition:opacity .15s;}
+  font-size:14px;letter-spacing:.14em;color:#ff5a66;text-shadow:0 0 6px #400;opacity:0;transition:opacity .15s;}
 #compassStrip{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;
-  font-size:11px;letter-spacing:.2em;color:var(--gate);text-shadow:0 0 6px rgba(87,224,163,.6);}
+  font-size:14px;letter-spacing:.2em;color:var(--gate);text-shadow:0 0 6px rgba(87,224,163,.6);}
 #photoStrip{position:absolute;top:24px;left:calc(50% + 42px);z-index:10;pointer-events:none;
-  font-size:10px;letter-spacing:.2em;color:var(--bone);text-shadow:0 0 6px rgba(255,217,138,.35);}
+  font-size:13px;letter-spacing:.2em;color:var(--bone);text-shadow:0 0 6px rgba(255,217,138,.35);}
 
 /* damage vignette + alert flash */
 #vignette{position:absolute;inset:0;pointer-events:none;z-index:8;opacity:0;
@@ -82,48 +82,46 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #zoneStack{display:flex;gap:16px;align-items:flex-start;justify-content:center;}
 .zoneRight{display:flex;flex-direction:column;}
 .zoneBlock{margin-bottom:10px;}
-.zoneLabel{font-size:9px;letter-spacing:.16em;color:var(--dust);margin:0 0 3px 2px;}
 .equipCell{position:relative;}
-.slotGhost{font-size:8px;letter-spacing:.1em;color:#4a4a42;}
+.slotGhost{font-size:11px;letter-spacing:.1em;color:#4a4a42;}
 .lockedCell{background:rgba(60,70,60,.12);}
 .widg{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;}
-.widgLab{font-size:7px;letter-spacing:.06em;color:var(--dust);text-align:center;line-height:1.1;}
-.widgVal{font-size:9px;color:var(--bone);margin-top:2px;}
+.widgLab{font-size:11px;letter-spacing:.06em;color:var(--dust);text-align:center;line-height:1.1;}
+.widgVal{font-size:13px;color:var(--bone);margin-top:2px;}
 #terminalUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:52;
   min-width:340px;padding:18px 22px;border:1px solid var(--line);background:rgba(5,9,7,.94);
   box-shadow:0 0 40px rgba(20,60,40,.25) inset;}
 #termRows{margin-top:12px;}
-.termRow{padding:8px 10px;margin:3px 0;border:1px solid transparent;font-size:11px;
+.termRow{padding:8px 10px;margin:3px 0;border:1px solid transparent;font-size:15px;
   letter-spacing:.14em;color:var(--bone);cursor:pointer;display:flex;justify-content:space-between;}
 .termRow.sel{border-color:var(--exposed);color:var(--exposed);background:rgba(80,200,120,.06);}
-.termRow .trMeta{color:var(--dust);font-size:10px;}
-.termHint{margin-top:12px;font-size:9px;letter-spacing:.12em;color:var(--dust);}
+.termRow .trMeta{color:var(--dust);font-size:13px;}
+.termHint{margin-top:12px;font-size:12px;letter-spacing:.12em;color:var(--dust);}
 #tipPanel{position:absolute;left:calc(50% + 205px);top:50%;transform:translateY(-50%);z-index:44;
   width:225px;pointer-events:none;}
 #tipMain{min-height:225px;padding:14px;border:1px solid var(--line);background:rgba(8,10,13,.72);
-  font-size:10px;letter-spacing:.1em;line-height:1.8;text-align:left;}
-#tipMain .tt-name{color:var(--exposed);font-weight:bold;font-size:12px;letter-spacing:.16em;display:block;margin-bottom:6px;}
+  font-size:14px;letter-spacing:.1em;line-height:1.8;text-align:left;}
+#tipMain .tt-name{color:var(--exposed);font-weight:bold;font-size:16px;letter-spacing:.16em;display:block;margin-bottom:6px;}
 #tipMain .tt-kind{color:var(--gate);display:block;margin-bottom:6px;}
 #tipMain .tt-row{color:var(--bone);display:block;}
 #tipMain .tt-dim{color:var(--dust);}
 #tipDetail{min-height:130px;margin-top:12px;padding:12px 14px;border:1px dashed var(--line);
-  background:rgba(8,10,13,.45);font-size:10px;letter-spacing:.08em;line-height:1.7;color:var(--dust);text-align:left;}
+  background:rgba(8,10,13,.45);font-size:13px;letter-spacing:.08em;line-height:1.7;color:var(--dust);text-align:left;}
 #__deadRackInspect{flex:0 0 210px;min-height:120px;align-self:stretch;padding:12px 14px;
   background:rgba(6,8,10,.5);border:1px solid var(--dust);border-radius:4px;pointer-events:auto;}
-#rackInspect .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;font-size:11px;}
-#rackInspect .tt-cat{color:var(--dust);font-size:9px;margin-bottom:8px;}
-#rackInspect .tt-body{font-size:10px;line-height:1.6;color:var(--bone);}
+#rackInspect .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;font-size:14px;}
+#rackInspect .tt-cat{color:var(--dust);font-size:12px;margin-bottom:8px;}
+#rackInspect .tt-body{font-size:13px;line-height:1.6;color:var(--bone);}
 #toolUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);z-index:40;
   text-align:center;pointer-events:none;}
-#backpackUI .stencil,#toolUI .stencil{text-shadow:0 1px 5px #000,0 0 14px #000;font-size:11px;letter-spacing:.28em;}
 .gridWrap{position:relative;display:grid;gap:3px;padding:6px;margin:12px auto 0;width:max-content;
   pointer-events:auto;background:rgba(6,8,10,.16);border:1px solid rgba(215,220,230,.13);border-radius:7px;
   backdrop-filter:blur(1.5px);}
 .cell{width:44px;height:44px;border:1px solid rgba(215,220,230,.15);border-radius:3px;
-  background:rgba(12,14,18,.28);position:relative;font-size:8px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
+  background:rgba(12,14,18,.28);position:relative;font-size:11px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
 #rackWrap{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:8px 4px;}
 .rackCol{display:flex;flex-direction:column-reverse;gap:3px;align-items:center;}
-.rackHead{font-size:8px;letter-spacing:.08em;color:var(--dust);text-align:center;white-space:nowrap;align-self:end;pointer-events:none;}
+.rackHead{font-size:11px;letter-spacing:.08em;color:var(--dust);text-align:center;white-space:nowrap;align-self:end;pointer-events:none;}
 .rcell{width:var(--rc,40px);height:var(--rc,40px);border:1px solid rgba(215,220,230,.15);border-radius:3px;
   background:rgba(12,14,18,.30);position:relative;cursor:pointer;}
 .rcell:hover{outline:1px solid var(--dust);z-index:2;}
@@ -134,7 +132,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .rcell.vent{opacity:.4;filter:grayscale(1);}
 .rcell.nextCore{outline:2px solid var(--gate);}
 .rcell img{width:82%;height:82%;position:absolute;left:9%;top:9%;image-rendering:pixelated;pointer-events:none;}
-.rcell .rlbl{position:absolute;bottom:-1px;left:1px;right:1px;font-size:7px;line-height:1;color:#dfe3ea;
+.rcell .rlbl{position:absolute;bottom:-1px;left:1px;right:1px;font-size:10px;line-height:1;color:#dfe3ea;
   text-shadow:0 1px 2px #000;pointer-events:none;overflow:hidden;white-space:nowrap;}
 .cell:hover{outline:1px solid var(--dust);z-index:2;}
 .cell.cursor{outline:2px solid var(--exposed);z-index:3;}
@@ -143,38 +141,38 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   align-items:center;justify-content:flex-end;padding:2px;}
 .itemSpan img{width:86%;height:70%;object-fit:contain;margin:auto;
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.85));}
-.itemSpan .lbl2{font-size:8px;letter-spacing:.05em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 4px #000;
+.itemSpan .lbl2{font-size:11px;letter-spacing:.05em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 4px #000;
   white-space:nowrap;overflow:hidden;max-width:100%;}
 #inspectUI{position:absolute;right:4vw;top:50%;transform:translateY(-50%);z-index:45;width:250px;padding:14px;}
 #inspectUI .gridWrap{margin:10px auto 0;}
-.seqReadout{margin-top:14px;padding:10px;border:1px dashed var(--line);font-size:10px;letter-spacing:.1em;color:var(--dust);}
+.seqReadout{margin-top:14px;padding:10px;border:1px dashed var(--line);font-size:13px;letter-spacing:.1em;color:var(--dust);}
 .seqChip{display:inline-block;border:1px solid var(--line);padding:2px 6px;margin:2px 3px 2px 0;color:var(--bone);background:#000;}
 .seqArrow{color:var(--dust);margin:0 2px;}
-.hintline{margin-top:12px;font-size:9px;letter-spacing:.12em;color:var(--dust);line-height:1.7;}
+.hintline{margin-top:12px;font-size:12px;letter-spacing:.12em;color:var(--dust);line-height:1.7;}
 .hintline b{color:var(--bone);}
 
 /* floating item card */
-#tooltip{display:none;position:absolute;z-index:60;pointer-events:none;max-width:250px;padding:9px 11px;font-size:10px;
+#tooltip{display:none;position:absolute;z-index:60;pointer-events:none;max-width:250px;padding:9px 11px;font-size:14px;
   letter-spacing:.06em;line-height:1.5;background:var(--panel);border:1px solid var(--dust);color:var(--bone);display:none;}
 #tooltip .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;}
-#tooltip .tt-cat{color:var(--dust);font-size:9px;}
+#tooltip .tt-cat{color:var(--dust);font-size:12px;}
 
 /* ---------- full-screen overlays ---------- */
 .screen{position:absolute;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;
   background:rgba(5,6,8,.88);backdrop-filter:blur(2px);}
 .screen .inner{max-width:640px;padding:34px 40px;text-align:center;}
-.screen h1{font-size:30px;letter-spacing:.5em;margin:0 0 18px;color:var(--bone);font-weight:bold;}
-.screen p{font-size:12px;letter-spacing:.12em;line-height:2;color:var(--dust);margin:8px 0;}
+.screen h1{font-size:36px;letter-spacing:.5em;margin:0 0 18px;color:var(--bone);font-weight:bold;}
+.screen p{font-size:15px;letter-spacing:.12em;line-height:2;color:var(--dust);margin:8px 0;}
 .screen p b{color:var(--bone);}
-.screen .go{margin-top:22px;font-size:11px;letter-spacing:.3em;color:var(--exposed);animation:pulse 1.6s infinite;}
+.screen .go{margin-top:22px;font-size:14px;letter-spacing:.3em;color:var(--exposed);animation:pulse 1.6s infinite;}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
 #banner{position:absolute;top:32%;left:50%;transform:translateX(-50%);z-index:70;pointer-events:none;
-  font-size:20px;letter-spacing:.5em;color:var(--gate);text-shadow:0 0 12px rgba(87,224,163,.7);opacity:0;transition:opacity .4s;}
+  font-size:26px;letter-spacing:.5em;color:var(--gate);text-shadow:0 0 12px rgba(87,224,163,.7);opacity:0;transition:opacity .4s;}
 
 /* ---------- field manual (remap) ---------- */
 #manualUI{position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(5,6,8,.9);}
 #manualUI .inner{width:min(680px,92vw);max-height:88vh;overflow:auto;padding:24px 28px;}
-#manualUI table{width:100%;border-collapse:collapse;font-size:10px;letter-spacing:.1em;margin-top:10px;}
+#manualUI table{width:100%;border-collapse:collapse;font-size:13px;letter-spacing:.1em;margin-top:10px;}
 #manualUI td{border-bottom:1px solid var(--line);padding:6px 8px;color:var(--dust);}
 #manualUI td:first-child{color:var(--bone);}
 .bindBtn{display:inline-block;min-width:86px;text-align:center;padding:3px 8px;border:1px solid var(--line);
@@ -182,20 +180,24 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .bindBtn:hover{border-color:var(--exposed);color:var(--exposed);}
 .bindBtn.listening{border-color:var(--alert);color:var(--alert);animation:pulse .6s infinite;}
 #manualUI input[type=range]{width:120px;accent-color:var(--dust);}
-.manualNote{font-size:9px;color:var(--dust);letter-spacing:.1em;line-height:1.8;margin-top:14px;border-top:1px dashed var(--line);padding-top:10px;}
+.manualNote{font-size:13px;color:var(--dust);letter-spacing:.1em;line-height:1.8;margin-top:14px;border-top:1px dashed var(--line);padding-top:10px;}
 
 /* ---------- debug console ---------- */
-#debugUI{position:absolute;top:10px;right:10px;bottom:10px;width:330px;z-index:95;padding:14px;overflow:auto;font-size:10px;letter-spacing:.08em;}
-#debugUI h3{margin:10px 0 4px;font-size:10px;letter-spacing:.2em;color:var(--alert);}
+#debugUI{position:absolute;top:10px;right:10px;bottom:10px;width:330px;z-index:95;padding:14px;overflow:auto;font-size:12px;letter-spacing:.08em;}
+#debugUI h3{margin:10px 0 4px;font-size:12px;letter-spacing:.2em;color:var(--alert);}
 #debugUI .drow{display:flex;justify-content:space-between;align-items:center;gap:6px;margin:3px 0;color:var(--dust);}
 #debugUI .drow span:last-child{color:var(--bone);}
 #debugUI input[type=range]{width:130px;accent-color:var(--alert);}
+#debugUI .dval{flex:0 0 6ch;text-align:right;} /* fixed value cell — free-width text re-flexed the row and walked the slider mid-drag */
+#debugUI button.cursor,#debugUI .drow.cursor,#debugUI label.cursor{outline:2px solid var(--exposed);} /* pad focus — the item-grid cursor look */
 #debugUI select,#debugUI button{background:#000;border:1px solid var(--line);color:var(--bone);
-  font-family:inherit;font-size:10px;padding:3px 6px;cursor:pointer;letter-spacing:.08em;}
+  font-family:inherit;font-size:12px;padding:3px 6px;cursor:pointer;letter-spacing:.08em;}
 #debugUI button:hover{border-color:var(--alert);color:var(--alert);}
 #debugUI label{display:flex;gap:6px;align-items:center;color:var(--dust);}
 #errBanner{position:absolute;left:0;right:0;bottom:0;z-index:200;background:#3a0d06;color:#ffd9d0;
-  font-size:11px;padding:8px 12px;display:none;white-space:pre-wrap;font-family:monospace;}
+  font-size:14px;padding:8px 12px;display:none;white-space:pre-wrap;font-family:monospace;}
+#igpuBanner{position:absolute;left:0;right:0;top:0;z-index:205;background:#3a2c06;color:#ffe9b0;
+  font-size:14px;padding:8px 12px;display:none;white-space:pre-wrap;font-family:monospace;cursor:pointer;letter-spacing:.05em;}
 </style>
 </head>
 <body>
@@ -228,13 +230,11 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- Rucksack -->
 <div id="backpackUI" class="hidden">
-  <div class="stencil">RUCKSACK · THE WORLD DOES NOT PAUSE</div>
   <div id="zoneStack"></div>
 </div>
 
 <!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
 <div id="toolUI" class="hidden">
-  <div class="stencil">THE TOOL · BARREL RACK</div>
   <div id="rackWrap"></div>
   <div class="seqReadout hidden"><div id="modSequence">—</div></div>
 </div>
@@ -262,20 +262,24 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- Field manual: controls & analog settings notes -->
 <div id="manualUI" class="hidden"><div class="inner panel">
-  <div class="stencil" style="font-size:12px;">📖 <b>Field Manual</b> — quartermaster's copy, margins full of a child's handwriting</div>
+  <div class="stencil" style="font-size:16px;">📖 <b>Field Manual</b></div>
+  <div style="margin-top:8px;font-size:14px;letter-spacing:.14em;color:var(--bone);">Shadow hides you. Light betrays you. Noise carries.</div>
   <table id="bindTable"></table>
-  <div class="drow" style="display:flex;justify-content:space-between;margin-top:12px;font-size:10px;color:var(--dust);">
+  <div class="drow" style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:var(--dust);">
     <label>Mouse feel <input type="range" id="sensMouse" min="0.4" max="3" step="0.1"></label>
     <label>Stick feel <input type="range" id="sensPad" min="0.4" max="3" step="0.1"></label>
     <label><input type="checkbox" id="invertY"> Invert look</label>
   </div>
   <div class="manualNote">
-    Pads pair through your system's Bluetooth, then press any button here — the engine listens for it.<br>
-    Settings live as objects: the <b>Pocket Watch</b> tells time on your HUD while carried · the <b>Compass</b> points to the beacon ·
-    the <b>Optics Dial</b> cycles render fidelity · the <b>Volume Knob</b> cycles sound. Lose them, lose the setting.<br>
-    Bindings hold for this session only. Close with the same key that opened this.<br>
-    With <b>GRIP fed by a BEAM</b> the triggers trade jobs — <b>LT/LMB</b> casts the thread and carries,
-    <b>RT/RMB</b> pins the carried load mid-air until gripped again. Other Tools keep the standard layout.
+    Pads: pair via system Bluetooth, then press any button here.<br>
+    Settings are objects: the <b>Pocket Watch</b> keeps HUD time · the <b>Compass</b> marks the beacon ·
+    the <b>Optics Dial</b> cycles render fidelity · the <b>Volume Knob</b> cycles sound. Lose the object, lose the setting.<br>
+    <b>△</b> in the pockets: a rig piece folds its zone · a container opens · a usable is used where it lies
+    (a LIT core blows from whoever carries it) · an empty cell beds the wielded tool.
+    In hand: <b>tap</b> opens pockets, <b>hold</b> stows a tool.<br>
+    Bindings hold for this session only. Close with the key that opened this.<br>
+    <b>GRIP fed by a BEAM</b> trades triggers: <b>LT/LMB</b> casts the thread and carries ·
+    <b>RT/RMB</b> pins the load mid-air until gripped again. Other Tools keep the standard layout.
   </div>
 </div></div>
 
@@ -344,20 +348,17 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <ellipse cx="798" cy="398" rx="14" ry="16" fill="#ddd6c6" stroke="none"/>
 <ellipse cx="846" cy="396" rx="15" ry="16" fill="#ddd6c6" stroke="none"/>
 </g></svg>
-  <p>The Ashen Covenant strings its camps along the valley floor.<br>Tonight the generator stuttered, and your cell door forgot its faith.</p>
-  <p><b>Follow the valley to the beacon.</b> Every zealot carries the same Tool you do — take theirs apart and make yours stranger.</p>
-  <p>Shadow hides you. Light betrays you. Noise carries.</p>
-  <p style="font-size:10px;">WASD move · <b>E</b> grab / reload / place · <b>LMB</b> fire or hurl · Shift sprint toggles · <b>B</b> rucksack · <b>Tab</b> tool · <b>X</b> inspect in menus · F light · M manual</p>
+  <p style="font-size:14px;">WASD · <b>E</b> interact · <b>LMB</b> fire · <b>M</b> manual</p>
   <div class="go" id="bootStatus">COMPILING THE VALLEY…</div>
 </div></div>
 <div id="deathScreen" class="screen hidden"><div class="inner panel">
   <h1 style="color:var(--alert);">RECLAIMED</h1>
-  <p>"The Covenant does not punish. It reteaches."</p>
   <p id="deathStats"></p>
   <div class="go">— any key: slip the door again —</div>
 </div></div>
 
 <div id="errBanner"></div>
+<div id="igpuBanner"></div>
 <script type="text/plain" id="gameSrc">
 'use strict';
 // ============================================================
@@ -371,7 +372,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='v22l';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.0';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -396,11 +397,11 @@ const PARAMS = {
   maxEnemies:  {v:3,   min:0,   max:6,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
-  fogDensity:  {v:0.014,min:0,  max:0.1,  step:0.002,label:'fog density'},
   fogWeather:  {v:-1,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
   nightFloor:  {v:0.012,min:0.002,max:0.06,step:0.002,label:'night ambient'},
 };
 const P = k => PARAMS[k].v;
+const PARAM_DEFAULTS={}; for(const k in PARAMS) PARAM_DEFAULTS[k]=PARAMS[k].v;   // boot literals — NEW GAME and slots without a value land here
 
 const FLAGS = { god:false, noclip:false, seeAll:false };
 
@@ -457,11 +458,13 @@ const ACTIONS = [
   {id:'aim',      label:'Aim (hold)',          kb:'Mouse2',      pad:6},   // L2
   {id:'interact', label:'Grab / reload / place',kb:'KeyE',       pad:2},   // square
   {id:'throwHeld',label:'Hurl carried (alt)',  kb:'KeyG',        pad:null},
-  {id:'flash',    label:'Lantern',             kb:'KeyF',        pad:3},   // triangle
+  {id:'flash',    label:'Lantern / use · open held', kb:'KeyF',  pad:3},   // triangle
   {id:'leanL',    label:'Lean left',           kb:'KeyQ',        pad:4},   // L1
   {id:'leanR',    label:'Lean right',          kb:'KeyX',        pad:5},   // R1
   {id:'cycleL',   label:'Holster · prev tool', kb:null,          pad:14},  // d-left
   {id:'cycleR',   label:'Holster · next tool', kb:'KeyT',        pad:15},  // d-right (Q is spoken for — lean)
+  {id:'reelIn',  label:'Wheel up (reel · carry)',   kb:null, pad:12},  // d-up  = mouse-wheel up
+  {id:'reelOut', label:'Wheel down (reel · carry)', kb:null, pad:13},  // d-down = mouse-wheel down
   {id:'bag',      label:'Rucksack',            kb:'KeyB',        pad:8},   // share
   {id:'tool',     label:'Tool rack / close layer',kb:'Tab',       pad:1},   // circle
   {id:'manual',   label:'Field manual',        kb:'KeyM',        pad:9},   // options
@@ -470,7 +473,7 @@ const ACTIONS = [
 const BIND = {};            // action -> {kb, pad}
 ACTIONS.forEach(a=>BIND[a.id]={kb:a.kb, pad:a.pad});
 const INPUT = {
-  keys:{}, mouse:{}, mdx:0, mdy:0, wheel:0,
+  keys:{}, mouse:{}, mdx:0, mdy:0, wheel:0, padWheelT:0,
   padButtons:[], padPrevButtons:[], padAxes:[0,0,0,0], padConnected:false,
   sensMouse:1.0, sensPad:1.4, invertY:false,
   frameDown:{},             // action edges this frame
@@ -502,6 +505,21 @@ function navEdges(){        // one read for the three menu cursors — arrows + 
   return { up:!!(k['ArrowUp']||p[12]),    down:!!(k['ArrowDown']||p[13]),
            left:!!(k['ArrowLeft']||p[14]), right:!!(k['ArrowRight']||p[15]),
            confirm:!!k['KeyE'], back:!!k['Escape'] };   // kb halves only — each menu ORs its own pad face
+}
+// D-PAD UP/DOWN ARE THE MOUSE WHEEL — pad 12/13 (reelIn/reelOut) inject the SAME
+// notches the physical wheel does (one detent up = wheel-up, down = wheel-down) straight
+// into INPUT.wheel, so they drive EVERYTHING the wheel drives — carry distance AND the
+// rope reel — identically, not just "reel". First notch fires on the press EDGE, then
+// auto-repeats while held at ~one notch/0.12s (the wheel path is a discrete per-frame
+// accumulator, so a notch cadence — not a continuous rate — and a held d-pad still keeps
+// reeling). Gated OUT of menus, where these same buttons walk the list cursor (navEdges).
+function padWheelStep(dt){
+  if(uiMenusOpen()){ INPUT.padWheelT=0; return; }
+  const dir=(down('reelOut')?1:0)-(down('reelIn')?1:0);   // reelOut = wheel-down (+deltaY), reelIn = wheel-up (-deltaY)
+  if(dir===0){ INPUT.padWheelT=0; return; }
+  if(pressed('reelIn')||pressed('reelOut')){ INPUT.wheel+=dir; INPUT.padWheelT=0.12; return; }   // edge: the first notch, now
+  INPUT.padWheelT-=dt;
+  if(INPUT.padWheelT<=0){ INPUT.wheel+=dir; INPUT.padWheelT=0.12; }                               // held: repeat at the notch cadence
 }
 
 window.addEventListener('keydown',e=>{
@@ -684,7 +702,7 @@ uniform vec4  uGlobs[10];   // xyz center · w radius
 uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uHasTool;
-uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w unused
+uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w melee whip phase 0→1
 uniform float uExposure;    // 0..1 player light exposure — dims the viewmodel in cover
 
 uniform int   worldItemCount;
@@ -1426,6 +1444,20 @@ vec2 map(vec3 p){
       float arm=sdCapsule(vl, vec3(0.14,-0.30,-0.36), vec3(0.005,-0.10,-0.055), 0.052);
       if(arm<res.x) res=vec2(arm,21.0);
     }
+    else if(uToolCfg.w>0.001){
+      // EMPTY HANDS — the whip snap. Phase w runs 0→1 over 0.3s; ease-in-out lives in
+      // the pose curves. 3 prims, the tool's own mats (20/21) — uExposure dims them free.
+      float ph=uToolCfg.w;
+      float sw=ph*ph*(3.0-2.0*ph);                                          // master ease
+      float snap=smoothstep(0.25,0.5,ph)*(1.0-smoothstep(0.55,1.0,ph));     // fling, then settle
+      vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame
+      float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050);
+      if(warm<res.x) res=vec2(warm,21.0);
+      vec3 wtip=hd+mix(vec3(0.05,0.14,0.02), vec3(-0.02,-0.03,0.55), snap); // curled overhead → flung long
+      float lash=sdCapsule(vl, hd, wtip, mix(0.026,0.011,snap));
+      lash=min(lash, length(vl-wtip)-0.020);                                // the cracker bead
+      if(lash<res.x) res=vec2(lash,20.0);
+    }
   }
   return res;
 }
@@ -1672,7 +1704,7 @@ void main(){
     }
     if(m>19.5 && m<21.5) col *= mix(0.35, 1.0, smoothstep(0.0, 0.8, uExposure)); // hands darken with the cover you stand in — viewmodel only
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
-    col = mix(col, skyColor(rayDir), fogAmt);            // aerial perspective, one truth
+    col = mix(col, uSkyLo, fogAmt);                      // opaque distance haze: horizon tint, NOT skyColor (no sun/stars/clouds bleed through geometry)
   }else{
     col = skyColor(rayDir);   // a true miss is sky; the ground march owns the land
   }
@@ -1708,8 +1740,25 @@ canvas.addEventListener('webglcontextlost', e=>{
   b.style.display='block';
   b.textContent='GPU CONTEXT LOST — the driver reset (usually the frame was too heavy for this GPU). Reload to retry; if it repeats, close other GPU apps or try another browser.';
 });
-const gl = canvas.getContext('webgl2');
+const gl = canvas.getContext('webgl2',{powerPreference:'high-performance'});   // Optimus laptops: ask for the real GPU, not the Intel chip
 if(!gl) fatal('WebGL2 unavailable — this engine needs it.');
+// GPU identity — the hint above is only a hint; name what we actually got.
+const glRenderer=(()=>{ try{
+  const x=gl.getExtension('WEBGL_debug_renderer_info');                        // may be null (Firefox etc.)
+  return String(gl.getParameter(x?x.UNMASKED_RENDERER_WEBGL:gl.RENDERER)||'?');
+}catch(e){ return '?'; } })();
+// integrated-GPU tripwire — conservative on purpose: Intel HD/UHD/Iris only, so a
+// discrete chip never matches. A hit on a gaming laptop = dual-GPU miss. Warn once,
+// never block boot, never touch renderScale.
+if(/intel.*(hd|uhd|iris)/i.test(glRenderer) && !(_ls()&&_ls().getItem('sotv_igpu_ack'))){
+  const b=document.getElementById('igpuBanner');
+  b.textContent='RUNNING ON INTEGRATED GRAPHICS — '+glRenderer+'. If this machine has a gaming GPU: Windows Settings → Display → Graphics → your browser → High performance. — click to dismiss';
+  b.style.display='block';
+  b.addEventListener('mousedown',e=>e.stopPropagation());                      // the ack click must not double as "any key"
+  b.addEventListener('click',e=>{ e.stopPropagation(); b.style.display='none';
+    const ls=_ls(); if(ls) try{ ls.setItem('sotv_igpu_ack','1'); }catch(_){}
+  });
+}
 // slow driver compiles (ANGLE/D3D) can take a while — say so instead of black
 { const b=document.getElementById('errBanner');
   b.style.display='block'; b.style.background='rgba(20,24,18,0.85)';
@@ -1999,14 +2048,15 @@ function marchWorldJS(ox,oy,oz,dx,dy,dz,maxDist){
 const playerPos={
   x:2.5,y:0,z:2.5, velY:0, onGround:true, coyoteT:0, jumpBufT:0,
   health:100,maxHealth:100,
-  status:{burn:0,bleedT:0}, burnedMax:0,     // BURN pools · BLEED runs a clock · fire scars the ceiling
+  status:{burn:0,bleedT:0,bleedN:0}, burnedMax:0,     // BURN pools · BLEED stacks cuts on a clock · fire scars the ceiling
   eyeHeight:1.32, baseHeight:1.32,          // a child's eye line
   isAiming:false,isSprinting:false,isCrouching:false,
   lean:0,currentLean:0,currentFov:1.0,
   flashlightOn:false,
   noiseLevel:0.2, exposure:0.5, muzzleGlow:0,
   camYawOffset:0,camPitchOffset:0,
-  aimAmt:0, bobX:0, bobY:0, viewKick:0, walkCycle:0,
+  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, walkCycle:0,
+  velX:0, velZ:0, swinging:false, launched:false,   // velX/velZ = the ONLY horizontal velocity state (rope swing + slide-hop launch)
 };
 let cameraYaw=0.6, cameraPitch=0;
 let gameTime=0, timeScale=1, runClock=0, kills=0, depth=1;
@@ -2513,6 +2563,10 @@ function levelSdfJS(px,py,pz){
 let gameState='intro';                        // intro | play | dead | hideout
 const worldItems=[];                          // {item,pos,vel,ry,rotVel,held}
 const projectiles=[];                         // live shots
+let _worldGen=0;                              // WORLD GENERATION — teardownWorld/resetLevel bump it. Any loop that can
+                                              // kill the world through its own body (damagePlayer→onDeath→deployTo)
+                                              // captures it at entry and bails when it moves: the arrays it held are a
+                                              // dead world's and its index is a lie (v22n fault: pr.stuck, pr undefined)
 const tracersR=[];                            // render segments {a,b,col,life}
 const decals=[];
 const dynLights=[];                           // {pos,col,intensity,ttl}
@@ -2596,7 +2650,12 @@ function updateDayNight(){
   // dense cap, and the far plane follows the fog wall in: march no farther than
   // where transmittance ~2.5% (exp(-fog·far)=0.025 → far=3.7/fog). Fog-opaque
   // distance ≈ far, so shrinking uFar is pure FPS win — nothing visible is cut.
-  const baseFog=activeLevel&&activeLevel.atmos ? activeLevel.atmos.fog : P('fogDensity');
+  // the no-atmos fallback (the open valley) is pinned CLEAR. It was the
+  // fogDensity slider, and any nonzero base mixes skyColor() — sun disk, stars,
+  // clouds — through geometry with distance: the world reads translucent
+  // (KNOWN_BUGS backlog). Weather still thickens from zero via the lerp below;
+  // authored levels keep their own haze.
+  const baseFog=activeLevel&&activeLevel.atmos ? activeLevel.atmos.fog : 0.0;
   const baseFar=activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0;
   dayNight.fogE=Math.max(baseFog, lerp(baseFog,0.085,fogW));      // full bank: see ~43m
   dayNight.farE=Math.min(baseFar, 3.7/Math.max(dayNight.fogE,1e-4));
@@ -2923,34 +2982,34 @@ const ITEM_DEFS={
   hairTrigger:()=>new ToolMod('Hair Trigger','#795548','stat',{fireRate:-0.14},'Faster follow-ups'),
   // --- sequence: projectile cores ---
   boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt',base:0},'Core · fires a slug from the magazine'),
-  sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18,burn:15},'Core · bursting ember — the fire rides the blast now · 15 burn · 18⚡'),
-  emberCore:  ()=>new ToolMod('EMBER','#e64a19','proj',{kind:'spark',base:22,burn:28},'Core · fire that keeps eating — one dose nearly fills the pool · 28 burn · 22⚡'),
-  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: the shot becomes a held, continuous thread (less hurt) · alone atop a column: tactical laser'),
+  sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18,burn:15},'Core · explodes where it hits — burns (15) · 18⚡'),
+  emberCore:  ()=>new ToolMod('EMBER','#e64a19','proj',{kind:'spark',base:22,burn:28},'Core · explodes — heavy burn (28) · 22⚡'),
+  beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: hold to fire it as a continuous beam (less hurt) · alone at the top of a column: aiming laser · +8⚡'),
   pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
   decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands, sings to the camp for 12s · 10⚡'),
-  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · the blast itself — no flight: it goes off the moment it is cast, arm\'s length from the muzzle or AT a relay\'s point. FUSE restores the lob. No friends in the blast · 26⚡'),
-  waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a wide slow wall of pressure — washes a ~1.8m swath, each foe pays once · 10⚡'),
-  sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · teeth, not reach — the whole tool cycles at the floor; its own bite dies at arm\'s length · 1⚡'),
-  warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · you arrive where it dies. Loud on arrival, unless you taught it to whisper · 15⚡'),
-  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · a slug that pays in lead — its feeders ride free. Threads refuse the discount'),
-  slugCore:   ()=>new ToolMod('SLUG','#a1887f','proj',{kind:'slug',base:0},'Core · three rounds, one fat blow — ×3 tool hurt, slow hands. Housed in a relay, the tool keeps its pace'),
-  orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · just an orb. Slow, patient, six seconds aloft — it becomes whatever you feed it · 8⚡'),
+  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · big explosion where it is cast — no flight, and no friends in the blast (you included). FUSE gives it flight · 26⚡ · in hand [F/△]: light a 5s charge, then throw'),
+  waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a slow wide wall — shoves, and hits each foe once in a ~1.8m swath · 10⚡'),
+  sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · point-blank teeth — the whole tool fires at its fastest; the bite ends ~4m out · 1⚡'),
+  warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · you teleport to where it stops. Arrival is loud — HUSH quiets it · 15⚡'),
+  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · fires a round; mods feeding it cost no ⚡. Under a BEAM: hitscan, one round per pulse'),
+  slugCore:   ()=>new ToolMod('SLUG','#a1887f','proj',{kind:'slug',base:0},'Core · three rounds, one heavy shot — ×3 tool hurt, +0.45s cycle. Housed in a relay: no slowdown'),
+  orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · a slow orb, 6s aloft — weak alone; the mods feeding it decide what it becomes · 8⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
   velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:1.6,surcharge:4},'Next core ×1.6 speed · +4⚡'),
   bounce:     ()=>new ToolMod('RICOCHET','#3c8f7c','mod',{bounce:2,surcharge:6},'Next core bounces twice · +6⚡'),
-  pierce:     ()=>new ToolMod('DRILL','#8f6a3c','mod',{pierce:2,surcharge:8},'Next core passes through two bodies · +8⚡'),
+  pierce:     ()=>new ToolMod('DRILL','#8f6a3c','mod',{pierce:1,surcharge:8},'Next core drills through bodies — hits everyone in its path; walls still stop it · +8⚡'),
   heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6,surcharge:5},'Next core arcs and lands harder · +5⚡'),
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
-  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core opens a wound · 1 hurt / 1.5s for 30s · +5⚡'),
+  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core causes Bleed — 1 hp/s for 15s, stacks to five · +5⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
   gummies:    ()=>{ const it=new Item('Gummies',1,1,'#a04a5e'); it.gummies=true; return it; },
   bandAid:    ()=>{ const it=new Item('Band-Aid',1,1,'#c9b78f'); it.bandAid=true; return it; },
   aloe:       ()=>{ const it=new Item('Aloe Vera',1,1,'#57764a'); it.aloe=true; return it; },
   // ---- armor (stats provisional) ----
-  rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6}),
+  rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6,zoneOpen:true}),
   beltBasic:  ()=>new Armor('Web Belt',2,1,'#4a4436','belt',{invCols:1,invRows:1,slotMode:true}),
   holster1:   ()=>new Armor('Hip Holster',1,2,'#4e4030','holster',{invCols:1,invRows:1,slotMode:true,zoneOpen:true}),
   holster2:   ()=>new Armor('Twin Holster',1,2,'#54432c','holster',{invCols:2,invRows:1,slotMode:true,zoneOpen:true}),
@@ -2965,19 +3024,19 @@ const ITEM_DEFS={
   helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
-  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it from the blast · +4⚡'),
-  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core casts the core ABOVE it from its first touch — world or flesh, no stick, no wait. Nothing above: it just impacts. FUSE outranks it on the same core · +5⚡'),
-  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{fuseAdd:1.5,surcharge:3},'Next core waits +1.5s more on the fuse · +3⚡'),
-  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
-  boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
-  homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core hunts the nearest warm thing ahead of it — hard turns, honest ones. Cover still works · +7⚡'),
-  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:10},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +10⚡, never waived'),
-  chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core forgets the straight line. Threads arc like lightning; with SEEKER the arcs bite the nearest warm thing · +6⚡'),
+  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it, off the stuck face · +4⚡'),
+  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core fires the one after it, where it hits — the cast leaves along the struck face. Nothing racked above: plain impact · +5⚡'),
+  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{timer:1.5,surcharge:3},'Next core goes off at 1.5s or on first touch, whichever comes first — and fires the one after it. On a FUSE: +1.5s patience instead · +3⚡'),
+  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact — the shards inherit its steer (SEEKER homes · CHAOS flies wild · RETURN boomerangs); with CONTACT they carry its payload · +7⚡'),
+  boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core flies out, banks, and returns to the thrower — both passes cut · +6⚡'),
+  homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core steers toward the nearest warm target ahead — cover still works · +7⚡'),
+  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core fires free — no base ⚡, no round spent · +1⚡, never waived'),
+  chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core flies wild and hits +45% harder — stacks twice. Beams arc like lightning · +6⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
-  gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
+  gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glue glob — sticks to the world and to other globs. Behind a BEAM: a physics gun. Dies in flight: sets there · 6⚡'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
   lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'A light of your own. It sees you back. [F]'),
-  beltFeeder: ()=>new ToolMod('BELT-FEEDER','#6d4c41','util',{beltFeed:true},'Chambers one round every 0.9s from your pockets. It ticks while it works — a suppressed tool hushes it'),
+  beltFeeder: ()=>new ToolMod('BELT-FEEDER','#6d4c41','util',{beltFeed:true},'Chambers a round every 0.9s from your pockets — ticks softly; a suppressor hushes it'),
   // --- analog settings, as objects ---
   watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','While carried, the HUD keeps time.'),
   compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon — or the nearest exfil in a raid.'),
@@ -3021,7 +3080,7 @@ class Armor extends Item{
   desc(){
     switch(this.armorType){
       case 'plates': return 'incoming ×'+this.damageMult+this.wearTag();
-      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port (dormant)':'')+this.wearTag();
+      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port · dormant':'')+this.wearTag();
       case 'goggles': case 'headphones': return 'a settings device — dials live inside'+this.foldTag();
       default: return this.invCols? this.invCols+'×'+this.invRows+' pockets'+this.foldTag():'';
     }
@@ -3089,7 +3148,7 @@ function adjustWidget(wd,dir){
     v=Math.min(wd.max, Math.max(wd.min, +(v+dir*wd.step).toFixed(3)));
     if(wd.functional&&wd.set) wd.set(v); else wd._stub=v;
   }
-  toast(wd.label+' · '+widgetValueText(wd)+(wd.functional?'':' (not wired yet)'));
+  toast(wd.label+' · '+widgetValueText(wd)+(wd.functional?'':' · not wired'));
   playSound('click');
 }
 const EQUIP_SLOTS=['helmet','goggles','headphones','plates','harness','holster','belt','rucksack'];
@@ -3097,6 +3156,10 @@ let equip={helmet:null,goggles:null,headphones:null,plates:null,harness:null,hol
 let BAG_COLS=5,BAG_ROWS=6;
 const GUN_COLS=4,GUN_ROWS=4;
 let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
+// POCKETS — the four slots sewn to the player, not to any gear: present even naked,
+// even after a full-wipe death (the container is permanent; only its CONTENTS are taken).
+const POCKET_COLS=4, POCKET_ROWS=1;
+const pocketsGrid=Array(POCKET_ROWS).fill(null).map(()=>Array(POCKET_COLS).fill(null));
 // legacy surface: bagGrid aliases the EQUIPPED rucksack's own grid (live reference)
 function syncBagAlias(){
   const r=equip.rucksack;
@@ -3116,17 +3179,20 @@ function invZones(){
                  external:true}];
   return playerZones();
 }
-// harness + settings devices + holster FOLD — [X] on the rig item opens/closes their
-// zone. Session-only state on the item (itemToJSON never sees zoneOpen); harness and
-// devices default CLOSED to save space. The holster defaults OPEN — it is the target
-// of the Triangle wield-swap, and hiding it every session would tax the core verb
-// (its def carries zoneOpen:true). d-pad cycling reads holster.inv directly and never
-// cares. The rucksack and the belt slot-rack never fold.
-const FOLD_SLOTS=['harness','goggles','headphones','holster'];
+// harness + settings devices + holster + rucksack FOLD — [X] on the rig item opens/
+// closes their zone. Session-only state on the item (itemToJSON never sees zoneOpen);
+// harness and devices default CLOSED to save space. The holster and the rucksack
+// default OPEN (defs carry zoneOpen:true) — one is the Triangle wield-swap's target,
+// the other is the main bag; hiding either every session would tax a core verb.
+// d-pad cycling reads holster.inv directly and never cares; autoplace/reload/ammo
+// counts walk storageZones (playerZones(true)) and see folded pockets fine.
+// The belt slot-rack never folds.
+const FOLD_SLOTS=['harness','goggles','headphones','holster','rucksack'];
 const zoneFolds=it=>!!it&&FOLD_SLOTS.includes(it.armorType);
 const zoneShut=it=>zoneFolds(it)&&!it.zoneOpen;
 function playerZones(all){
   const z=[{id:'equip',label:'RIG',equipCol:true,cols:1,rows:EQUIP_SLOTS.length}];
+  z.push({id:'pockets',label:'POCKETS',grid:pocketsGrid,cols:POCKET_COLS,rows:POCKET_ROWS,storage:true});   // ALWAYS present — before every equipped container; storage:true wires it into storageZones/autoPlaceAny/ammo-count for free
   const push=slot=>{ const it=equip[slot];
     if(it&&it.inv&&it.invCols>0&&(all||!zoneShut(it)))
       z.push({id:slot,label:it.name.toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
@@ -3145,6 +3211,8 @@ function autoPlaceAny(item){
   const zs=storageZones().filter(z=>!z.external);
   const order=[...zs];
   const pref=id=>{ const i=order.findIndex(z=>z.id===id); if(i>0) order.unshift(order.splice(i,1)[0]); };
+  const defer=id=>{ const i=order.findIndex(z=>z.id===id); if(i>=0&&i<order.length-1) order.push(order.splice(i,1)[0]); };
+  defer('pockets');   // the always-there safety net catches overflow LAST — every real container gets first refusal
   if(item instanceof Tool) pref('holster');
   if(item instanceof Ammunition||item instanceof Magazine) pref('belt');
   for(const z of order){
@@ -3256,7 +3324,9 @@ function menuSet(view){
 }
 function menuInspect(item){
   Menus.inspect=item; inspectItem=item;
-  if(item instanceof Tool || (item && item.inv)) setFocus(2);   // pockets are pockets
+  // pockets are pockets — but a world-side open (menus closed, carried item) has
+  // no cursor to send: the panel is for the eyes until a menu comes up under it
+  if((item instanceof Tool || (item && item.inv)) && uiMenusOpen()) setFocus(2);
   else if(!item && currentFocus===2) setFocus(Menus.view==='tool'?1:0);
   refreshInvUI();
 }
@@ -3336,6 +3406,7 @@ function handHold(item){
 // the held item leaves the world (it went into a pocket)
 function consumeHeld(){
   const wi=worldItems.indexOf(heldWorld.w); if(wi>=0) worldItems.splice(wi,1);
+  if(!uiMenusOpen()&&inspectItem===heldWorld.w.item) menuInspect(null);   // world-side pockets leave with the hands
   heldWorld.w.held=false; heldWorld=null;
   document.getElementById('crosshair').classList.remove('carrying');
 }
@@ -3387,6 +3458,7 @@ function interactInventory(){
 
   if(heldWorld){
     const it=heldWorld.w.item;
+    if(it._armT!=null){ toast('IT IS LIT'); playSound('empty'); return; }   // an armed core never enters a grid
     // supply crates are TAKE-ONLY: they reseed on every deploy — whatever you leave, the
     // valley eats. The stash (no external flag) is the one box that accepts.
     if(f.external){ toast('A SUPPLY CRATE — TAKE ONLY'); playSound('empty'); return; }
@@ -3468,18 +3540,20 @@ function interactInventory(){
   playSound('click');
 }
 
+// the fold verb, shared by [X] and [△] on the rig column
+function toggleZoneFold(it){
+  it.zoneOpen=!it.zoneOpen;
+  clampZone();                                      // the stack changed shape — never strand the cursor
+  toast(it.name.toUpperCase()+(it.zoneOpen?' · OPEN':' · CLOSED')); playSound('click');
+  refreshInvUI();
+}
 // [X] — inspect · activate. Magazines & spare tools open their own pockets.
 function activateAtCursor(){
   const f=focusGrid();
-  if(f.equipCol){                                       // X on the rig: fold a harness/device zone open·closed
+  if(f.equipCol){                                       // X on the rig: fold a harness/device/rucksack zone open·closed
     clampCursor(f);
     const it=cellAt(f);
-    if(it&&zoneFolds(it)){
-      it.zoneOpen=!it.zoneOpen;
-      clampZone();                                      // the stack changed shape — never strand the cursor
-      toast(it.name.toUpperCase()+(it.zoneOpen?' · OPEN':' · CLOSED')); playSound('click');
-      refreshInvUI(); return;
-    }
+    if(it&&zoneFolds(it)){ toggleZoneFold(it); return; }
     if(inspectItem) closeInspect();
     return;
   }
@@ -3515,12 +3589,14 @@ function activateAtCursor(){
 function closeInspect(){ menuInspect(null); playSound('click'); }
 function renderInspect(){
   const ui=document.getElementById('inspectUI');
-  if(!inspectItem || !uiMenusOpen()){ ui.classList.add('hidden'); return; }
+  // menus open — or the carried item's own pockets, drawn over the world (△ tap)
+  const carriedOpen=heldWorld&&heldWorld.w.item===inspectItem;
+  if(!inspectItem || !(uiMenusOpen()||carriedOpen)){ ui.classList.add('hidden'); return; }
   ui.classList.remove('hidden');
   document.getElementById('inspectTitle').textContent=inspectItem.name.toUpperCase()+' — POCKETS';
   const body=document.getElementById('inspectBody');
   if(inspectItem instanceof Magazine){
-    body.innerHTML='<div style="margin-top:8px;font-size:11px;letter-spacing:.12em;">'
+    body.innerHTML='<div style="margin-top:8px;font-size:14px;letter-spacing:.12em;">'
       +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · '+inspectItem.acceptedType+'</div>';
   }else if(inspectItem instanceof Tool){
     body.innerHTML='<div id="inspectRack"></div>';
@@ -3532,13 +3608,42 @@ function renderInspect(){
   }else body.innerHTML='';
 }
 
-// right-click / [F] — the analog "use" verb
+// right-click / [F/△] — the analog "use" verb. Owner-approved precedence:
+// container → toggle its submenu/fold · usable → useItem · empty cell → stow
+// the wielded tool (existing). The wield-swap (△ on a pocketed Tool) and the
+// magazine verbs (unload · feed) keep their old seats — a Tool's "use" IS the
+// wield, a mag's IS its rounds; their panels stay on [X].
 function quickUse(){
-  const f=focusGrid(); if(!f.grid&&!f.rack) return;
+  const f=focusGrid();
+  if(f.equipCol){                          // △ on the rig folds like [X]: the rig item IS its zone
+    clampCursor(f);
+    const it=cellAt(f);
+    if(it&&zoneFolds(it)) toggleZoneFold(it);
+    else playSound('click');
+    return;
+  }
+  if(!f.grid&&!f.rack) return;
   clampCursor(f);
   const cell=cellAt(f);
+  if(!cell && activeTool && currentFocus===0 && f.grid && !f.equipCol && !f.rack && !f.external && !f.locked){
+    // △ on an EMPTY pocket: the wield goes to bed — the reverse of the wield-swap.
+    // One object, one home (the v22j lesson): the wield lives nowhere else, so
+    // write it exactly once. Footprint-checked; take-only crates and dials refuse.
+    const t=activeTool;
+    const ok=f.slotMode ? !f.grid[cursorY][cursorX] : gridFits(t,cursorX,cursorY,f.grid,f.cols,f.rows);
+    if(!ok){ playSound('empty'); return; }
+    _endBeams(); reloadTimer=0;                       // same teardown as wieldTool
+    activeTool=null;
+    if(f.slotMode){ f.grid[cursorY][cursorX]=t; t.x=cursorX; t.y=cursorY; }
+    else placeInGrid(t,cursorX,cursorY,f.grid);
+    playSound('place'); refreshInvUI(); updateToolReadout(); return;
+  }
   if(!cell && !f.rack) return;            // rack verbs (unchain/strip) work on empty cells
   if(cell instanceof Tool && currentFocus===0){ wieldTool(cell,f); return; }
+  if(cell && cell.inv && currentFocus!==2){               // container → its pockets, toggled (same panel [X] opens)
+    if(inspectItem===cell){ closeInspect(); return; }
+    menuInspect(cell); playSound('click'); return;
+  }
   if(cell instanceof Magazine && cell.loaded>0 && !heldWorld){   // F: shake the rounds out into your hand
     const rounds=new Ammunition(cell.acceptedType+' rounds','#a07c2c',cell.acceptedType,cell.loaded);
     cell.loaded=0;
@@ -3555,7 +3660,7 @@ function quickUse(){
       playSound('reload'); refreshInvUI(); return;
     }
   }
-  if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
+  if(cell){ useItem(cell,{f}); return; }   // usable → the ONE use verb, spent from this very cell
   playSound('click');
 }
 function wieldTool(tool,src){
@@ -3568,7 +3673,7 @@ function wieldTool(tool,src){
   reloadTimer=0;                                     // the half-fed reload dies with the swap
   const old=activeTool;
   activeTool=tool;
-  if(src&&src.id==='holster') holsterCur=sy*src.cols+sx;   // d-pad cycling resumes from the drawn slot
+  if(src&&src.id==='holster'){ holsterCur=sy*src.cols+sx; holsterDir=0; }   // d-pad cycling resumes from the drawn slot, direction unset
   if(old){
     const back=src&&src.grid&&!src.external;         // never stow into a take-only crate
     if(back&&src.slotMode&&!src.grid[sy][sx]){ src.grid[sy][sx]=old; old.x=sx; old.y=sy; }
@@ -3581,13 +3686,19 @@ function wieldTool(tool,src){
 // without opening a menu. The outgoing wield drops into the slot the incoming
 // tool came from; empty and non-tool slots are skipped; the walk wraps. An empty
 // holster answers with a soft click, nothing more.
-let holsterCur=-1;              // slot the current wield was drawn from — session-only
+let holsterCur=-1, holsterDir=0;   // slot the current wield was drawn from + the walk's last direction — session-only
 function cycleHolster(dir){
   const h=equip.holster, inv=h?h.inv:null;
   if(inv){
     const cols=h.invCols, n=cols*h.invRows;
     const start=holsterCur>=0?holsterCur:(dir>0?-1:n);   // fresh hands enter from the near edge
-    for(let s=1;s<=n;s++){
+    // TURNABOUT — the swap parks the LAST wield in holsterCur itself, and the scan
+    // used to start one step PAST it, so reversing never took that tool back; on a
+    // 2-slot rack +1 and -1 land on the SAME slot mod 2 and both buttons walked one
+    // loop. A direction change starts the scan ON holsterCur: ◀ after ▶ is a true
+    // "previous", on racks of any size.
+    const s0=(holsterCur>=0&&holsterDir&&dir!==holsterDir)?0:1;
+    for(let s=s0;s<=n;s++){
       const i=(((start+dir*s)%n)+n)%n, r=(i/cols)|0, c=i%cols;
       const inc=inv[r][c];
       if(!(inc instanceof Tool)) continue;
@@ -3596,7 +3707,7 @@ function cycleHolster(dir){
       inv[r][c]=activeTool||null;        // the wield takes the incoming tool's slot
       if(activeTool){ activeTool.x=c; activeTool.y=r; }
       activeTool=inc;
-      holsterCur=i;
+      holsterCur=i; holsterDir=dir;
       playSound('pickup'); refreshInvUI(); return;
     }
   }
@@ -3772,15 +3883,22 @@ function updateInteract(dt){
   const hover=_hoverCache;
   const prompt=document.getElementById('interactPrompt');
   if(heldWorld){
-    setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance · <b>B</b>/<b>Tab</b> open a pocket to stow',true);
+    const stowing=heldUseArm&&heldWorld.w.item instanceof Tool
+      ?' · <b>△</b> stowing '+'▮'.repeat(Math.min(4,1+(heldUseArm.t/0.35*4|0)))+'▯'.repeat(Math.max(0,3-(heldUseArm.t/0.35*4|0))):'';
+    setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance'+stowing,true);
   }else if(hover.idx>=0 && worldItems[hover.idx]){
     const it=worldItems[hover.idx].item;
-    setPrompt(prompt,'<b>E</b> grab '+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
+    setPrompt(prompt,'<b>E</b> '+(!activeTool&&it instanceof Tool?'take up ':'grab ')+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
   }else setPrompt(prompt,'',false);
 
   if(pressed('interact')){
     if(heldWorld){ releaseHeld(false); }
-    else if(hover.idx>=0 && worldItems[hover.idx]){ grabWorld(hover.idx, clamp(hover.t,1.2,2.6), 'hands'); sipFromHeld(); }
+    else if(hover.idx>=0 && worldItems[hover.idx]){
+      // empty hands + a TOOL on the ground: E takes it straight to the wield — no
+      // pin-hold detour. With a wield already up, the grab stays a grab, as ever.
+      if(!activeTool && worldItems[hover.idx].item instanceof Tool) wieldFromWorld(hover.idx);
+      else { grabWorld(hover.idx, clamp(hover.t,1.2,2.6), 'hands'); sipFromHeld(); }
+    }
     else tryReload();
   }
 }
@@ -3826,6 +3944,7 @@ function grabWorld(idx,dist,mode){
 function releaseHeld(hurl){
   if(!heldWorld) return;
   const w=heldWorld.w; w.held=false;
+  if(!uiMenusOpen()&&inspectItem===w.item) menuInspect(null);   // thrown/dropped: its world-side pockets shut
   if(hurl){
     const f=camForward();
     w.vel.set(f.x*20,f.y*20+2.0,f.z*20);
@@ -3835,6 +3954,47 @@ function releaseHeld(hurl){
   }else playSound('place');
   heldWorld=null;
   document.getElementById('crosshair').classList.remove('carrying');
+}
+// HOLD-△ with a plain TOOL in the hands: it holsters itself. Owner's order —
+// belt, then holster, then rucksack, then the ground at your feet. One object
+// one home (the v22j law): the tool leaves the WORLD first, then exactly one
+// write; no space anywhere and the hands simply let it go (the drop verb).
+function placeToolAway(t){
+  // Owner's order: belt, then harness, then rucksack, then the floor. storageZones()
+  // walks playerZones(true) — the FOLD-BLIND view — so a CLOSED harness or a folded
+  // rucksack still takes the tool. Returns the zone label, or null when it hit the floor.
+  const zs=storageZones().filter(z=>!z.external);
+  for(const id of ['belt','harness','rucksack','pockets']){
+    const z=zs.find(z=>z.id===id); if(!z) continue;
+    const ok=z.slotMode ? slotPlace(t,z) : autoPlace(t,z.grid,z.cols,z.rows);
+    if(ok) return z.label;
+  }
+  dropItemToWorld(t,0.4,0.6);                        // no pocket would take it — it rests at the feet
+  return null;
+}
+function stowAwayToast(where){
+  if(where){ toast('STOWED · '+where); playSound('place'); }
+  else { toast('NO ROOM — DROPPED'); playSound('drop'); }
+  refreshInvUI();
+}
+function stowHeldTool(){                             // △-hold on a CROSSHAIR-CARRIED tool
+  const t=heldWorld.w.item; consumeHeld();
+  stowAwayToast(placeToolAway(t));                  // one object one home: consumeHeld, then one write
+}
+function stowWieldedTool(){                          // △-hold on the WIELDED gun — the hand goes empty
+  const t=activeTool; if(!t) return;
+  activeTool=null; _endBeams(); reloadTimer=0; meleeT=0; meleeHit=false;
+  stowAwayToast(placeToolAway(t)); updateToolReadout();
+}
+// EMPTY HANDS + a ground TOOL: [E] wields it on the spot instead of the pin-hold
+// carry. One object one home: out of the WORLD list, then the single wield write.
+function wieldFromWorld(idx){
+  const t=worldItems[idx].item;
+  worldItems.splice(idx,1);
+  _endBeams(); reloadTimer=0;                        // wieldTool's teardown idiom
+  meleeT=0; meleeHit=false;                          // the whip stands down — the hand is full now
+  activeTool=t;
+  playSound('pickup'); refreshInvUI(); updateToolReadout();
 }
 // pin + hinge: a spring pins the grabbed point to the crosshair ray;
 // its off-centre pull becomes torque, so the item swings on the hinge
@@ -3847,7 +4007,7 @@ function updateHeldPhysics(dt){
     releaseHeld(false); playSound('click'); toast('PINNED');
     return;
   }
-  if(INPUT.wheel!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+INPUT.wheel*0.35,1.1,heldWorld.mode==='beam'?16:3.2);
+  const _rl=uiMenusOpen()?0:(clamp(INPUT.wheel,-2,2)*0.35); if(_rl!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+_rl,1.1,heldWorld.mode==='beam'?16:3.2);   // carry distance rides the WHEEL — d-pad up/down feed the same notches (padWheelStep). Menu gate covers it too; 2-notch frame cap matches the rope
   const o=camPos(), f=camForward();
   const w=heldWorld.w;
   const off=itemWorldJS(heldWorld.lx,heldWorld.ly,heldWorld.lz, w.ry||0, w.pitch||0);
@@ -3875,7 +4035,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0,chaos:0}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,timer:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0,chaos:0}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
 function foldFrame(out,m){
   const e=m.effect;
@@ -3924,7 +4084,7 @@ function resolveLane(col,out){
       if(e.twin) pend.twin*=e.twin;
       if(e.silent) pend.silent=true;
       if(e.fuse) pend.fuse+=e.fuse;
-      if(e.fuseAdd) pend.fuse+=e.fuseAdd;             // TIMER: more patience on the same fuse
+      if(e.timer) pend.timer+=e.timer;                // TIMER: a clock in flight — or, feeding a FUSE, more patience on it
       if(e.contact) pend.contact=true;
       if(e.split) pend.split+=e.split;
       if(e.laser) pend.laser=true;
@@ -3942,12 +4102,14 @@ function resolveLane(col,out){
       if(m.effect.kind==='warp'||m.effect.kind==='slug') pend.laser=false;   // these shed the thread — a feeding BEAM vents its ⚡ into the chip price
       const e=m.effect;
       // THE PRICE: REFUND waives the core's base; POWDER waives the feeders' surcharges —
-      // except REFUND's own (surchargeHard), and never under a thread (laser keeps full price).
-      const cost=(pend.refund?0:(e.base||0)) + ((e.powder&&!pend.laser)?pend.surchargeHard:pend.surcharge);
-      const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane};
+      // except REFUND's own (surchargeHard) — even under BEAM (v22 C1): a powder lane
+      // never threads, it PULSES hitscan on the pull path, and every pulse pays a round.
+      if(pend.fuse>0&&pend.timer>0){ pend.fuse+=pend.timer; pend.timer=0; }   // TIMER feeds a standing FUSE: patience, not a second clock
+      const cost=(pend.refund?0:(e.base||0)) + ((e.powder)?pend.surchargeHard:pend.surcharge);
+      const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane,powder:!!e.powder};
       lane.shots.push(shot);
       const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY / CONTACT-RELAY: a fused core casts the NEXT core from its point of death; a contact core casts it from its FIRST TOUCH — no timer, no stick
-      if(prev&&(prev.pend.fuse>0||prev.pend.contact)&&!shot.pend.laser){
+      if(prev&&(prev.pend.fuse>0||prev.pend.contact||prev.pend.timer>0)&&!shot.pend.laser){
         prev.relayNext=shot;
         // HOUSED PAYLOAD (v22j): the relay target lives INSIDE its trigger — the
         // fire cycle passes over it (carrier→carrier, no bare-fired BOOMs in your
@@ -3955,10 +4117,14 @@ function resolveLane(col,out){
         // shot's assembled cost (base + its own feeders' ⚡ — REFUND/POWDER
         // already folded per shot above) rides the chain root. Chains recurse:
         // a housed shot's own relay is housed too, billed to the same root.
-        // BEAM carriers are EXEMPT — threads never cast relayNext (only wave/orb
-        // trains do, per emitted copy), so under a laser the old cycle-gate
-        // stands: the payload keeps its cycle seat and pays at its own turn.
-        if(!prev.pend.laser){
+        // CONTACT-thread carriers HOUSE and DRUM (v22 C2): the thread fires
+        // half-size casts of the payload at its contact point every 0.5s —
+        // priced automatically (root.cost folds the housed chain into the
+        // carrier, and the thread rate reads carrier cost). FUSE-only beam
+        // carriers keep the old exemption — a thread can't stick, so FUSE's
+        // wiring under a thread stays a priced vent: the payload keeps its
+        // cycle seat and pays at its own turn.
+        if(!prev.pend.laser||prev.pend.contact){
           shot.housed=true;
           const root=prev.housed?prev.housedRoot:prev;
           shot.housedRoot=root;
@@ -4011,7 +4177,7 @@ function describeSequence(res){
         if(sh&&sh.housed) return '<span class="seqChip" style="border-color:#8e24aa;opacity:.75">'+m.name
           +'<span class="seqCost">⌂ housed</span></span>';   // fires from the carrier's impact — its ⚡/lead already ride the carrier chip
         return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
-          +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&!sh.pend.laser&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';
+          +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&(!sh.pend.laser||sh.powder)&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';   // powder pulses pay lead even under BEAM (v22 C1)
       }
       if(m.cat==='util') return '<span class="seqChip" style="border-color:#2f8f9f">'+m.name+'</span>';
       if(m.cat==='muzzle') return '<span class="seqChip" style="border-color:#c9a45a">'+m.name+'</span>';
@@ -4024,66 +4190,74 @@ function describeSequence(res){
   }).join('<br>');
 }
 
-// triangle, hand full: the held item does its thing
-let _pillArm=0, _pillDeath=false;
+// triangle, hand full: the held item does its thing. Anything with a submenu —
+// a Tool's rack, a Magazine's round count, a container's pockets, a settings
+// device's dials — opens it instead (tap again shuts it); the panel renders
+// pockets-detached over the world, menus closed (renderInspect's held-item gate).
+// The held Magazine's old dump/refill verb yields to the panel: pour/unload/sip
+// still cover it from the grids.
+let _pillDeath=false;
 function heldUse(it){
+  if(it instanceof Tool || it instanceof Magazine || it.inv){
+    if(inspectItem===it){ closeInspect(); return; }
+    menuInspect(it); playSound('click'); return;
+  }
+  useItem(it,{hand:true});
+}
+// ---- ONE use verb, two rooms (v22n): the hand's △ tap and the inventory's △
+// ---- both land here — a hand effect IS a pocket effect. ctx names the item's
+// ---- home: {hand:true} spends from the hands (consumeHeld), {f} spends from
+// ---- the focused cell. One object one home — consumed exactly once.
+// ---- The pill's two-press arm lives ON the item (it._pillArm), so a first
+// ---- press in the hand and a second in the bag still read as one resolve.
+function useItem(it,ctx){
+  const spend=()=>{ if(ctx.hand) consumeHeld();
+    else if(ctx.f.rack) writeRef(refAt(ctx.f),null);
+    else removeFromGrid(it,ctx.f.grid); };
   if(it.ration){
     playerPos.health=Math.min(effMaxHP(), playerPos.health+14);
     toast('TASTES LIKE THE WAR');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.gummies){
     playerPos.health=Math.min(effMaxHP(), playerPos.health+30);
     toast('SUGAR ON A DEAD TONGUE');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.bandAid){
-    playerPos.status.bleedT=0;
+    playerPos.status.bleedT=0; playerPos.status.bleedN=0;
     toast('PRESSURE HELD');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.aloe){
     playerPos.status.burn=0; playerPos.burnedMax=0;
     toast('THE SKIN FORGIVES');
-    consumeHeld(); playSound('reload'); refreshInvUI(); return;
+    spend(); playSound('reload'); refreshInvUI(); return;
   }
   if(it.pill){
     const now=performance.now();
-    if(_pillArm && now-_pillArm<3000){
-      _pillArm=0; _pillDeath=true;
+    if(it._pillArm && now-it._pillArm<3000){
+      it._pillArm=0; _pillDeath=true;
       toast('BITTER ALMONDS.');
       playerPos.health=0;
       onDeath();
     }else{
-      _pillArm=now;
+      it._pillArm=now;
       toast('BITE DOWN? PRESS AGAIN TO END THE RUN.');
       playSound('click');
     }
     return;
   }
-  if(it instanceof Magazine){
-    if(it.loaded>0){                                     // dump the rounds into the rucksack
-      const rounds=new Ammunition(it.acceptedType+' rounds','#a07c2c',it.acceptedType,it.loaded);
-      it.loaded=0;
-      if(!autoPlaceAny(rounds)) dropItemToWorld(rounds,0.8,1.2);
-      toast('DUMPED '+rounds.count+' ROUNDS'); playSound('reload');
-    }else{                                               // refill from rucksack ammo
-      let took=0;
-      for(let r=0;r<BAG_ROWS&&it.loaded<it.maxCapacity;r++) for(let c=0;c<BAG_COLS&&it.loaded<it.maxCapacity;c++){
-        const b=bagGrid[r][c];
-        if(b instanceof Ammunition && b.ammoType===it.acceptedType && b.x===c && b.y===r){
-          const take=Math.min(b.count,it.maxCapacity-it.loaded);
-          b.count-=take; it.loaded+=take; took+=take;
-          if(b.count<=0) removeFromGrid(b,bagGrid);
-        }
-      }
-      toast(took?('LOADED '+took+' ROUNDS'):'NO '+it.acceptedType.toUpperCase()+' IN THE BAG');
-      playSound(took?'reload':'empty');
-    }
-    refreshInvUI(); return;
-  }
-  if(it instanceof Gadget){ useGadget(it); return; }
+  if(it instanceof Gadget){ useGadget(it); refreshInvUI(); return; }
   if(it instanceof Battery){ toast('BATTERY · '+(battFunctional(it)?it.charge.toFixed(0)+'/'+it.cap+'\u26a1':'DEPLETED')); playSound('click'); return; }
+  if(it instanceof ToolMod && it.effect && it.effect.kind==='boom'){
+    if(it._armT!=null){ toast('IT IS LIT'); playSound('empty'); return; }   // no fingers un-pull a pin
+    // it arms in the hand or anywhere ON the body (tickInvArm's walk) — never in
+    // a box the tick can't reach: a stash/crate grenade would smoulder forever
+    if(!ctx.hand && !itemOnPlayer(it)){ toast('LIGHT IT ON YOUR BACK, NOT IN A BOX'); playSound('empty'); return; }
+    it._armT=5; toast('LIT — FIVE'); playSound('click');
+    return;
+  }
   if(it instanceof ToolMod && it.effect && it.effect.laser){
     it.pointing=!it.pointing;
     toast(it.pointing?'BEAM · POINTING':'BEAM · DARK'); playSound('click'); return;
@@ -4142,24 +4316,25 @@ function globSlow(pos,host){                          // enemies wade through gl
   }
   return m;
 }
-let beamActive=false, beamWasHeld=false;
 
-function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
+function chaosMul(ch){ return ch?1+0.45*Math.min(2,ch):1; }   // CHAOS: wild path, heavy hand
+function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
   const p=shot.pend;
+  const _tl=owner==='player'?(srcTool||activeTool):null;   // pin the billing tool at FIRE time — relay extras (castRelay) charge it, not the live wield
   // BOOM IS THE BLAST — no flight, no tracer slot: it detonates the frame it is
   // cast. Muzzle-fired it goes off ~1.2m out (survivable, stupid); relay/contact
   // cast (atPoint) it goes off AT the cast point — explosive rounds, breach
   // charges. FUSE alone restores the lob: a fused boom still flies, sticks and
   // waits its turn. TWIN pools instead of fanning: ONE blast, radius ×1.4.
   // SPLINTER still shatters from the fire; its own relay casts onward from it.
-  if(shot.kind==='boom'&&!(p.fuse>0)){
+  if(shot.kind==='boom'&&!(p.fuse>0||p.timer>0)){
     const nud=atPoint?0:1.2;
     triggerPayload({
       pos:new Vec3(origin.x+dir.x*nud,origin.y+dir.y*nud,origin.z+dir.z*nud),
       vel:new Vec3(dir.x*26,dir.y*26,dir.z*26), owner, kind:'boom',
-      dmg:34+p.dmg, rMul:Math.round(p.twin)>1?1.4:1, split:p.split||0,
+      dmg:(34+p.dmg)*chaosMul(p.chaos)*(shot.small||1), rMul:shot.small?0.75:(Math.round(p.twin)>1?1.4:1), split:p.split||0,   // small: a drummed half-beat (v22 C2)
       relay:shot.relayNext||null, rdir:new Vec3(dir.x,dir.y,dir.z), rbase:base,
-      src:src||null, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
+      src:src||null, tool:_tl, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
     });
     return;
   }
@@ -4174,22 +4349,23 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:kind==='orb'?6.0:kind==='saw'?0.16:2.2, owner, kind,   // saw reach ≈ 4m — SWIFT is its reach knob; orb: 6s aloft, then the payload pops
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything (slug: ×3 TOOL hurt, pend added after)
-      dmg:(kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg,   // wave flat 16 — enemy-fired included, declared
+      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg)*chaosMul(p.chaos)*(shot.small||1),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand; small: drummed half-beat (v22 C2)
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
+      timerT:p.timer||0,                                 // TIMER: the bell rides the flight
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
-      relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
-      burn:p.burn||0, bleed:!!p.bleed, chaos:p.chaos||0,
+      relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null, tool:_tl,
+      burn:Math.round((p.burn||0)*(shot.small||1)), bleed:!!p.bleed, chaos:p.chaos||0,
       col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[0.75,0.75,0.55]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[0.78,0.55,0.15]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; width tiers: sum<1.5 fat, <2.8 gossamer, ≥2.8 hairline — slug brass stays under 1.5 (fat shell), saw steel rides the gossamer tier
       silent:p.silent||base.silenced,
     });
   }
   if(shot.kind==='orb'&&owner==='player'){             // FOUR PEARLS, NO MORE — the oldest pops its payload
-    const orbs=projectiles.filter(q=>q.kind==='orb'&&q.owner==='player');
+    const orbs=projectiles.filter(q=>q.kind==='orb'&&q.owner==='player'&&!q._cull);
     while(orbs.length>4){
       const old=orbs.shift();
-      triggerPayload(old); projectiles.splice(projectiles.indexOf(old),1);
-    }
+      triggerPayload(old); old._cull=true;             // popped, but MARKED not spliced — a relay can cast the 5th pearl
+    }                                                  // from INSIDE updateProjectiles, and a splice here shifts its live index
   }
 }
 function toolNoise(silent){ return silent?4:22; }
@@ -4201,6 +4377,10 @@ function roundsFor(sh){
   const own=sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0;
   return own+(sh.relayNext&&sh.relayNext.housed?roundsFor(sh.relayNext):0);
 }
+// CHAIN ⚡ mirrors the lead: resolveLane parks every deeper housed link's cost on
+// the chain ROOT, so a housed shot's own .cost is link-local — an extra delivery
+// must bill the whole sub-chain it casts (castRelay), not just the first link.
+function chainCost(sh){ return (sh.cost||0)+(sh.relayNext&&sh.relayNext.housed?chainCost(sh.relayNext):0); }
 // the fire cycle never rests on a housed payload — first live entry at/after cyc
 function cycleShotIdx(lane,cyc){
   const n=lane.shots.length;
@@ -4209,13 +4389,22 @@ function cycleShotIdx(lane,cyc){
 }
 
 const _colsBuf=new Float32Array(32);
+// RECOIL, EASED — impulse → critically damped spring (ω=16): the kick rises to
+// peak over ~62ms (J/(ωe)≈0.39 ≈ the old +0.4 step) and settles by ~0.3s, C¹
+// smooth both ways. Pitch climb pays out over ~4 frames instead of stepping.
+function addKick(p){ playerPos.pitchPend+=p; playerPos.kickV+=17; }
 let fireCooldown=0, reloadTimer=0;
+let meleeT=0, meleeHit=false;   // the whip: swing clock + one-strike latch
 let BARE_RES=null;
 function bareRes(){ return BARE_RES||(BARE_RES=resolveTool(null)); }
 function tryFirePlayer(dt){
   const res=activeTool?activeTool._res:bareRes();
   if(fireCooldown>0) return;
   const clicked = res.auto ? fireDownEff() : firePressedEff();
+  if(clicked && !activeTool && !heldWorld){            // EMPTY HANDS ARE A WEAPON — the whip
+    if(meleeT<=0){ meleeT=0.001; meleeHit=false; fireCooldown=0.7; playSound('drop'); }
+    return;
+  }
   if(!clicked || !activeTool || heldWorld) return;
 
   const o=camPos(), f=camForward();
@@ -4241,7 +4430,7 @@ function tryFirePlayer(dt){
       const i=(cyc+k)%n, sh=lane.shots[i];
       if(sh.housed) continue;                            // HOUSED: never a cycle entry — it fires from its carrier's impact, already paid there
       const bl=burstLaser(res,sh);                       // burst cam: a fed damage beam volleys pulses instead of flowing
-      if(sh.pend.laser&&!bl){ passed=true; continue; }   // continuous shots belong to the held-fire path
+      if(sh.pend.laser&&!bl&&!sh.powder){ passed=true; continue; }   // continuous shots belong to the held-fire path — powder pulls, hitscan
       if(bl&&_laserBursts.some(q=>q.lane===lane)){ passed=true; continue; }   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
       const okCharge=activeTool.charge>=(bl?Math.ceil((sh.cost||0)/3):(sh.cost||0));
@@ -4257,15 +4446,30 @@ function tryFirePlayer(dt){
       firedAny=true; continue;
     }
     wearRoll(spendCharge(activeTool,sh.cost||0));        // price the shot, not the copies — and roll the dice
+    const gen=_worldGen;                                 // a bare BOOM / powder pulse detonates IN this loop and can kill the shooter
     for(let b=0;b<res.burst;b++){
+      if(gen!==_worldGen) break;                         // dead men fire no follow-ups into the world they respawned to
       const rds=roundsFor(sh);
       if(rds>0){ if(!mag||mag.loaded<rds) break; mag.loaded-=rds; }
-      emitProjectile('player',origin,fireDir,sh,res);
+      if(sh.powder&&sh.pend.laser){
+        // POWDER PULSE (v22 C1) — the owner's rounds-powered hitscan laser: each
+        // pull fires a pulse through fireHitscan, 1 round + 0⚡, every lane mod
+        // live (mirrors runBurstLasers' aim block). Rounds/noise/kick/sound around
+        // this branch are UNTOUCHED — the pulse replaces only the emit.
+        let f2=fireDir; const ch=sh.pend.chaos||0;
+        if(ch){
+          if(sh.pend.homing>0) f2=chaosBias(camPos(),f2);
+          f2=tiltDir(f2,(runRng()-0.5)*0.06*ch,new Vec3(0,0,0));
+        }else if(sh.pend.homing>0) f2=seekBias(camPos(),f2);
+        let rays=Math.max(1,Math.round(sh.pend.twin));
+        if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
+        for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f2,_jDir):f2,sh,res,dt,r===0);
+      }else emitProjectile('player',origin,fireDir,sh,res);
       const silent=sh.pend.silent||res.silenced||lane.silenced;
       playSound(sh.pend.laser?'spark':sh.kind==='spark'?'spark':(silent?'silenced':'shoot'));
       loudest=Math.max(loudest,toolNoise(silent));
       if(!silent&&kicked===0){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
-      if(kicked<3){ cameraPitch+=0.012+res.dmg*0.0004; playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4); kicked++; }
+      if(kicked<3){ addKick(0.012+res.dmg*0.0004); kicked++; }
     }
     if(!res.bare) lane.cycleRef.set((pick+1)%n);
     firedAny=true;
@@ -4278,6 +4482,39 @@ function tryFirePlayer(dt){
   if(loudest>0) addNoise(playerPos.x,playerPos.y,playerPos.z,loudest);
   fireCooldown=res.fireRate;
   updateToolReadout();
+}
+
+// THE WHIP — bare fire snaps a 0.3s swing; the CRACK lands at phase 0.45.
+function tickMelee(dt){
+  if(meleeT<=0) return;
+  meleeT+=dt;
+  if(!meleeHit && meleeT>=0.135){ meleeHit=true; meleeStrike(); }   // the CRACK lands mid-snap
+  if(meleeT>=0.3) meleeT=0;
+}
+function meleeStrike(){
+  const o=camPos(), f=camForward();
+  let best=null, bd=2.2;
+  for(const en of enemies){
+    if(en.health<=0||en._dormant) continue;
+    const dx=en.position.x-o.x, dy=(en.position.y+0.95)-o.y, dz=en.position.z-o.z;
+    const d=Math.hypot(dx,dy,dz);
+    if(d>bd) continue;
+    if((dx*f.x+dy*f.y+dz*f.z)/Math.max(0.001,d)<0.7) continue;                     // narrow arc
+    if(!losClearJS(o.x,o.y,o.z,en.position.x,en.position.y+0.95,en.position.z)) continue;   // no whipping through walls
+    best=en; bd=d;
+  }
+  if(!best){ addNoise(playerPos.x,playerPos.y,playerPos.z,6); return; }            // a whiff still cracks air
+  const bx=playerPos.x-best.position.x, bz=playerPos.z-best.position.z, b2=Math.hypot(bx,bz);
+  const behind=(Math.sin(best.yaw)*bx+Math.cos(best.yaw)*bz)/Math.max(0.001,b2)<-0.25;   // same cone math as their eyes, reversed
+  if(best.state===0 && behind && bd<1.6){
+    best.hurt(400,'player');                        // STEALTH TAKEDOWN: unsuspecting, from behind, close — the quiet kill
+    addNoise(playerPos.x,playerPos.y,playerPos.z,3); playSound('hit'); toast('SILENCED');
+  }else{
+    best.hurt(18,'player');                         // whip-snap: two swipes fell a bare zealot
+    best.velocity.addScaledVector(f,6); best.stagger=Math.max(best.stagger,0.25);
+    addNoise(playerPos.x,playerPos.y,playerPos.z,10); playSound('hit');            // the crack CARRIES
+  }
+  addKick(0.008);                                   // P-ease spring — the snap tugs the view
 }
 
 // CONTINUOUS BEAMS — a BEAM-fed core doesn't fire, it FLOWS. Hold the trigger
@@ -4303,6 +4540,7 @@ function physgunInputTick(){                // once per frame, right after the p
 function fireDownEff(){ return physgunRes()?_pgFire:down('fire'); }
 function firePressedEff(){ return physgunRes()?_pgFireEdge:pressed('fire'); }
 const _beamLanes=new Map();               // laneIdx -> {acc, engaged}
+let _swing=null;   // {ax,ay,az,len,li} — the grip thread hooked STATIC WORLD: the player is the moving end
 const _jDir=new Vec3(0,0,0);
 // dir tilted th rad at a random azimuth — the unstable-beam wander
 function tiltDir(f,th,out){
@@ -4372,7 +4610,20 @@ function pushJaggedSeg(a,b,col,chaos,dt){
     p=q;
   }
 }
+// MASS DROOP — a heavy thread sags like a hose of lead: walk a marched path's
+// knees and drop each by sag·s² (s = path length walked so far, drooped-chord
+// measure). ONE transform for both curve families: the straight droop chain
+// AND the B1 return arc (a drooping loop falls out of the same walk — pts[0]
+// is the muzzle anchor and never sags; a loop's home knee rides a CLONE of it).
+function droopPath(pts,sag){
+  let s=0;
+  for(let i=1;i<pts.length;i++){
+    s+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y,pts[i].z-pts[i-1].z);
+    pts[i].y-=sag*s*s;
+  }
+}
 function runContinuousBeams(dt){
+  const gen=_worldGen;                        // the drum below can splash its own gunner dead — watch for the world to die
   const res=activeTool?activeTool._res:null;
   if(!res||res.bare){ _endBeams(); return; }
   const firing=fireDownEff()&&(!heldWorld||heldWorld.mode==='beam');
@@ -4385,42 +4636,131 @@ function runContinuousBeams(dt){
     const hi=cycleShotIdx(lane,lane.cycleRef.get()%n);  // the cycle skips housed payloads here too — a pull can park cycleRef on one
     if(hi<0) continue;
     const sh=lane.shots[hi];
-    if(!sh.pend.laser) continue;
+    if(!sh.pend.laser||sh.powder) continue;           // POWDER never threads — it pulses on the PULL path (v22 C1)
     if(burstLaser(res,sh)) continue;                  // burst cam owns that lane: pulses, not a thread
     const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
-    if(activeTool.charge<rate*dt){ continue; }        // starved thread gutters out
+    if(activeTool.charge<rate*dt){ if(_swing&&_swing.li===li)_swing=null; continue; }   // a guttering grip lane drops its rope
     spendCharge(activeTool,rate*dt);
     any=true;
     let st=_beamLanes.get(li);
     if(!st){ st={acc:[0,0,0]}; _beamLanes.set(li,st); wearRoll(toolPowerCells(activeTool).slice(0,1)); }
     st.engaged=true;
+    const dmgKind=sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw';
+    const arc=dmgKind&&sh.pend.boomerang;             // RETURN ARC (v22 B1): the thread bends into a D-loop — grip/pick/wave/orb stay inert BY DESIGN (6⚡ priced)
+    // MASS DROOP (v22 P-mass) — grav on a damage thread SAGS it: the beam is a
+    // STREAM at its core's projectile pace (bolt 82 · spark 34 · boom/saw 26,
+    // ×SWIFT) under the projectile-MASS pull (12·grav), so drop = ½·12·grav·(s/V)²
+    // = sag·s² along the marched path (droopPath). SWIFT divides the droop by
+    // vel SQUARED — a faster stream flies flatter, physical. A level grav-1
+    // bolt thread grounds ~34m out (grav 2 ~24m; boom's 26 m/s stream ~11m —
+    // the mortar thread); the dirt hit IS the contact point (pulses, the drum
+    // and SPLINTER anchor there). Drooped paths march like the B1 arc — 4
+    // chord segs, SAME flash-budget class. GRIP/PICK never droop (a drooping
+    // physgun is nonsense) and wave/orb keep their own verbs — !dmgKind covers
+    // all four. MASS's 5⚡ is already priced through the thread rate.
+    const sag=dmgKind&&sh.pend.grav>0?6*sh.pend.grav/Math.pow((sh.kind==='bolt'?82:sh.kind==='spark'?34:26)*sh.pend.vel,2):0;
     // TWIN SPLIT — a twinned damage thread frays into round(twin) strands (cap 3),
     // each wandering off the aim, each 0.65×: three on one mark ≈ ×1.95, priced by
     // TWIN's ⚡12 already in the rate. grip/pick don't fray — splitting a physgun
-    // or a carving stream is nonsense. wave/orb don't fray EITHER: their trains twin
-    // at the EMIT (emitProjectile fans round(twin) copies) — a split thread would
-    // square TWIN (K strands × K copies = 9 walls a tick, priced once). Strands draw
-    // one-frame segs; when the tracer pool runs dry the EXTRA strands drop first
-    // (damage too), the aim thread never.
+    // or a carving stream is nonsense. wave doesn't fray EITHER: the corridor POOLS
+    // width (CW 1.5→2.1, boom-rMul precedent) — TWIN's ⚡12 buys WIDE, never strands.
+    // orb keeps the train rationale: its pearls twin at the EMIT (emitProjectile
+    // fans round(twin) copies) — a split thread would square TWIN (K strands × K
+    // copies, priced once). Strands draw one-frame segs; when the tracer pool runs
+    // dry the EXTRA strands drop first (damage too), the aim thread never.
     let K=(sh.kind==='grip'||sh.kind==='pick'||sh.kind==='wave'||sh.kind==='orb')?1:Math.max(1,Math.round(sh.pend.twin));
     if(K>1) K=Math.max(1,Math.min(K,flashHeadroom()));
+    if(arc||sag>0) K=Math.max(1,Math.min(K,Math.floor(flashHeadroom()/4)));   // loops AND drooped threads FLASH 4 segs each (one reservation class): TWIN tops at 2 by budget — a strand that can't draw never damages
     const mul=K>1?0.65:1;
     // CHAOS: damage threads arc like lightning — grip/pick stay straight BY RULE
     // (a jittering physgun is nausea). With SEEKER: CHAIN LIGHTNING — the arc
     // leans at the nearest warm thing, scanned once per lane-frame.
-    const dmgKind=sh.kind==='bolt'||sh.kind==='spark'||sh.kind==='boom'||sh.kind==='saw';
     const chaos=dmgKind?(sh.pend.chaos||0):0;
     // SEEKER bends the damage thread (12° lock — priced by its 7⚡ already in the
     // rate); with CHAOS it becomes chain lightning instead (40° arc bias). GRIP/
-    // PICK stay true BY RULE; wave/orb trains seek as PROJECTILES, never as aim.
+    // PICK stay true BY RULE; orb trains seek as PROJECTILES, never as aim.
     const fb=(chaos&&sh.pend.homing>0)?chaosBias(o,f):(dmgKind&&sh.pend.homing>0?seekBias(o,f):f);
     for(let k=0;k<K;k++){
       const dir=chaos?jitterDir(fb,_jDir,1+0.6*chaos):(K>1?jitterDir(fb,_jDir):fb);   // chaos: the aim WANDERS even at K===1 — that is the price; strands wander around the (possibly bent) aim
-      let t=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);
+      let arcApex=null, loopClip=null, pathEnd=null, pts=null;   // B1: loop apex · first world-clip (B2 shards anchor there) · curved-path knees + terminus (arc D-loop / MASS droop)
+      if(arc){
+        // RETURN ARC (v22 B1) — RETURN bends the thread into a flat D-loop: out
+        // along the (seek/chaos-bent, jittered) aim, bulging to one side (sign
+        // alternates per strand: +,−,+), home to the muzzle. Four segs marched
+        // in order — a seg that hits the world TRUNCATES the loop there (draw to
+        // the hit, drop the rest this frame: the thread breaks at the wall, and
+        // SPLINTER anchors at that first clip). ONE bite per enemy per tick
+        // (dedupe set): damage BESIDE and part-way behind cover, never more
+        // single-target dps than the straight thread. bolt/saw bite on the line
+        // (A5 cook rides); spark/boom keep their pulse — it fires at the APEX
+        // (end:=A below). CHAOS wobbles W, never joints the segs (the loop IS
+        // the multi-seg). All four segs FLASH: 4 slots a strand a frame, the
+        // honest arc price, pre-paid by the K clamp above — damage follows draw.
+        const R=sh.kind==='saw'?4:14;                 // saw: a hand-width halo, allowed comedy
+        const t0=marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,R);
+        const sl=Math.hypot(dir.z,dir.x)||1, sgn=k%2?-1:1;
+        const sx=-dir.z/sl*sgn, sz=dir.x/sl*sgn;      // side = dir×up, flat, alternating
+        const W=2.5*(1+(runRng()-0.5)*0.8*(sh.pend.chaos||0));
+        const hx=o.x+dir.x*t0*0.5, hy=o.y+dir.y*t0*0.5, hz=o.z+dir.z*t0*0.5;
+        arcApex=new Vec3(o.x+dir.x*t0,o.y+dir.y*t0,o.z+dir.z*t0);
+        const M=muzzleWorld();
+        pts=[M,new Vec3(hx+sx*W,hy,hz+sz*W),arcApex,new Vec3(hx-sx*W,hy,hz-sz*W),sag>0?new Vec3(M.x,M.y,M.z):M];   // MASS: the home knee sags on a CLONE of M — the muzzle anchor itself never droops
+      }else if(sag>0){
+        // MASS DROOP path — 4 straight-chord knees laid along the aim, sagged by
+        // droopPath below, marched by the SAME per-seg loop as the B1 arc (world
+        // truncation, per-seg bites, 4 flash segs). Where the heavy thread
+        // grounds at range, that dirt hit IS the contact point.
+        const R=sh.kind==='saw'?4:50;                 // the thread's own reach: saw teeth die at arm's length
+        const M=muzzleWorld();
+        pts=[M];
+        for(let i=1;i<=4;i++) pts.push(new Vec3(M.x+dir.x*R*i*0.25,M.y+dir.y*R*i*0.25,M.z+dir.z*R*i*0.25));
+      }
+      if(pts){
+        if(sag>0) droopPath(pts,sag);                 // MASS sags ANY marched path — the drooping arc loop falls out of the same transform, no special case
+        const lcol=sh.kind==='spark'?[3.0,1.1,2.6]:[3.0,0.8,1.0];
+        const lineBite=sh.kind==='bolt'||sh.kind==='saw';
+        const bit=lineBite?new Set():null;
+        for(let s=0;s<4;s++){
+          const P=pts[s], Q=pts[s+1];
+          const gl=Math.hypot(Q.x-P.x,Q.y-P.y,Q.z-P.z)||0.001;
+          const dx=(Q.x-P.x)/gl, dy=(Q.y-P.y)/gl, dz=(Q.z-P.z)/gl;
+          const ts=marchWorldJS(P.x,P.y,P.z,dx,dy,dz,gl);
+          const cut=ts<gl-0.05;
+          if(lineBite) for(const en of enemies){
+            if(en.health<=0||en._dormant||bit.has(en)) continue;
+            const rx=en.position.x-P.x, ry=(en.position.y+0.95)-P.y, rz=en.position.z-P.z;
+            const tt=rx*dx+ry*dy+rz*dz;
+            if(tt>0.05&&tt<ts){
+              const d=Math.hypot(en.position.x-(P.x+dx*tt),(en.position.y+0.95)-(P.y+dy*tt),en.position.z-(P.z+dz*tt));
+              const hp=enemyHeadPos(en,_hpV);
+              const hd=Math.hypot(hp.x-(P.x+dx*tt),hp.y-(P.y+dy*tt),hp.z-(P.z+dz*tt));
+              if(d<0.55||hd<0.24){
+                bit.add(en);
+                let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
+                const hh=hd<0.24;
+                if(hh){
+                  if(en.helm){ en._helmT=(en._helmT||0)+dt; if(en._helmT>=0.4){ en._helmT-=0.4; crackHelm(en); } }
+                  else bdmg*=2;
+                }
+                en.hurt(bdmg,'player',hh?'head':undefined); applyStatus(en,{burn:bdmg,bleed:threadCut(en,sh.pend.bleed,dt)});   // A5: arc line ticks COOK too; bleed banks on the cut cadence
+              }
+            }
+          }
+          const E=cut?new Vec3(P.x+dx*ts,P.y+dy*ts,P.z+dz*ts):Q;
+          beamSegs.push({a:P,b:E,col:lcol,ttl:dt+0.001,flash:lastT});
+          pathEnd=E;
+          if(cut){ loopClip={x:E.x,y:E.y,z:E.z,dx,dy,dz}; break; }   // truncate: the rest of the path dies this frame
+        }
+      }
+      let t=pts?50:marchWorldJS(o.x,o.y,o.z,dir.x,dir.y,dir.z,50);   // curved paths (arc loop / drooped thread) marched their own segs above — no straight 50m march
       if(sh.kind==='saw') t=Math.min(t,4.0);          // CHAINSAW: the teeth die at arm's length
+      if(sh.kind==='wave') t=Math.min(t,10.0);        // PRESSURE CORRIDOR: short, wide, continuous
       // enemies intercept the thread — head tested above the body, same ray foot
+      // (wave skips this: the corridor washes THROUGH — flesh never clamps t, only
+      // the world does; arcs and drooped threads skip it too — the curved-path
+      // block owns its per-seg bites)
       let hitEn=null, hitHead=false;
-      for(const en of enemies){
+      if(sh.kind!=='wave'&&!pts) for(const en of enemies){
         if(en.health<=0||en._dormant) continue;
         const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
         const tt=rx*dir.x+ry*dir.y+rz*dir.z;
@@ -4431,24 +4771,29 @@ function runContinuousBeams(dt){
           if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
         }
       }
-      const end=new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);
+      const end=arc?arcApex:pts?pathEnd:new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);   // arc: spark/boom pulses fire at the (sagged) APEX · drooped thread: at its terminus — the dirt hit at range
       st.acc[k]=(st.acc[k]||0)+dt;
       if((sh.kind==='bolt'||sh.kind==='saw')&&hitEn){
-        let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt;
+        let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
         if(hitHead){
           if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
           else bdmg*=2;
         }
-        hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
+        hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,{burn:bdmg,bleed:threadCut(hitEn,sh.pend.bleed,dt)});   // THREAD HEAT LAW (A5): line ticks COOK — burn dose = tick hurt (pool 30, resists apply); bleed banks on the cut cadence
       }
-      if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
-      if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
+      if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
+      if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
+      if(gen!==_worldGen) return;             // that beat killed the gunner: onDeath dropped the lanes and the wield — the next lane would read a null tool
       if(sh.kind==='pick'&&st.acc[k]>0.16){ st.acc[k]=0; carveAt({pos:end,dmg:8,r:0.55}); }
       if(sh.kind==='grip'){
-        if(!heldWorld&&!st.gripEn&&!_pgRegrabLock){
+        if(!_swing&&!heldWorld&&!st.gripEn&&!_pgRegrabLock){
           const pick=itemUnderCrosshair(40);
           if(pick.idx>=0) grabWorld(pick.idx,Math.max(1.5,pick.t),'beam');
           else if(hitEn){ st.gripEn=hitEn; st.gripDist=clamp(t,2.5,12); playSound('grab'); }   // no item — wrangle flesh
+          else if(t<=24 && mapWorldJS(end.x,end.y,end.z)<0.12){   // STATIC WORLD (glue globs included): the rope takes YOU
+            _swing={ax:end.x,ay:end.y,az:end.z,len:Math.max(1.2,t),li};
+            playSound('grab');
+          }
         }
         if(st.gripEn){
           const en=st.gripEn;
@@ -4463,7 +4808,35 @@ function runContinuousBeams(dt){
           }
         }
       }
-      if(sh.kind==='wave'&&st.acc[k]>0.55){ st.acc[k]=0; emitProjectile('player',muzzleWorld(),dir,sh,res); }   // WAVE TRAIN: a wall every 0.55s, priced by the rate — you're locked in
+      if(sh.kind==='wave'){
+        // PRESSURE CORRIDOR (v22 A1) — the train is gone: the thread IS the wall.
+        // Every live foe in the corridor (0.3..t along the ray, within CW of it,
+        // LOS-checked from the ray foot — the world blocks the wash sideways)
+        // pays per tick and is pressed back: a steady 2.2 m/s displacement in
+        // the zealot's own move step — patrol (1.4) loses ground, a 2.6 charger
+        // still crawls through. Slower than every walk speed's ceiling = held,
+        // never locked.
+        // TWIN pools WIDTH (boom-rMul precedent): CW 1.5→2.1, K stays 1 — the 12⚡
+        // buys wide, never strands. NO stagger BY RULE: the rate is regen-positive
+        // (11.9 < 16) and a stagger-locking corridor at surplus ⚡ is free crowd
+        // god-mode — the press is the paid verb. Burn law A5: dose = tick hurt.
+        const CW=Math.round(sh.pend.twin)>1?2.1:1.5;
+        const wdmg=(16+sh.pend.dmg)*0.55*dt;
+        for(const en of enemies){
+          if(en.health<=0||en._dormant) continue;
+          const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
+          const tt=rx*dir.x+ry*dir.y+rz*dir.z;
+          if(tt>0.3&&tt<t){
+            const d=Math.hypot(en.position.x-(o.x+dir.x*tt),(en.position.y+0.95)-(o.y+dir.y*tt),en.position.z-(o.z+dir.z*tt));
+            if(d<CW){
+              if(!losClearJS(o.x+dir.x*tt,o.y+dir.y*tt,o.z+dir.z*tt,en.position.x,en.position.y+0.95,en.position.z)) continue;   // washes through FLESH, never sideways through WORLD — only the center ray was marched, and ruin walls are 0.3m thin
+              en.hurt(wdmg,'player');
+              applyStatus(en,{burn:wdmg,bleed:threadCut(en,sh.pend.bleed,dt)});
+              en._prX=dir.x; en._prZ=dir.z;              // the press lands in the zealot's own move step, AFTER pathing writes velocity — a chaser used to stomp this shove flat
+            }
+          }
+        }
+      }
       if(sh.kind==='orb'){
         // THE THREAD NOSES IT: a live pearl obeys the aim point — the physgun for
         // your own ordnance. No pearl aloft: the thread lays one every 0.7s.
@@ -4475,20 +4848,112 @@ function runContinuousBeams(dt){
           if(sp>0.001&&sp<9) orb.vel.multiplyScalar(Math.min(9,sp+18*dt)/sp);   // pump it up to a canter
         }else if(st.acc[k]>0.7){ st.acc[k]=0; emitProjectile('player',muzzleWorld(),dir,sh,res); }
       }
+      // CONTACT DRUM (v22 C2) — a CONTACT thread carrying a housed payload DRUMS
+      // half-size casts of it at the contact point every 0.5s. Per-LANE, AIM
+      // strand only (k===0): TWIN never multiplies the drum — twin already
+      // multiplies the thread. Ballistic beats bill their lead per beat at the
+      // mag (roundsFor); the ⚡ is already in the rate (root.cost folded the
+      // chain in at resolve). The beat forces twin:1 (boom pooling ignored via
+      // small's rMul) — TWIN on a drummed payload is I-by-design, 12⚡ priced.
+      // A chain hanging off the beat (relayNext rides intact) casts FULL size —
+      // and is priced full at the root.
+      if(k===0&&sh.pend.contact&&sh.relayNext&&sh.relayNext.housed){
+        st.dAcc=(st.dAcc||0)+dt;
+        if(st.dAcc>0.5){
+          const pay=roundsFor(sh.relayNext);
+          const mag=pay>0?columnMag(activeTool,lane.mountIdx,true):null;
+          if(pay>0&&(!mag||mag.loaded<pay)){ /* drum holds with a full head — fires the beat the moment lead arrives; the thread keeps flowing */ }
+          else{
+            if(pay>0) mag.loaded-=pay;
+            st.dAcc=0;
+            const beat={...sh.relayNext, small:0.5, pend:{...sh.relayNext.pend, twin:1}};
+            emitProjectile('player', end.clone(), dir, beat, res, null, true);
+          }
+        }
+      }
       // sums >2.8 land in the shader's single-ray tier; the ×1.6 heat pays for the width
       const col=sh.kind==='grip'?[0.6,2.6,3.0]:sh.kind==='spark'?[3.0,1.1,2.6]:sh.kind==='pick'?[1.1,3.0,2.6]:[3.0,0.8,1.0];
       let bEnd=end;
       if(sh.kind==='grip'){ if(heldWorld) bEnd=heldWorld.w.pos;
-        else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z); }
-      if(chaos) pushJaggedSeg(muzzleWorld(),bEnd,col,chaos,dt);   // lightning: jointed one-frame strand, joints starve first
-      else if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
-      else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
+        else if(st.gripEn) bEnd=new Vec3(st.gripEn.position.x,st.gripEn.position.y+0.95,st.gripEn.position.z);
+        else if(_swing) bEnd=new Vec3(_swing.ax,_swing.ay,_swing.az); }
+      if(!pts){                                       // arcs and drooped threads drew their flash segs in the curved-path block — no straight seg, no jagged joints (B1)
+        if(chaos) pushJaggedSeg(muzzleWorld(),bEnd,col,chaos,dt);   // lightning: jointed one-frame strand, joints starve first
+        else if(K>1) beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:dt+0.001,flash:lastT});   // strands strobe: one frame, then re-cast
+        else beamSegs.push({a:muzzleWorld(),b:bEnd,col,ttl:0.05});
+      }
+      // SPLINTER SHATTER (v22 B2) — a damage thread with SPLINTER sprays shard
+      // rays at its contact point every frame it touches something: a world hit
+      // reflects off the face, a flesh hit shatters THROUGH (forward shrapnel —
+      // distinct from DRILL's single full line). Arc loops and drooped threads
+      // shed only at their first world clip; an unclipped path sheds nothing.
+      // Shards are BOLT-shards
+      // regardless of parent kind (the splinterBurst frags-become-bolts
+      // precedent): 0.45× the bolt line, 6m (saw parent 2.7m), own chest/head
+      // intercept (head ×2, helm _helmT tick), A5 cook, bleed refresh. BUDGET
+      // FIRST — reserve one flash per remaining strand; declared starve order:
+      // aim thread > extra strands > chaos joints > shards (later strands'
+      // shards starve first). A shard that can't draw doesn't march or hurt.
+      if(dmgKind&&sh.pend.split>0){
+        const wHit=pts?!!loopClip:t<(sh.kind==='saw'?3.99:49.9);
+        if(wHit||(!pts&&hitEn)){
+          const room=flashHeadroom()-(pts?4:1)*(K-1-k);   // reserve what a remaining strand actually draws: arc loops AND drooped threads FLASH 4 segs each — a 1-slot reserve let strand-0 shards eat the projectile-tracer floor
+          const nSh=Math.max(0,Math.min(3,Math.round(sh.pend.split),room));
+          if(nSh>0){
+            const sO=new Vec3(), sB=new Vec3();       // shard origin · base dir
+            if(loopClip){
+              worldNormalJS(loopClip.x,loopClip.y,loopClip.z,_n);
+              const dn=2*(loopClip.dx*_n.x+loopClip.dy*_n.y+loopClip.dz*_n.z);
+              sB.set(loopClip.dx-dn*_n.x,loopClip.dy-dn*_n.y,loopClip.dz-dn*_n.z).normalize();
+              sO.set(loopClip.x+_n.x*0.06,loopClip.y+_n.y*0.06,loopClip.z+_n.z*0.06);
+            }else if(hitEn){ sB.set(dir.x,dir.y,dir.z); sO.set(end.x,end.y,end.z); }
+            else{
+              worldNormalJS(end.x,end.y,end.z,_n);
+              const dn=2*(dir.x*_n.x+dir.y*_n.y+dir.z*_n.z);
+              sB.set(dir.x-dn*_n.x,dir.y-dn*_n.y,dir.z-dn*_n.z).normalize();
+              sO.set(end.x+_n.x*0.06,end.y+_n.y*0.06,end.z+_n.z*0.06);
+            }
+            const sLen=sh.kind==='saw'?2.7:6;
+            const scol=[col[0]*0.8,col[1]*0.8,col[2]*0.8];   // parent col ×0.8 — hairline laser tier
+            for(let si=0;si<nSh;si++){
+              const ds=jitterDir(sB,_jDir,5);         // 0.2–0.4 rad, re-rolled every frame — the sparkler
+              let ts=marchWorldJS(sO.x,sO.y,sO.z,ds.x,ds.y,ds.z,sLen);
+              let sEn=null, sHead=false;
+              for(const en of enemies){
+                if(en.health<=0||en._dormant) continue;
+                const rx=en.position.x-sO.x, ry=(en.position.y+0.95)-sO.y, rz=en.position.z-sO.z;
+                const tt=rx*ds.x+ry*ds.y+rz*ds.z;
+                if(tt>0.05&&tt<ts){
+                  const d=Math.hypot(en.position.x-(sO.x+ds.x*tt),(en.position.y+0.95)-(sO.y+ds.y*tt),en.position.z-(sO.z+ds.z*tt));
+                  const hp=enemyHeadPos(en,_hpV);
+                  const hd=Math.hypot(hp.x-(sO.x+ds.x*tt),hp.y-(sO.y+ds.y*tt),hp.z-(sO.z+ds.z*tt));
+                  if(d<0.55||hd<0.24){ ts=tt; sEn=en; sHead=hd<0.24; }
+                }
+              }
+              if(sEn){
+                let sd=0.45*((24+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);   // bolt-shard tick — chaos boosts once, same as the parent line (frag precedent: inherit, no double dip)
+                if(sHead){
+                  if(sEn.helm){ sEn._helmT=(sEn._helmT||0)+dt; if(sEn._helmT>=0.4){ sEn._helmT-=0.4; crackHelm(sEn); } }
+                  else sd*=2;
+                }
+                sEn.hurt(sd,'player',sHead?'head':undefined); applyStatus(sEn,{burn:sd,bleed:threadCut(sEn,sh.pend.bleed,dt)});   // A5: shard ticks COOK too; bleed banks on the cut cadence
+              }
+              beamSegs.push({a:sO,b:new Vec3(sO.x+ds.x*ts,sO.y+ds.y*ts,sO.z+ds.z*ts),col:scol,ttl:dt+0.001,flash:lastT});
+            }
+          }
+        }
+      }
       if(k===0) addDyn(end.x,end.y,end.z,[col[0]*0.6,col[1]*0.6,col[2]*0.6],0.8,0.04);
+      if(sh.kind==='wave'){                            // the WIDE read: one flash-tier perp bar spans the corridor's end (sum 1.45 → fat 0.035)
+        const cw=Math.round(sh.pend.twin)>1?2.1:1.5, pl=Math.hypot(dir.z,dir.x)||1;
+        beamSegs.push({a:new Vec3(end.x+dir.z/pl*cw,end.y,end.z-dir.x/pl*cw),b:new Vec3(end.x-dir.z/pl*cw,end.y,end.z+dir.x/pl*cw),col:[0.45,0.4,0.6],ttl:dt+0.001,flash:lastT});
+      }
     }
   }
   if(!any) _endBeams();
 }
 function _endBeams(){
+  _swing=null;                              // the rope lets go — momentum (playerPos.velX/Z) rides on
   _pgRegrabLock=false;                      // trigger came up — the next thread may grab afresh
   if(_beamLanes.size===0) return;
   const res=activeTool?activeTool._res:null;
@@ -4504,13 +4969,14 @@ function _endBeams(){
 // rules: bare head x2, a helm eats the bonus and cracks), honors DRILL pierce, and
 // pays the core's FULL projectile hurt — no continuous-beam discount. Draws one
 // one-frame laser-tier flash (col sums >2.8 land in the shader's 0.004 ray).
-function fireHitscan(owner,origin,dir,shot,res,dt){
+function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
+  const gen=_worldGen;                                 // a spark/boom pulse below can splash the shooter dead
   const p=shot.pend;
   const o=owner==='player'?camPos():origin, f=dir;
   const maxLen=60;
   let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
-  let pierceLeft=p.pierce;
-  const dmg=(shot.kind==='boom'?34:shot.kind==='spark'?12:res.dmg)+p.dmg;
+  const pierceAll=p.pierce>0;                          // DRILL: the pulse takes every body in the sweep before the wall
+  const dmg=((shot.kind==='boom'?34:shot.kind==='spark'?12:res.dmg)+p.dmg)*chaosMul(p.chaos);
   const hits=[];
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;
@@ -4529,8 +4995,7 @@ function fireHitscan(owner,origin,dir,shot,res,dt){
     if(shot.kind!=='spark'&&shot.kind!=='boom') applyStatus(h.en,p);   // blast kinds dose via the explosion — once
     playSound('hit');
     if(res&&res.pulse){ h.en.velocity.addScaledVector(f,8); h.en.stagger=0.35; }
-    if(pierceLeft<=0){ t=h.tt; break; }
-    pierceLeft--;
+    if(!pierceAll){ t=h.tt; break; }
   }
   const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
   const fa=origin.clone?origin.clone():new Vec3(origin.x,origin.y,origin.z);
@@ -4545,6 +5010,19 @@ function fireHitscan(owner,origin,dir,shot,res,dt){
     worldNormalJS(end.x,end.y,end.z,_n); addDecal(end,_n,0.14);
     addDyn(end.x,end.y,end.z,[1,0.4,0.4],1.0,0.05);
   }
+  if(gen!==_worldGen) return;                          // the blast killed the shooter — no housed sequel fired into the fresh world
+  // HOUSED DELIVERY (accounting fix): the pull/pulse already PAID the folded
+  // chain — spendCharge took the root-folded cost, roundsFor took the chain's
+  // lead — but this path used to discard shot.relayNext. Cast the housed
+  // payload at the pulse's contact point: aim ray only (doRelay mirrors
+  // emitProjectile's first-TWIN-copy rule), no touch no cast (the projectile
+  // miss precedent), _relayPaid unset — this first delivery is the pre-paid one.
+  if(doRelay&&owner==='player'&&shot.relayNext&&shot.relayNext.housed&&t<maxLen-0.1){
+    const flesh=hits.length>0&&!pierceAll;
+    let rx2=f.x,ry2=f.y,rz2=f.z;                       // flesh: the cast carries onward through the wound
+    if(!flesh){ worldNormalJS(end.x,end.y,end.z,_n); rx2=_n.x; ry2=_n.y; rz2=_n.z; }   // wall: the cast leaves the FACE (CONTACT law)
+    castRelay({owner,relay:shot.relayNext,pos:end,rdir:new Vec3(rx2,ry2,rz2),rbase:res,src:null,tool:activeTool},true);
+  }
 }
 // BURST LASERS — burst cam + BEAM on a damage core: the lane stops flowing and
 // VOLLEYS instead. `burst` pulses 70ms apart, re-trigger gated by fireRate like
@@ -4556,9 +5034,10 @@ function fireHitscan(owner,origin,dir,shot,res,dt){
 // grip/pick never volley — the physgun and the carver stay continuous.
 const _laserBursts=[];                    // {lane,sh,res,left,t}
 function burstLaser(res,sh){
-  return res.burst>1&&sh.pend.laser&&sh.kind!=='grip'&&sh.kind!=='pick'&&sh.kind!=='wave'&&sh.kind!=='orb'&&sh.kind!=='saw';
+  return res.burst>1&&sh.pend.laser&&sh.kind!=='grip'&&sh.kind!=='pick'&&sh.kind!=='wave'&&sh.kind!=='orb'&&sh.kind!=='saw'&&!sh.powder;   // powder pulses walk the plain burst loop — 1 rd each, never the 0⚡/0rd volley mint
 }
 function runBurstLasers(dt){
+  const gen=_worldGen;                        // a boom pulse can splash its own gunner dead mid-volley
   for(let i=_laserBursts.length-1;i>=0;i--){
     const q=_laserBursts[i];
     if(!activeTool||activeTool._res!==q.res){ _laserBursts.splice(i,1); continue; }   // re-racked mid-volley: it dies with the old sequence
@@ -4575,12 +5054,13 @@ function runBurstLasers(dt){
       }
       let rays=Math.max(1,Math.round(q.sh.pend.twin));
       if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
-      for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f,_jDir):f,q.sh,q.res,dt);
+      for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f,_jDir):f,q.sh,q.res,dt,r===0);
+      if(gen!==_worldGen) return;            // the pulse killed the gunner — the volley (and its null wield) dies with the world
       const silent=q.sh.pend.silent||q.res.silenced||q.lane.silenced;
       playSound(silent?'silenced':'spark');
       addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
       if(!silent){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
-      cameraPitch+=0.012+q.res.dmg*0.0004; playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4);
+      addKick(0.012+q.res.dmg*0.0004);
       updateToolReadout();
       q.left--; q.t+=0.07;
     }
@@ -4611,7 +5091,6 @@ function runTacLaser(dt){
   const lr=document.getElementById('laserRange');
   if(lr){ lr.textContent=t>=maxLen-0.1?'—— m':t.toFixed(1)+' m'; lr.style.opacity=1; }
 }
-function endBeam(){ beamActive=false; beamAudio(false); if(heldWorld&&heldWorld.mode==='beam') releaseHeld(false); }
 
 // ---- HEADSHOTS: the head is a second, smaller test sphere — twin of the GLSL head.
 // ---- The center MOVES: it rides the head-look (enHeadYaw in the shader — change one,
@@ -4667,8 +5146,12 @@ function steerPr(pr,tx,ty,tz,maxAng){
   pr.vel.set((vx*c+cx*s)*sp,(vy*c+cy*s)*sp,(vz*c+cz*s)*sp);
 }
 function updateProjectiles(dt){
+  const gen=_worldGen;
   for(let i=projectiles.length-1;i>=0;i--){
+    if(gen!==_worldGen) return;                          // a hit below killed the player → teardown cleared this list mid-walk
     const pr=projectiles[i];
+    if(!pr) continue;                                    // belt to the bail's braces: never chase a hole
+    if(pr._cull){ projectiles.splice(i,1); continue; }   // orb cap marked it — reaped here, at a safe index
     if(pr.stuck){                                        // FUSEd: sit, count, blow
       pr.fuseT-=dt;
       if(pr.kind==='decoy'&&pr.fuseT>0){                 // LURE: sing to the camp
@@ -4679,14 +5162,16 @@ function updateProjectiles(dt){
       continue;
     }
     pr.life-=dt;
-    if(pr.life<=0){ if(pr.kind==='warp'||pr.kind==='orb') triggerPayload(pr); projectiles.splice(i,1); continue; }   // ORB pops at 6s; WARP: the end of the arc is arrival too
+    if(pr.life<=0){ if(pr.kind==='warp'||pr.kind==='orb'||pr.kind==='grip') triggerPayload(pr); projectiles.splice(i,1); continue; }   // ORB pops at 6s; WARP: the end of the arc is arrival too; GRIP: glue sets wherever it dies — midair included
+    if(pr.timerT>0){ pr.timerT-=dt; if(pr.timerT<=0){ triggerPayload(pr); projectiles.splice(i,1); continue; } }   // TIMER: the bell rings mid-air — the payload casts where it hangs
     pr.vel.y-=pr.grav*dt;
     // RETURN: the way out is spent — the shot stalls, banks, and flies home to
     // the thrower's CURRENT position. Both passes cut; walls still kill it.
     if(pr.retT>0){
       pr.retT-=dt;
-      pr.vel.multiplyScalar(Math.max(0.05,1-2.4*dt));            // bleed speed going out
-      if(pr.retT<=0){ pr.returning=true; pr.bounces=0; pr.life=Math.max(pr.life,1.8); }   // no ricochet on the way back
+      const os=1-Math.max(0,pr.retT)/0.55, oe=os*os*(3-2*os);    // smoothstep ramp:
+      pr.vel.multiplyScalar(Math.max(0.05,1-2.4*oe*dt));         // full pace off the muzzle, the stall lands soft
+      if(pr.retT<=0){ pr.returning=true; pr.bounces=0; pr.retPhase=0; pr.life=Math.max(pr.life,1.8); }   // no ricochet on the way back
     }
     if(pr.returning){
       const s=pr.owner==='player'?playerPos:(pr.src&&pr.src.position);
@@ -4694,9 +5179,11 @@ function updateProjectiles(dt){
         const hy=s===playerPos?s.y+0.9:s.y+0.95;
         const hd=Math.hypot(s.x-pr.pos.x,hy-pr.pos.y,s.z-pr.pos.z);
         if(hd<0.6){ addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[0.5,0.8,0.9],0.7,0.05); playSound('click'); projectiles.splice(i,1); continue; }   // caught
-        steerPr(pr,s.x,hy,s.z,4.5*dt);
+        pr.retPhase=Math.min(1,(pr.retPhase||0)+dt/0.35);
+        const te=pr.retPhase*pr.retPhase*(3-2*pr.retPhase);      // ease-in the bank: lazy arc, then committed
+        steerPr(pr,s.x,hy,s.z,4.5*te*dt);
         const sp=pr.vel.length();                                // wind back up to launch speed
-        if(sp>0.001&&sp<pr.retSp) pr.vel.multiplyScalar(Math.min(pr.retSp,sp+pr.retSp*3*dt)/sp);
+        if(sp>0.001&&sp<pr.retSp) pr.vel.multiplyScalar((sp+(pr.retSp-sp)*Math.min(1,4.5*dt))/sp);   // exponential approach: no clamp kink at cruise
       }
     }else if(pr.homing){
       // SEEKER: nearest live warmth in a forward cone (~40°, 45m) bends the
@@ -4718,7 +5205,10 @@ function updateProjectiles(dt){
           const d=Math.hypot(dx,dy,dz);
           if(d<best&&d>0.001&&(dx*fx+dy*fy+dz*fz)/d>=0.766){ best=d; tx=dx; ty=dy; tz=dz; }
         }
-        if(best<45) steerPr(pr,pr.pos.x+tx,pr.pos.y+ty,pr.pos.z+tz,3.2*pr.homing*dt);
+        if(best<45){ pr.lockT=Math.min(0.4,(pr.lockT||0)+dt);
+          const le=(pr.lockT/0.4)*(pr.lockT/0.4)*(3-2*pr.lockT/0.4);   // the lock WAKES: smoothstep over 0.4s
+          steerPr(pr,pr.pos.x+tx,pr.pos.y+ty,pr.pos.z+tz,3.2*pr.homing*le*dt);
+        }else pr.lockT=0;
       }
     }
     // CHAOS: the flight forgets the straight line — composes with SEEKER into a
@@ -4749,12 +5239,25 @@ function updateProjectiles(dt){
           }
         }else if(!pr.hitPl){
           const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-          if(d<1.9){ pr.hitPl=true; damagePlayer(pr.dmg); applyStatus(playerPos,pr); }
+          if(d<1.9){ pr.hitPl=true; damagePlayer(pr.dmg); if(gen!==_worldGen) return; applyStatus(playerPos,pr); }   // a killing wall: the dose dies with the world
         }
       }else{
       if(pr.owner!=='player'){
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-        if(d<(pr.kind==='slug'?0.7:0.42)){ damagePlayer(pr.dmg); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
+        if(d<(pr.kind==='slug'?0.7:0.42)){
+          if(pr.pierce>0){                               // DRILL: the body is a tunnel — one bill per body per 0.1s
+            if(!pr._dHit) pr._dHit=new Map();
+            const last=pr._dHit.get(playerPos);
+            if(last===undefined||last-pr.life>=0.1){
+              pr._dHit.set(playerPos,pr.life);
+              damagePlayer(pr.dmg); if(gen!==_worldGen) return;   // a killing tick: dose and payload die with the world
+              if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr);   // spark/boom dose rides the explosion — once
+              if(pr.contact&&!(pr.fuse>0)) castRelay(pr,false,playerPos.x,playerPos.y+0.9,playerPos.z);   // DRILL+CONTACT: the payload delivers every tick in-body — zealot extras cap at 3
+            }
+            continue;                                    // keep flying
+          }
+          damagePlayer(pr.dmg); if(gen!==_worldGen) return;   // the killing shot: onDeath cleaned the fresh spawn — no re-dose, no payload after it
+          if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr,playerPos.x,playerPos.y+0.9,playerPos.z); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
         for(const en of enemies){
@@ -4764,10 +5267,22 @@ function updateProjectiles(dt){
           const hd=Math.hypot(pr.pos.x-hp.x,pr.pos.y-hp.y,pr.pos.z-hp.z);
           if(d<(pr.kind==='slug'?0.9:0.55)||hd<0.24){
             if(pr.kind==='grip'){ addGlobOnEnemy(en); dead=true; break; }   // glue takes flesh: it sticks, it does not cut
+            if(pr.pierce>0){                             // DRILL: the body is a tunnel — one bill per body per 0.1s
+              if(!pr._dHit) pr._dHit=new Map();
+              const last=pr._dHit.get(en);
+              if(last===undefined||last-pr.life>=0.1){
+                pr._dHit.set(en,pr.life);
+                const head=hd<0.24;
+                en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');   // spark/boom dose rides the explosion — once
+                if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
+                if(pr.contact&&!(pr.fuse>0)) castRelay(pr,false,en.position.x,en.position.y+0.95,en.position.z);   // DRILL+CONTACT: the payload delivers every tick in-body — extras billed
+              }
+              break;                                     // keep flying
+            }
             const head=hd<0.24;
             en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');   // spark/boom dose rides the explosion — once
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
-            dead=impactOrPierce(pr); break; }
+            dead=impactOrPierce(pr,en.position.x,en.position.y+0.95,en.position.z); break; }
         }
         if(dead) continue;
       }
@@ -4775,21 +5290,23 @@ function updateProjectiles(dt){
       // world
       const wd=mapWorldJS(pr.pos.x,pr.pos.y,pr.pos.z);
       if(wd<(pr.kind==='slug'?0.30:pr.kind==='orb'?0.12:0.04)){   // increased projectile size for fat ordnance
-        if(pr.contact&&!(pr.fuse>0)){                  // CONTACT: no patience — first touch triggers, the relay casts from here (on the same core FUSE governs: stick+timer; contact vents)
-          worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
-          pr.pos.addScaledVector(_n,0.06);
-          addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
-          dead=true;
-          triggerPayload(pr);
-        }else if(pr.bounces>0){
+        if(pr.bounces>0){
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           const dot=pr.vel.dot(_n);
           pr.vel.x-=2*dot*_n.x; pr.vel.y-=2*dot*_n.y; pr.vel.z-=2*dot*_n.z;
           pr.vel.multiplyScalar(0.8);
           pr.pos.addScaledVector(_n,0.08);
           pr.bounces--; playSound('click');
+        }else if(pr.contact&&!(pr.fuse>0)){            // CONTACT: the LAST touch triggers — RICOCHET spends its banks first; flesh triggers any time (on the same core FUSE governs: stick+timer; contact vents)
+          worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          if(pr.relay&&pr.rdir) pr.rdir.set(_n.x,_n.y,_n.z);   // the cast leaves the FACE, not the flight
+          pr.pos.addScaledVector(_n,0.06);
+          addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
+          dead=true;
+          triggerPayload(pr);
         }else if(pr.fuse>0){                             // FUSE: stick to the surface
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          if(pr.relay&&pr.rdir) pr.rdir.set(_n.x,_n.y,_n.z);   // the cast leaves the FACE, not the flight
           pr.pos.addScaledVector(_n,0.06);
           pr.vel.set(0,0,0); pr.grav=0;
           pr.stuck=true; pr.fuseT=pr.fuse;
@@ -4797,6 +5314,7 @@ function updateProjectiles(dt){
           dead=false; break;
         }else{
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          if(pr.relay&&pr.rdir) pr.rdir.set(_n.x,_n.y,_n.z);   // the cast leaves the FACE, not the flight
           addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
           dead=true;
           triggerPayload(pr);
@@ -4806,12 +5324,12 @@ function updateProjectiles(dt){
     if(dead) projectiles.splice(i,1);
   }
 }
-function impactOrPierce(pr){
+function impactOrPierce(pr,cx,cy,cz){
+  if(pr.relay&&pr.rdir&&cx!==undefined){ const l=Math.hypot(pr.pos.x-cx,pr.pos.y-cy,pr.pos.z-cz)||1; pr.rdir.set((pr.pos.x-cx)/l,(pr.pos.y-cy)/l,(pr.pos.z-cz)/l); }   // flesh casts leave RADIALLY, out of the wound
+  if(pr.pierce>0) return false;                        // DRILL: flesh never stops it — call sites bill per body
   if(pr.contact&&!(pr.fuse>0)){ triggerPayload(pr); return true; }   // CONTACT: flesh counts as arrival — the relay casts from the wound (FUSE on the same core governs)
   if(pr.kind==='spark'||pr.kind==='boom'||pr.kind==='warp'){ triggerPayload(pr); return true; }   // WARP+SEEKER = blink onto the mark
-  if(pr.split>0){ splinterBurst(pr); return true; }
-  if(pr.pierce>0){ pr.pierce--; return false; }
-  if(pr.relay||pr.fuse>0) triggerPayload(pr);          // FUSE on flesh: still terminal — the payload fires, the chain casts
+  if(pr.split>0||pr.relay||pr.fuse>0){ triggerPayload(pr); return true; }   // split now routes through the payload point — a TIMER/FUSE relay casts even when the shot shatters (old split-branch silently dropped the relay: declared fix)
   return true;
 }
 // one routing point for what a shot DOES when it lands (immediate or fused)
@@ -4822,13 +5340,43 @@ function triggerPayload(pr){
   if(pr.kind==='warp') warpArrive(pr);
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick'&&pr.kind!=='boom') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
-  if(pr.relay){                                        // FUSE/CONTACT-RELAY: the death casts the next core — free, the relay surcharge already paid
-    const sh=pr.relay; pr.relay=null;                  // one cast per corpse
-    emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge
+  // FUSE/CONTACT-RELAY: the death casts the next core — the pull pre-paid the first delivery
+  castRelay(pr,true);
+}
+// EXTRA CASTS COST A THIRD — the pull pre-pays ONE delivery of the housed chain.
+// Every cast past the first (in-body DRILL ticks, SPLINTER frag deliveries) draws
+// ceil(chain ⚡/3) — the burst-pulse precedent — and a BALLISTIC chain's extras eat
+// their rounds from the carrier's own mag: lead is a full price (the POWDER law).
+// Can't pay either bill: the cast simply doesn't happen. Zealots pay no ⚡ — their
+// extras cap flat at 3 per projectile.
+function castRelay(pr,term,cx,cy,cz){
+  const sh=pr.relay; if(!sh) return;
+  if(cx!==undefined&&pr.rdir){ const l=Math.hypot(pr.pos.x-cx,pr.pos.y-cy,pr.pos.z-cz)||1; pr.rdir.set((pr.pos.x-cx)/l,(pr.pos.y-cy)/l,(pr.pos.z-cz)/l); }
+  if(term) pr.relay=null;                              // one TERMINAL cast per corpse stands
+  if(pr._relayPaid){
+    if(pr.owner==='player'){
+      const tl=pr.tool||activeTool;                      // the tool that FIRED the chain pays — projectiles outlive the wield, a holster swap must not bill the other tool's cells/mag
+      const c=Math.ceil(chainCost(sh)/3);                // the law: extras draw ceil(CHAIN ⚡/3) — sh.cost alone is link-local (fold sits on the root), a 0-cost housed POWDER was casting its 26⚡ BOOM sub-chain free
+      if(!tl||tl.charge<c) return;
+      const rds=roundsFor(sh);
+      if(rds>0){ const mag=sh.lane?columnMag(tl,sh.lane.mountIdx,true):null; if(!mag||mag.loaded<rds) return; mag.loaded-=rds; }
+      spendCharge(tl,c);
+    }else if((pr._exCasts=(pr._exCasts||0)+1)>3) return;
   }
+  pr._relayPaid=true;
+  emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true,pr.tool);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge; the chain's tool rides into the sub-emit
 }
 function splinterBurst(pr){
-  const nFrag=Math.min(4,pr.split);
+  // SHARD BUDGET — steered shards LINGER (SEEKER chases, RETURN loops home), so a
+  // TWIN(3)×SPLINTER volley piles up faster than the old dumb frags did. The tracer
+  // upload is already hard-capped at RLIM.TRACERS (excess shards simply don't draw),
+  // but updateProjectiles walks the WHOLE array each frame — cap LIVE shards so a
+  // pathological build can't starve the incoming-fire tracers or grow the sim
+  // unbounded. 24 ≈ two full TWIN(3)×SPLINTER(4) pulls; past it a burst spawns
+  // fewer/none — the blast, relay and explode still fire, only the shard spray is
+  // clamped. Powerful-but-paid stands: normal play never reaches the rail.
+  let live=0; for(const q of projectiles) if(q._shard) live++;
+  const nFrag=Math.max(0,Math.min(4,pr.split,24-live));
   for(let j=0;j<nFrag;j++){
     const a=runRng()*Math.PI*2, e=(runRng()-0.2)*1.2;
     const sp=Math.max(14,pr.vel.length()*0.45)||26;
@@ -4838,7 +5386,19 @@ function splinterBurst(pr){
       vel:new Vec3(Math.cos(a)*Math.cos(e)*sp,Math.sin(e)*sp,Math.sin(a)*Math.cos(e)*sp),
       dmg:Math.max(2,Math.round(pr.dmg*0.45)),
       bounces:pr.bounces, pierce:pr.pierce, grav:6,
-      fuse:0, split:0, stuck:false,                      // fragments never re-split
+      fuse:0, split:0, stuck:false, _shard:true,         // fragments never re-split; _shard counts against the burst budget
+      contact:!!(pr.contact&&pr.relay), relay:pr.relay||null,
+      rdir:pr.rdir?pr.rdir.clone():null, rbase:pr.rbase||null, src:pr.src||null, tool:pr.tool||null,
+      _relayPaid:true,                                   // parent's terminal was the free cast — every shard delivery draws its third
+      // STEERING RIDES THE SHARD (owner ask): the same core's charged steer carries
+      // onto each shard — SEEKER shards home, CHAOS shards fly wild, RETURN shards
+      // boomerang home from the shatter point (fresh 0.55s out, their own launch
+      // speed back). steerPr integrates them every frame exactly like the parent;
+      // precedence (return overrides homing, chaos wobbles unless returning) is the
+      // projectile machinery's own, unchanged. Bare BOOM+SPLINTER shards stay dumb —
+      // the boom object carries no steer fields (flight-feeders inert by design).
+      homing:pr.homing||0, chaos:pr.chaos||0,
+      retT:pr.retSp>0?0.55:0, retSp:pr.retSp>0?sp:0,
       burn:Math.round((pr.burn||0)*0.45), bleed:!!pr.bleed,
       col:pr.col, silent:pr.silent,
     });
@@ -4867,6 +5427,7 @@ function carveAt(pr){
   playSound('spark');
 }
 function explode(pr){
+  const gen=_worldGen;                                   // self-splash can kill the maker mid-blast
   const big=pr.kind==='boom';                            // BOOM: the same blast, written larger
   playSound('boom');
   addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.5,0.2],big?9:5,big?0.45:0.25);
@@ -4875,22 +5436,32 @@ function explode(pr){
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
     const d=en.position.distanceTo(pr.pos);
-    if(d<R){ en.hurt(pr.dmg*(1-d/R)*1.6, pr.owner); applyStatus(en,pr); }
+    if(d<R){ const fall=1-d/R; en.hurt(pr.dmg*fall*1.6, pr.owner); applyStatus(en,{burn:(pr.burn||0)+Math.round(pr.dmg*fall*0.35), bleed:pr.bleed}); }   // the blast SEARS — dose scales with the hurt at range
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)); applyStatus(playerPos,pr); }
+  if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); if(gen!==_worldGen) return;   // it killed its maker — sear, kick, and shove die with the world (clearHudFx already swept the screen)
+    applyStatus(playerPos,{burn:(pr.burn||0)+Math.round(pr.dmg*(1-pd/R)*0.35), bleed:pr.bleed});   // same flesh math the enemies eat — armor shaves it after; the blast SEARS both sides
+    playerPos.kickV+=30; playerPos.pitchPend-=0.02*(1-pd/R); }   // the blast kicks — self-splash must READ (eased: 30/(ωe)≈0.69 peak ≈ the old +0.7 step; pitch dips DOWN)
   for(const w of worldItems){
     const d=w.pos.distanceTo(pr.pos);
     if(d<R){ const f=new Vec3().subVectors(w.pos,pr.pos).normalize(); w.vel.addScaledVector(f,(1-d/R)*14); w.vel.y+=3; }
   }
 }
-// ---- statuses: burn POOLS (capped), bleed REFRESHES (never stacks) ----
+// THREAD CUT CADENCE — a cut is a WOUND, not a frame: continuous-thread ticks
+// (bolt/saw line, arc bites, wave corridor, shards) bank one bleed stack per
+// 0.5s of contact per target; the first touch cuts at once. Projectile hits
+// keep 1 cut per landed shot; DRILL's 0.1s in-body ticks keep their declared
+// ledger. Without this a SERRATED thread kiss stacked to cap 5 in ~83ms.
+function threadCut(en,on,dt){ if(!on) return false; en._cutT=(en._cutT===undefined?0.5:en._cutT)+dt; if(en._cutT<0.5) return false; en._cutT-=0.5; return true; }
+// ---- statuses: burn POOLS (capped) · bleed STACKS (cap 5), 15s from the freshest cut ----
 function effMaxHP(){ return playerPos.maxHealth-playerPos.burnedMax; }   // burned health stays burned until treated
 function applyStatus(t,pr){
   if(!t.status) return;
   const pl=t===playerPos;                              // worn resists shave the dose — both sides
   if(pr.burn)  t.status.burn=Math.min(30, t.status.burn+pr.burn*(pl?playerResist('burn'):t.resist?t.resist('burn'):1));
-  if(pr.bleed) t.status.bleedT=Math.max(t.status.bleedT, 30*(pl?playerResist('bleed'):t.resist?t.resist('bleed'):1));
+  if(pr.bleed){ const r=(pl?playerResist('bleed'):t.resist?t.resist('bleed'):1);
+    t.status.bleedN=Math.min(5,(t.status.bleedN||0)+1);
+    t.status.bleedT=Math.max(t.status.bleedT, 15*r); }   // 15s from the freshest cut; resists shave the clock
 }
 // ---- a worn piece absorbs a point per hit; at 0 it breaks off the rig for good
 function armorWear(slot){
@@ -4907,6 +5478,16 @@ function playerResist(kind){
   for(const s of ['plates','helmet']){ const a=equip[s]; if(a&&a.resist) m*=1-(a.resist[kind]||0); }
   return m;
 }
+// ---- the HUD's transients die with the run: the hurt vignette, the alert wash,
+// ---- the recoil pendulums. The gen counter spends any hurt-flash setTimeout
+// ---- still in flight — a killing blow's 120ms echo must not paint a fresh spawn.
+let _fxGen=0;
+function clearHudFx(){
+  _fxGen++;
+  document.getElementById('vignette').style.opacity=0;
+  document.getElementById('alertFlash').style.opacity=0;
+  playerPos.viewKick=0; playerPos.kickV=0; playerPos.pitchPend=0;
+}
 function damagePlayer(dmg){
   // ---- armor seam: plates multiply, helmet shaves. Enemy fire aims center-mass, so
   // ---- there is no head channel to read on received fire yet — both pieces wear a
@@ -4918,7 +5499,8 @@ function damagePlayer(dmg){
   playSound('hurt');
   const v=document.getElementById('vignette');
   v.style.opacity=Math.min(1,0.35+ (1-playerPos.health/playerPos.maxHealth)*0.6);
-  setTimeout(()=>{v.style.opacity=Math.max(0,(1-playerPos.health/playerPos.maxHealth)*0.45);},120);
+  const g=_fxGen;
+  setTimeout(()=>{ if(g===_fxGen) v.style.opacity=Math.max(0,(1-playerPos.health/playerPos.maxHealth)*0.45); },120);
   if(playerPos.health<=0) onDeath();
 }
 let _beltT=0;
@@ -4969,7 +5551,7 @@ class Zealot{
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
-    this.status={burn:0,bleedT:0};
+    this.status={burn:0,bleedT:0,bleedN:0};
     this.muzzle=0; this.hurtFlash=0;
     this.targetPoint=this.newPatrolTarget();
     this.buildTool();
@@ -5088,7 +5670,7 @@ class Zealot{
       this.status.burn-=b; this.health-=b;
       this.hurtFlash=Math.max(this.hurtFlash,0.35);  // the body shows the fire — free telegraph
     }
-    if(this.status.bleedT>0){ this.status.bleedT-=dt; this.health-=dt/1.5; }
+    if(this.status.bleedT>0){ this.status.bleedT-=dt; this.health-=dt*(this.status.bleedN||1); if(this.status.bleedT<=0) this.status.bleedN=0; }   // 1 hp/s per stack · 15s
     if(this.health<=0){ this.die(); return; }
     if(this.stagger>0){ this.stagger-=dt; this.position.addScaledVector(this.velocity,dt*0.4); this.settle(dt); return; }
 
@@ -5179,6 +5761,7 @@ class Zealot{
       this.yaw+=clamp(d,-3*dt,3*dt);
     }
     this.position.addScaledVector(this.velocity,dt);
+    if(this._prX||this._prZ){ this.position.x+=this._prX*2.2*dt; this.position.z+=this._prZ*2.2*dt; this._prX=0; this._prZ=0; }   // WAVE press (paid verb): applied AFTER pathing wrote velocity, so chasers feel it too — no stagger, settle() keeps it out of walls
     this.settle(dt);
     if(this.reloadT>0){ this.reloadT-=dt; if(this.reloadT<=0){ const m=toolMagazine(this.tool);
       if(m){ const take=Math.min(this.reserve,m.maxCapacity); m.loaded=take; this.reserve-=take; } } }
@@ -5228,7 +5811,7 @@ class Zealot{
     this.startPos=this.position.clone();
     this.health=34; this.detection=0; this.state=0; this.investigate=null;
     this._helmT=0;
-    this.status.burn=0; this.status.bleedT=0;
+    this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
     this.buildTool();
     this.rollGear();
   }
@@ -5267,6 +5850,7 @@ function placeValleyExfil(){
   VALLEY_EXFIL={id:'exValley', x, z, y:Math.max(0,restOnSurface(x,30,z)), r:4.5, label:'THE WAY HOME'};   // base snapped to the dirt, same idiom as deployTo's authored snap
 }
 function resetLevel(){
+  _worldGen++;                                // same tripwire as teardownWorld — onBreach re-seeds in place
   SEED.x=Math.floor(runRng()*900)+17;
   SEED.y=Math.floor(runRng()*900)+13;
   placeGate();
@@ -5309,8 +5893,11 @@ function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   depth=1; kills=0; runClock=0;
   playerPos.health=playerPos.maxHealth;
-  playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
+  playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
+  clearHudFx();                                // a fresh run starts with a clean visor
+  applyDebugTuning(null,null);                 // debug knobs are per-save now — a fresh run starts stock
   for(const k of EQUIP_SLOTS) equip[k]=null;   // you start with NOTHING on the body — the stash holds the kit
+  for(const row of pocketsGrid) row.fill(null);   // fresh run: empty hands AND empty pockets
   activeTool=null; holsterCur=-1;
   syncBagAlias(); clampZone();
   seedStashKit();                              // BEFORE deployTo — the hideout's guaranteed-spawn check reads the stash
@@ -5326,24 +5913,26 @@ function newGame(){                            // the terminal's START OVER — 
 function onDeath(){
   if(!_pillDeath && !(activeLevel&&activeLevel.id==='hideout')){   // a lost raid, not a lost life
     playSound('death');
-    endBeam();                               // a mid-beam death: kill the hum and the beam-mode grip while the world still stands
+    _endBeams();                             // a mid-beam death: drop the rope and the beam-mode grip while the world still stands
     // THE TEETH v2: everything is the valley's now — the rig, every pocket sewn to
     // it, the tool in your grip. Only the stash at home remembers.
     // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null; holsterCur=-1; reloadTimer=0;   // no wield, no draw memory, no reload landing on empty hands
+    for(const row of pocketsGrid) row.fill(null);    // the valley takes the pockets' contents too — the four slots stay, empty
     syncBagAlias(); clampZone();             // bagGrid falls back to the 1x1 stub; the cursor keeps a legal zone
     if(!activeLevel) depth=1;                // the ring count died with the run — the next OPEN VALLEY starts at I
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
     deployTo('hideout');
-    playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.burnedMax=0;
+    playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
+    clearHudFx();                            // the death that sent you home must not stain the next screen
     showBanner('THE VALLEY KEPT EVERYTHING');   // AFTER deployTo — it calls showBanner(L.name) and would stomp this
     return;
   }
   _pillDeath=false;
   gameState='dead'; timeScale=0;
   playSound('death');
-  endBeam();
+  _endBeams();
   document.getElementById('deathStats').innerHTML=
     'Ring <b>'+roman(depth)+'</b> · guards silenced <b>'+kills+'</b> · lasted <b>'+fmtTime(runClock)+'</b>';
   document.getElementById('deathScreen').classList.remove('hidden');
@@ -5361,8 +5950,11 @@ let TRAVEL=null;                              // {dest:'area1'|'hideout'} — th
 const legDepth=()=>TRAVEL?1:depth;            // travel legs walk Ring I weather; the endless loop keeps its own count
 let isTerminalOpen=false;
 function teardownWorld(){
+  _worldGen++;                                // any loop still walking the old arrays must see the world die
   worldItems.length=0; enemies.length=0; projectiles.length=0;
   beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
+  _swing=null; playerPos.swinging=false; playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; meleeT=0;
+  slideT=0; slideHopSpd=0; sprintLatch=false; airSlideArmed=false;   // MOMENTUM CHAIN state must not leak across a world swap / respawn
   SDF_EDITS.length=0; dynLights.length=0;
   _beamLanes.clear(); _laserBursts.length=0;
   if(heldWorld){ heldWorld=null; document.getElementById('crosshair').classList.remove('carrying'); }
@@ -5387,7 +5979,7 @@ function deployTo(levelId){
     seedLevelSpawns(L);
     if(L.lights) for(const li of L.lights)
       dynLights.push({pos:{x:li.x,y:li.y,z:li.z},col:li.col,intensity:li.intensity,ttl:Infinity});
-    if(levelId==='hideout'){ playerPos.status.burn=0; playerPos.status.bleedT=0; }  // home stanches open wounds — the burn scar still wants aloe
+    if(levelId==='hideout'){ playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; }  // home stanches open wounds — the burn scar still wants aloe
     gameState = levelId==='hideout' ? 'hideout' : 'play';
   }else{
     activeLevel=null; levelBake=null;
@@ -5637,7 +6229,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash. v2 blobs load as an empty stash.
+const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
@@ -5701,8 +6293,15 @@ function saveGame(slot){
     const ch=stashInv[r][c];
     if(ch&&!seen.has(ch)&&ch.x===c&&ch.y===r){ seen.add(ch); stash.push(itemToJSON(ch)); }
   }
+  const pockets=[]; const pkSeen=new Set();                 // same top-left-anchored walk as the stash
+  for(let r=0;r<POCKET_ROWS;r++) for(let c=0;c<POCKET_COLS;c++){
+    const ch=pocketsGrid[r][c];
+    if(ch&&!pkSeen.has(ch)&&ch.x===c&&ch.y===r){ pkSeen.add(ch); pockets.push(itemToJSON(ch)); }
+  }
+  const params={}; for(const k in PARAMS) params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
-              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash};
+              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
+              params, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll}};
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
   const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
@@ -5719,8 +6318,20 @@ function saveMeta(slot){
     for(const k in b.equip) walk(b.equip[k]);
     walk(b.wield);
     (b.stash||[]).forEach(walk);
+    (b.pockets||[]).forEach(walk);
     return {stamp:b.stamp, items:n};
   }catch(e){ return null; }
+}
+// debug tuning rides the slots additively: known keys only, clamped to their
+// rails; anything missing or foreign reads as the boot default — corruption
+// still means "empty", never a crash. NEW GAME walks this with no blob at all.
+function applyDebugTuning(bp,bf){
+  for(const k in PARAMS) PARAMS[k].v=PARAM_DEFAULTS[k];
+  if(bp) for(const k in PARAMS) if(typeof bp[k]==='number'&&isFinite(bp[k]))
+    PARAMS[k].v=clamp(bp[k],PARAMS[k].min,PARAMS[k].max);
+  FLAGS.god=!!(bf&&bf.god); FLAGS.noclip=!!(bf&&bf.noclip); FLAGS.seeAll=!!(bf&&bf.seeAll);
+  resize();                                               // renderScale may have moved with the rest
+  syncDebugPanel();                                       // the once-built knobs go stale otherwise
 }
 function loadGame(slot){
   const ls=_ls(); const meta=saveMeta(slot);
@@ -5739,12 +6350,21 @@ function loadGame(slot){
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
       else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
     }
+    for(const row of pocketsGrid) row.fill(null);         // absent in old blobs → stays empty
+    for(const cj of (b.pockets||[])){
+      const ch=itemFromJSON(cj); if(!ch) continue;
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,pocketsGrid,POCKET_COLS,POCKET_ROWS)) placeInGrid(ch,cj.x,cj.y,pocketsGrid);
+      else autoPlace(ch,pocketsGrid,POCKET_COLS,POCKET_ROWS);
+    }
+    applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
   }catch(e){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
     for(const row of stashInv) row.fill(null);
+    for(const row of pocketsGrid) row.fill(null);
     _retuneOrphans.length=0;
     syncBagAlias(); clampZone();
+    applyDebugTuning(null,null);                          // a corrupt slot is an empty one — stock knobs
     toast('SLOT '+(slot+1)+' CORRUPT — READ AS EMPTY'); playSound('empty');
     refreshInvUI();
     return;
@@ -5753,7 +6373,7 @@ function loadGame(slot){
   if(_retuneOrphans.length){                              // the retune unseated tail mods — pockets first, stash second
     let lost=0;
     for(const o of _retuneOrphans) if(!autoPlaceAny(o)&&!autoPlace(o,stashInv,STASH_COLS,STASH_ROWS)) lost++;
-    toast('RETUNE UNSEATED '+_retuneOrphans.length+' MODULES — '+(_retuneOrphans.length-lost)+' RECLAIMED'+(lost?' · '+lost+' LOST':''));
+    toast('BARRELS SHRANK — '+(_retuneOrphans.length-lost)+' MODS MOVED'+(lost?' · '+lost+' LOST':''));
     _retuneOrphans.length=0;
   }
   refreshInvUI();
@@ -5803,38 +6423,39 @@ function tipBrief(it){                                  // the info square's row
     const rows=[];
     // racked above a FUSE/CONTACT carrier? the resolved shot knows — read it honestly
     if(it.cat==='proj'&&activeTool&&activeTool._res&&activeTool._res.shots.some(sh=>sh.core===it&&sh.housed))
-      rows.push('⌂ housed — fires from the carrier\'s impact; its ⚡ and lead ride the carrier\'s pull');
+      rows.push('⌂ housed — fires where the carrier lands; its ⚡/lead bill the carrier (extra casts draw a third)');
     if(e.base) rows.push('⚡'+e.base+' base');
     if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
     if(e.kind==='bolt') rows.push('+1 round per shot');
     if(e.kind==='decoy') rows.push('sticks · chirps every 1.5s for 12s · lures the unalarmed');
-    if(e.kind==='boom'){ rows.push('no flight — detonates as cast: bare fire blasts ~1.2m out (it WILL hurt you)'); rows.push('relay/contact-cast: the blast lands AT the point · FUSE-fed: flies, sticks, timed charge'); rows.push('TWIN: one blast, ×1.4 radius · BEAM-fed: a drum of small charges at the dot'); }
-    if(e.kind==='wave') rows.push('a wide slow wall · ~1.8m swath · shoves · each foe pays once');
+    if(e.kind==='boom'){ rows.push('no flight — the blast goes off ~1.2m from the muzzle (it WILL hurt you)'); rows.push('FUSE-fed: flies, sticks, timed · relay-cast: blasts AT the point · TWIN: one blast, ×1.4 radius · BEAM-fed: drums small charges at the dot'); }
+    if(e.kind==='wave'){ rows.push('a slow wide wall · ~1.8m swath · shoves · each foe pays once'); rows.push('beam-fed: a short wide pressure corridor (~10m) — everything in it pays and is pressed back · TWIN widens it'); }
     if(e.kind==='saw') rows.push('whole tool: cycle floor 0.06s · its own teeth die at ~4m · SWIFT stretches them');
-    if(e.kind==='warp'){ rows.push('you arrive where it dies — impact, fuse, or the end of its arc'); rows.push('arrival is LOUD · HUSH-fed: a whisper, both ends'); }
-    if(e.kind==='slug') rows.push('3 rounds per shot · fat, slow, ×3 tool hurt · whole tool +0.45s cycle unless relay-housed');
-    if(e.kind==='orb') rows.push('slow pearl · 6s aloft, then its payload pops · weak alone — it becomes what you feed it');
-    if(e.powder) rows.push('feeders ride free — their ⚡ surcharges are waived · threads refuse: full price under BEAM');
-    if(e.refund) rows.push('next core: base ⚡ waived · mag-fed cores fire without lead · this +10⚡ is never waived');
+    if(e.kind==='warp'){ rows.push('you arrive where it dies — impact, fuse, or the end of its arc'); rows.push('arrival is LOUD · HUSH-fed: quiet, both ends'); }
+    if(e.kind==='slug') rows.push('3 rounds per shot · ×3 tool hurt · whole tool +0.45s cycle unless relay-housed');
+    if(e.kind==='orb') rows.push('slow orb · 6s aloft, then its payload pops · weak alone');
+    if(e.powder) rows.push('its feeding mods cost no ⚡ · under BEAM: hitscan paid in lead — 1 round per pulse, 0⚡');
+    if(e.refund) rows.push('next core: base ⚡ waived · mag-fed: no lead spent · this +1⚡ is never waived');
     if(e.beltFeed) rows.push('chambers 1 round / 0.9s from your pockets · ticks softly — a suppressed tool feeds silent');
-    if(e.chaos){ rows.push('flight forgets the straight line · threads arc like lightning'); rows.push('with SEEKER: every arc bites the nearest warm thing'); }
+    if(e.chaos){ rows.push('wild flight · beam threads arc like lightning'); rows.push('with SEEKER: the arcs bite the nearest warm thing · with SPLINTER: the shards fly wild too'); }
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
     if(e.twin) rows.push('beam-fed: splits the thread ×'+e.twin+' · strands wander');
-    if(e.pierce) rows.push('pierces '+e.pierce);
+    if(e.pierce) rows.push('drills through every body in its path — each one pays · the world or the clock ends it');
     if(e.bounce) rows.push('bounces '+e.bounce);
+    if(e.grav){ rows.push('weight — the shot arcs and falls'); rows.push('beam-fed: the thread sags to the dirt at range · SWIFT flies it flatter · GRIP/PICK stay straight'); }
     if(e.spread) rows.push('spread ×'+e.spread);
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
     if(e.burst) rows.push(e.burst+'-round burst · beam lanes: '+e.burst+'-pulse laser burst');
     if(e.silenced||e.silent) rows.push('silenced');
-    if(e.fuse){ rows.push('fused '+e.fuse+'s — the death casts the next core in the lane from the blast point'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); }
-    if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
-    if(e.contact){ rows.push('first touch casts the NEXT core in the lane from the hit point — instant, no stick'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
-    if(e.split) rows.push('splinters ×'+e.split);
-    if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
-    if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
-    if(e.laser) rows.push('laser · ⚡+'+(e.surcharge||0));
+    if(e.fuse){ rows.push('fused '+e.fuse+'s — sticks, blows, and casts the next core in the lane off the stuck face'); rows.push('that core is HOUSED — out of the fire cycle, billed to this carrier'); }
+    if(e.timer){ rows.push(e.timer+'s clock or first touch — whichever first, casts the payload'); rows.push('feeding a FUSE: +'+e.timer+'s patience instead'); }
+    if(e.contact){ rows.push('LAST touch casts the next core in the lane, off the struck face — RICOCHET banks first · nothing above: plain impact · FUSE on the same core wins'); rows.push('that core is HOUSED — billed to this carrier · on a BEAM: the thread drums half-size casts at the contact point every 0.5s (ballistic beats cost lead)'); }
+    if(e.split){ rows.push('splinters ×'+e.split+' on impact'); rows.push('the shards inherit the core’s steer — SEEKER shards home · CHAOS shards fly wild · RETURN shards boomerang home · TWIN: every copy shatters'); rows.push('beam-fed: the thread shatters at contact — up to 3 shard rays, 6m, weaker · every TWIN strand shatters'); }
+    if(e.boomerang){ rows.push('returns to the thrower · both passes cut'); rows.push('with SPLINTER: the shards boomerang too'); rows.push('beam-fed: the thread loops out and back — cuts beside cover · TWIN mirrors it'); }
+    if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('with SPLINTER: the shards seek too'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
+    if(e.laser){ rows.push('laser · ⚡+'+(e.surcharge||0)); rows.push('beam hurt also burns — an equal dose per tick (pool 30, resists apply)'); }
     return {kind,rows};
   }
   if(it instanceof Magazine) return {kind:'MAGAZINE · '+it.acceptedType,
@@ -5847,7 +6468,7 @@ function tipBrief(it){                                  // the info square's row
   if(it instanceof Armor) return {kind:'ARMOR · '+it.armorType.toUpperCase(),
     rows:[it.desc(), equip[it.armorType]===it ? (zoneFolds(it)?'equipped · [X] opens / closes it':'equipped') : 'equip it in the rig column']};
   if(it&&it.widget) return {kind:'SETTING',
-    rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired yet — turns freely'].concat(it.tip?[it.tip]:[])};
+    rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired · turns freely'].concat(it.tip?[it.tip]:[])};
   if(it.ration) return {kind:'RATION', rows:['+14 vitality','tastes like the war']};
   if(it.pill) return {kind:'LAST RESORT',
     rows:['every zealot carries one. now you do.','hold it · press [F] twice · the run ends']};
@@ -6056,8 +6677,6 @@ function renderZones(){
   const zl=invZones();
   zl.forEach((z,zi)=>{
     const blk=document.createElement('div'); blk.className='zoneBlock';
-    const lab=document.createElement('div'); lab.className='zoneLabel stencil';
-    lab.textContent=z.label; blk.appendChild(lab);
     const g=document.createElement('div'); g.className='gridWrap';
     g.style.gridTemplateColumns='repeat('+z.cols+',44px)';
     if(z.equipCol){
@@ -6224,7 +6843,7 @@ function refreshInvUI(){
 function renderRack(containerId,tool,focusIdx){
   const container=document.getElementById(containerId);
   container.innerHTML='';
-  if(!tool){ container.innerHTML='<div style="color:var(--dust);font-size:10px;letter-spacing:.14em;">NO TOOL WIELDED</div>'; return; }
+  if(!tool){ container.innerHTML='<div style="color:var(--dust);font-size:14px;letter-spacing:.14em;">NO TOOL WIELDED</div>'; return; }
   const res=(focusIdx===1&&tool._res)?tool._res:resolveTool(tool);
   const z=rackZone(tool);
   const rows=z.maxY+1;
@@ -6358,12 +6977,12 @@ function updateToolReadout(){
 let toastT=0;
 function toast(msg){
   const b=document.getElementById('banner');
-  b.style.fontSize='12px'; b.style.letterSpacing='.3em'; b.style.color='var(--bone)'; b.style.textShadow='0 1px 3px #000';
+  b.style.fontSize='15px'; b.style.letterSpacing='.3em'; b.style.color='var(--bone)'; b.style.textShadow='0 1px 3px #000';
   b.textContent=msg; b.style.opacity=1; toastT=1.6;
 }
 function showBanner(msg){
   const b=document.getElementById('banner');
-  b.style.fontSize='20px'; b.style.letterSpacing='.5em'; b.style.color='var(--gate)'; b.style.textShadow='0 0 12px rgba(87,224,163,.7)';
+  b.style.fontSize='26px'; b.style.letterSpacing='.5em'; b.style.color='var(--gate)'; b.style.textShadow='0 0 12px rgba(87,224,163,.7)';
   b.textContent=msg; b.style.opacity=1; toastT=2.6;
 }
 
@@ -6404,6 +7023,11 @@ function toggleDebug(){
 }
 let debugBuilt=false;
 let DBG_KEYS=[], dbgSel=0;
+// the pad cursor walks the WHOLE console: item grid → buttons → sliders → flags.
+// Mouse and keyboard handlers are untouched — the cursor only drives them.
+let dbgZone='grid', dbgBtnSel=0, dbgParSel=0, dbgFlagSel=0, dbgFocusedEl=null;
+let dbgSlewT=0, dbgSlewAcc=0, dbgSlewDir=0;   // hold-to-slew on PARAMS dials (held ◀▶ / analog-X ramp) — session-only, never serialized
+let DBG_BTNS=[], DBG_PARAMS=[], DBG_FLAGS=[];   // buildDebugPanel fills these once
 function dbgSpawnToHand(key){
   if(heldWorld){ toast('HANDS FULL'); playSound('empty'); return; }
   handHold(ITEM_DEFS[key]());
@@ -6414,7 +7038,7 @@ function renderDebugItems(){
   box.innerHTML='';
   DBG_KEYS.forEach((k,i)=>{
     const d=document.createElement('div');
-    d.className='rcell'+(i===dbgSel?' cursor':'');
+    d.className='rcell'+(dbgZone==='grid'&&i===dbgSel?' cursor':'');
     d.style.width='36px'; d.style.height='36px';
     const it=ITEM_DEFS[k]();
     const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false; d.appendChild(img);
@@ -6423,24 +7047,87 @@ function renderDebugItems(){
     d.addEventListener('mousedown',()=>{ dbgSel=i; dbgSpawnToHand(k); });
     box.appendChild(d);
   });
+  if(dbgZone==='grid'&&box.children[dbgSel]&&box.children[dbgSel].scrollIntoView)
+    box.children[dbgSel].scrollIntoView({block:'nearest'});   // the grid scrolls — the cursor must not walk off-screen
 }
-function dbgNav(){
-  const cols=8;
-  let moved=false;
-  const step=d=>{ dbgSel=clamp(dbgSel+d,0,DBG_KEYS.length-1); moved=true; };
-  const nav=navEdges();
-  if(nav.left)  step(-1);
-  if(nav.right) step(1);
-  if(nav.up)    step(-cols);
-  if(nav.down)  step(cols);
-  if(INPUT.rawPad[1]){ toggleDebug(); return; }                       // ○ backs out — Esc stays with frame()
-  if(nav.confirm||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
-  if(moved){ playSound('click'); renderDebugItems(); }
+function dbgFocusEl(){
+  return dbgZone==='btns'   ? DBG_BTNS[dbgBtnSel]
+       : dbgZone==='params' ? (DBG_PARAMS[dbgParSel]||{}).row
+       : dbgZone==='flags'  ? (DBG_FLAGS[dbgFlagSel]||{}).parentElement   // the <label> wraps box + word
+       : null;                                                            // the grid paints its own cursor
 }
-function buildDebugPanel(){
-  if(debugBuilt){ renderDebugItems(); return; } debugBuilt=true;
-  DBG_KEYS=Object.keys(ITEM_DEFS);
+function dbgPaint(){
+  if(dbgFocusedEl) dbgFocusedEl.classList.remove('cursor');
+  dbgFocusedEl=dbgFocusEl()||null;
+  if(dbgFocusedEl){ dbgFocusedEl.classList.add('cursor');
+    if(dbgFocusedEl.scrollIntoView) dbgFocusedEl.scrollIntoView({block:'nearest'}); }
   renderDebugItems();
+}
+function dbgNav(dt){
+  if(INPUT.rawPad[1]){ toggleDebug(); return; }              // ○ backs out — Esc stays with frame()
+  const nav=navEdges(), take=nav.confirm||INPUT.rawPad[2];   // E · □ — press what the cursor rides
+  let moved=false;
+  if(dbgZone==='grid'){
+    const cols=8, last=DBG_KEYS.length-1;
+    if(nav.left) { dbgSel=clamp(dbgSel-1,0,last); moved=true; }
+    if(nav.right){ dbgSel=clamp(dbgSel+1,0,last); moved=true; }
+    if(nav.up)   { dbgSel=clamp(dbgSel-cols,0,last); moved=true; }
+    if(nav.down) { if(dbgSel+cols>last) dbgZone='btns'; else dbgSel+=cols; moved=true; }
+    if(take) dbgSpawnToHand(DBG_KEYS[dbgSel]);               // □ takes
+  }else if(dbgZone==='btns'){
+    const cols=2, last=DBG_BTNS.length-1;
+    if(nav.left) { dbgBtnSel=Math.max(dbgBtnSel-1,0); moved=true; }
+    if(nav.right){ dbgBtnSel=Math.min(dbgBtnSel+1,last); moved=true; }
+    if(nav.up)   { if(dbgBtnSel<cols) dbgZone='grid'; else dbgBtnSel-=cols; moved=true; }
+    if(nav.down) { if(dbgBtnSel+cols>last) dbgZone='params'; else dbgBtnSel+=cols; moved=true; }
+    if(take&&DBG_BTNS[dbgBtnSel]){ DBG_BTNS[dbgBtnSel].click(); playSound('click'); }
+  }else if(dbgZone==='params'){
+    const u=DBG_PARAMS[dbgParSel];
+    if(nav.up)   { if(dbgParSel===0) dbgZone='btns'; else dbgParSel--; moved=true; }
+    if(nav.down) { if(dbgParSel>=DBG_PARAMS.length-1) dbgZone='flags'; else dbgParSel++; moved=true; }
+    if((nav.left||nav.right)&&u){                            // ◀▶ ride the slider one step,
+      nav.left ? u.inp.stepDown() : u.inp.stepUp();          // through the same 'input' path the mouse drags
+      u.inp.dispatchEvent(new Event('input')); moved=true;
+    }
+    // HOLD-TO-SLEW — held ◀▶ / d-pad 14·15 / left-stick X ramps the dial continuously.
+    // Tap = one step (edge block above); continuous only past the tap window. No sound/dbgPaint here:
+    // the knob+value update through the native 'input' event, so we skip moved (avoids click-spam + grid rebuild).
+    { const ax=INPUT.padAxes[0]||0;
+      const dRight=INPUT.keys['ArrowRight']||INPUT.padButtons[15];
+      const dLeft =INPUT.keys['ArrowLeft'] ||INPUT.padButtons[14];
+      let sdir=0, smag=1, digital=true;
+      if(dRight&&!dLeft) sdir=1; else if(dLeft&&!dRight) sdir=-1;
+      else if(ax!==0){ sdir=ax<0?-1:1; smag=clamp((Math.abs(ax)-0.16)/0.84,0.05,1); digital=false; }
+      if(sdir!==0&&u){
+        if(sdir!==dbgSlewDir){ dbgSlewDir=sdir; dbgSlewT=0; dbgSlewAcc=0; } else dbgSlewT+=dt;
+        const gate=digital?0.22:0;                              // digital: tap window; analog: respond now
+        if(dbgSlewT>=gate){
+          const f=clamp((dbgSlewT-gate)/1.4,0,1);               // ease-in ramp, 1.4s to full coarse
+          const rate=(6+54*f*f)*smag;                           // 6→60 steps/s, ×analog magnitude
+          dbgSlewAcc+=rate*dt;
+          if(dbgSlewAcc>=1){ const n=Math.floor(dbgSlewAcc); dbgSlewAcc-=n;
+            sdir>0?u.inp.stepUp(n):u.inp.stepDown(n);           // native min/max/step clamp+snap; dt-cap bounds n≤3
+            u.inp.dispatchEvent(new Event('input')); }
+        }
+      }else{ dbgSlewDir=0; dbgSlewT=0; dbgSlewAcc=0; }
+    }
+  }else{                                                     // flags
+    if(nav.left) { dbgFlagSel=Math.max(dbgFlagSel-1,0); moved=true; }
+    if(nav.right){ dbgFlagSel=Math.min(dbgFlagSel+1,DBG_FLAGS.length-1); moved=true; }
+    if(nav.up)   { dbgZone='params'; moved=true; }
+    if(take&&DBG_FLAGS[dbgFlagSel]){ const c=DBG_FLAGS[dbgFlagSel];
+      c.checked=!c.checked; c.dispatchEvent(new Event('change')); playSound('click'); }
+  }
+  if(moved){ playSound('click'); dbgPaint(); }
+}
+// step-true decimals into a FIXED 6ch cell (.dval) — the value used to print at
+// natural width, so "-1" → "-0.95" re-flexed the space-between row, the track
+// slid under the still pointer mid-drag, and the grabbed value jumped with it
+const dbgDec=s=>{ s=String(s); const i=s.indexOf('.'); return i<0?0:s.length-1-i; };
+const dbgFmt=p=>(+p.v).toFixed(dbgDec(p.step));
+function buildDebugPanel(){
+  if(debugBuilt){ dbgPaint(); return; } debugBuilt=true;
+  DBG_KEYS=Object.keys(ITEM_DEFS);
   document.getElementById('dbgSpawnEnemy').onclick=()=>{ const f=camForward();
     enemies.push(new Zealot(playerPos.x+f.x*8, playerPos.z+f.z*8)); };
   document.getElementById('dbgKillAll').onclick=()=>enemies.forEach(e=>{ if(e.health>0) e.hurt(999,'debug'); });
@@ -6453,6 +7140,10 @@ function buildDebugPanel(){
   document.getElementById('dbgGod').onchange=e=>FLAGS.god=e.target.checked;
   document.getElementById('dbgNoclip').onchange=e=>FLAGS.noclip=e.target.checked;
   document.getElementById('dbgSeeAll').onchange=e=>FLAGS.seeAll=e.target.checked;
+  DBG_BTNS=['dbgSpawnEnemy','dbgKillAll','dbgDeployA1','dbgDeployHide',       // pad order == visual order,
+            'dbgDeployValley','dbgResetSaves','dbgTpGate','dbgNextRing']      // two per row — new buttons join here
+           .map(id=>document.getElementById(id));
+  DBG_FLAGS=['dbgGod','dbgNoclip','dbgSeeAll'].map(id=>document.getElementById(id));
   const pp=document.getElementById('dbgParams');
   for(const k in PARAMS){
     const p=PARAMS[k];
@@ -6460,14 +7151,22 @@ function buildDebugPanel(){
     const lbl=document.createElement('span'); lbl.textContent=p.label;
     const inp=document.createElement('input'); inp.type='range';
     inp.min=p.min; inp.max=p.max; inp.step=p.step; inp.value=p.v;
-    const val=document.createElement('span'); val.textContent=p.v;
-    inp.addEventListener('input',()=>{ p.v=parseFloat(inp.value); val.textContent=p.v;
+    const val=document.createElement('span'); val.className='dval'; val.textContent=dbgFmt(p);
+    inp.addEventListener('input',()=>{ p.v=parseFloat(inp.value); val.textContent=dbgFmt(p);
       if(k==='renderScale') resize();
       if(k==='timeOfDay') worldClock=0;   // the slider IS the clock: zero the offset so t01 lands on the dial — anim phases (gameTime/iTime) keep running
     });
     row.appendChild(lbl); row.appendChild(inp); row.appendChild(val);
     pp.appendChild(row);
+    DBG_PARAMS.push({k,row,inp,val});
   }
+  dbgPaint();
+}
+function syncDebugPanel(){                     // knobs follow PARAMS/FLAGS — loads and NEW GAME re-aim them
+  document.getElementById('dbgGod').checked=FLAGS.god;
+  document.getElementById('dbgNoclip').checked=FLAGS.noclip;
+  document.getElementById('dbgSeeAll').checked=FLAGS.seeAll;
+  for(const u of DBG_PARAMS){ const p=PARAMS[u.k]; u.inp.value=p.v; u.val.textContent=dbgFmt(p); }   // empty until first open — later builds read live PARAMS anyway
 }
 let dbgWatchT=0;
 function updateDebugWatch(dt){
@@ -6487,6 +7186,7 @@ function updateDebugWatch(dt){
     ['items world', ''+worldItems.length],
     ['projectiles', ''+projectiles.length],
     ['zealots', enemies.filter(e=>e.health>0).length+'/'+enemies.length],
+    ['gpu', glRenderer],
   ];
   document.getElementById('dbgWatch').innerHTML=
     rows.map(r=>'<div class="drow"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>').join('');
@@ -6497,6 +7197,11 @@ function updateDebugWatch(dt){
 // ============================================================
 function uiMenusOpen(){ return isInventoryOpen||isToolMenuOpen||isCrateOpen; }   // crate is a first-class menu: nav, render, close, mouse-lock all flow through here
 let stepAcc=0;
+let heldUseArm=null;           // △ tap-vs-hold: {t,subj} while the button rides a carried item OR the wielded gun
+let sprintIdleT=0;             // a stopped run lets the sprint toggle go after a beat
+const SLIDE_DUR=0.9;           // SLIDE — crouch pressed at sprint speed rides the run's momentum out
+let slideT=0, slideV0=0, slideDX=0, slideDZ=1, slideStand=false, slideVcur=0, slideHopSpd=0;   // slideVcur = live (decaying) slide speed; slideHopSpd = the launch floor a slide-hop holds through its whole airborne arc
+let sprintLatch=false, airSlideArmed=false;   // MOMENTUM CHAIN — sprintLatch: a slide/hop chain came off a sprint, resume it on landing (a slide crouch-kills sprintOn). airSlideArmed: a mid-air crouch queues a slide that starts on the next landing, carrying the air momentum
 const _c1=new Vec3(), _c2=new Vec3();
 
 function updatePlayer(dt){
@@ -6511,7 +7216,6 @@ function updatePlayer(dt){
   }
   playerPos.isAiming=down('aim')&&!menus&&!heldWorld&&!physgunRes();   // the physgun repurposes aim: it freezes
   playerPos.aimAmt+=((playerPos.isAiming?1:0)-playerPos.aimAmt)*Math.min(1,12*dt);
-  if(pressed('crouch')&&!menus){ playerPos.isCrouching=!playerPos.isCrouching; }
 
   // move
   let mx=(down('right')?1:0)-(down('left')?1:0)+INPUT.padAxes[0];
@@ -6525,17 +7229,67 @@ function updatePlayer(dt){
   // sprint is a toggle — crouching or aiming drops it
   if(pressed('sprint')&&!menus) sprintOn=!sprintOn;
   if(playerPos.isCrouching||playerPos.isAiming) sprintOn=false;
+  const wasSprint=playerPos.isSprinting;
   playerPos.isSprinting=sprintOn&&moving&&!playerPos.isCrouching&&!playerPos.isAiming;
+  // ...and a run that STOPS lets the toggle go after a beat — walking again is a
+  // walk, not a surprise sprint. An untouched toggle still waits for its first step.
+  if(moving||!sprintOn||playerPos.launched||slideT>0) sprintIdleT=0;   // a slide-hop / slide is momentum, not an idle stop — the no-input cancel must not fire mid-chain
+  else if(wasSprint||sprintIdleT>0){ sprintIdleT+=dt; if(sprintIdleT>=0.25){ sprintOn=false; sprintIdleT=0; } }
+
+  const fx=Math.sin(cameraYaw), fz=Math.cos(cameraYaw);
+  const rx=Math.cos(cameraYaw), rz=-Math.sin(cameraYaw);
+
+  // crouch is a toggle — but pressed AT SPRINT SPEED (>=80% of the sprint step,
+  // grounded) it becomes a SLIDE: the stance ducks NOW and the run's momentum
+  // keeps its line while friction spends it (the step block below). Mid-slide
+  // the same button flips the exit stance; a slide otherwise ends in a crouch.
+  if(pressed('crouch')&&!menus){
+    const m=Math.hypot(mx,mz);
+    if(slideT>0) slideStand=!slideStand;
+    else if(!playerPos.onGround) airSlideArmed=!airSlideArmed;   // MID-AIR CROUCH: arm a landing-slide (toggle). No mid-air duck — keeping the air speed is what lets the touchdown clear the slide's speed gate; the slide (and its crouch) begin on landing
+    else if(!playerPos.isCrouching&&playerPos.isSprinting&&playerPos.onGround&&m>=0.8){
+      const wx=rx*mx+fx*mz, wz=rz*mx+fz*mz;          // world-frame run direction, unit
+      slideDX=wx/m; slideDZ=wz/m;
+      slideV0=P('playerSpeed')*P('sprintMult')*Math.min(1,m);
+      slideT=SLIDE_DUR; slideStand=false;
+      playerPos.isCrouching=true; sprintOn=false; playerPos.isSprinting=false; sprintLatch=true;   // this slide came off a sprint — latch it so the chain lands sprinting
+      playSound('step');                             // the scuff — walk-loud (noise floor below)
+    }
+    else{ playerPos.isCrouching=!playerPos.isCrouching; if(playerPos.isCrouching){ sprintOn=false; playerPos.isSprinting=false; } }
+  }
 
   let speed=P('playerSpeed');
   if(playerPos.isSprinting) speed*=P('sprintMult');
   if(playerPos.isCrouching) speed*=P('crouchMult');
   if(playerPos.isAiming) speed*=0.55;
-
-  const fx=Math.sin(cameraYaw), fz=Math.cos(cameraYaw);
-  const rx=Math.cos(cameraYaw), rz=-Math.sin(cameraYaw);
-  { // substep the slide: ruin walls are 0.3m thin, one capped-dt sprint frame is wider
-    const stepX=(rx*mx+fx*mz)*speed*dt, stepZ=(rz*mx+fz*mz)*speed*dt;
+  if(playerPos.swinging) slideT=0;                   // the rope owns momentum — a hook ends the slide
+  if(!(playerPos.swinging&&!playerPos.onGround)){ // substep the slide: ruin walls are 0.3m thin, one capped-dt sprint frame is wider — airborne swing/momentum x/z belong to VELOCITY (the rope block below), skip the positional step
+    let stepX,stepZ;
+    if(slideT>0){
+      // SLIDE — eased friction: v rides smoothstep(k) from the captured sprint
+      // speed down to EXACTLY crouch-walk speed — monotone, flat at both ends
+      // (hold a beat, bleed, settle). The stance is already crouched, so the
+      // shadow math (exposure ×0.62) and the crouch speed floor apply for free.
+      slideT=Math.max(0,slideT-dt);
+      const k=slideT/SLIDE_DUR, e=k*k*(3-2*k);
+      const vEnd=P('playerSpeed')*P('crouchMult');
+      const v=vEnd+(slideV0-vEnd)*e; slideVcur=v;     // stash it: a slide-hop this frame launches at exactly this speed
+      const sx=rx*mx+fx*mz, sz=rz*mx+fz*mz;          // steering: a heavy nudge (~1 rad/s), never a turn
+      slideDX+=sx*1.0*dt; slideDZ+=sz*1.0*dt;
+      const dl=Math.hypot(slideDX,slideDZ); if(dl>1e-6){ slideDX/=dl; slideDZ/=dl; }
+      stepX=slideDX*v*dt; stepZ=slideDZ*v*dt;
+      if(slideT<=0){ if(slideStand) playerPos.isCrouching=false; slideStand=false; sprintLatch=false; }   // spent: settle into crouch — or stand, if released. The slide rode to a stop (no hop) — the chain's over, drop the sprint latch
+    }else if(playerPos.launched&&!playerPos.onGround){
+      // SLIDE-HOP airborne: fly the launch momentum (velX/velZ carried out of the slide);
+      // WASD is air-control accel, the same model as the rope's air block (8 m/s², 16 m/s cap)
+      playerPos.velX+=(rx*mx+fx*mz)*8*dt; playerPos.velZ+=(rz*mx+fz*mz)*8*dt;
+      const _hs=Math.hypot(playerPos.velX,playerPos.velZ);
+      if(_hs>16){ playerPos.velX*=16/_hs; playerPos.velZ*=16/_hs; }
+      else if(slideHopSpd>0&&_hs<slideHopSpd&&_hs>1e-4){ const s=slideHopSpd/_hs; playerPos.velX*=s; playerPos.velZ*=s; }   // no bleed below the launch — air-control steers, it never stalls the fling
+      stepX=playerPos.velX*dt; stepZ=playerPos.velZ*dt;
+    }else{
+      stepX=(rx*mx+fx*mz)*speed*dt; stepZ=(rz*mx+fz*mz)*speed*dt;
+    }
     const nSub=FLAGS.noclip?1:Math.max(1,Math.ceil(Math.hypot(stepX,stepZ)/0.18));
     for(let sI=0;sI<nSub;sI++){
       playerPos.x+=stepX/nSub; playerPos.z+=stepZ/nSub;
@@ -6554,6 +7308,58 @@ function updatePlayer(dt){
     playerPos.velY-=P('gravity')*dt;
     if(playerPos.velY<-34) playerPos.velY=-34;           // terminal velocity
     playerPos.y+=playerPos.velY*dt;
+    // THE ROPE — grip thread hooked static world: chest (y+0.95, sphere-2 centre) rides
+    // a sphere of radius len around the anchor. Gravity supplies the swing; the
+    // projection turns fall into tangent speed. Airborne x/z become VELOCITY here
+    // (the only place they ever do) — everywhere else movement stays positional.
+    if(_swing){
+      const _fresh=!playerPos.swinging;                  // the frame the rope takes hold — flag not yet raised
+      playerPos.swinging=true;
+      // grounded: velocity tracks the step for a clean lift-off handoff. Midair ATTACH
+      // seeds it the same way — normal airborne flight IS the positional input step, so
+      // the step is the momentum: jump-and-hook keeps its run instead of halting dead.
+      // A midair RE-grab (swinging still riding) keeps its live velocity untouched.
+      if(playerPos.onGround||_fresh){ playerPos.velX=(rx*mx+fx*mz)*speed; playerPos.velZ=(rz*mx+fz*mz)*speed; }
+      _swing.len=clamp(_swing.len + clamp(INPUT.wheel,-2,2)*0.35, 1.2, 26);   // reel rides the WHEEL: 0.35 m/notch — d-pad up/down feed the same notches (padWheelStep). Capped at 2 notches a FRAME: smooth-scroll mice burst 10-30 events between frames and the taut sphere would yank metres in one step
+    }
+    if(playerPos.swinging&&!_swing&&playerPos.onGround){ playerPos.swinging=false; playerPos.velX=0; playerPos.velZ=0; }  // momentum spends itself on landing
+    const _sw0x=playerPos.x, _sw0y=playerPos.y, _sw0z=playerPos.z;   // pre-flight pose — the swept resolve below walks from here
+    if(playerPos.swinging&&!playerPos.onGround){
+      playerPos.velX+=(rx*mx+fx*mz)*8*dt; playerPos.velZ+=(rz*mx+fz*mz)*8*dt;    // air control: input is an accel now (8 m/s²), not a step
+      const _hs=Math.hypot(playerPos.velX,playerPos.velZ);
+      if(_hs>16){ playerPos.velX*=16/_hs; playerPos.velZ*=16/_hs; }              // lateral terminal: 16 m/s
+      playerPos.x+=playerPos.velX*dt; playerPos.z+=playerPos.velZ*dt;
+    }
+    if(_swing){
+      const cx=playerPos.x-_swing.ax, cy=(playerPos.y+0.95)-_swing.ay, cz=playerPos.z-_swing.az;
+      const cd=Math.hypot(cx,cy,cz);
+      if(cd>_swing.len){                                     // TAUT: project position onto the sphere,
+        const s=_swing.len/cd;                               // then velocity onto the tangent plane
+        playerPos.x=_swing.ax+cx*s; playerPos.y=_swing.ay+cy*s-0.95; playerPos.z=_swing.az+cz*s;
+        const nx=cx/cd, ny=cy/cd, nz=cz/cd;
+        const vr=playerPos.velX*nx+playerPos.velY*ny+playerPos.velZ*nz;
+        if(vr>0){ playerPos.velX-=vr*nx; playerPos.velY-=vr*ny; playerPos.velZ-=vr*nz; }   // strip radial-OUT only; falling toward the anchor stays free
+      }
+      if(cd>_swing.len+3 || mapWorldJS(_swing.ax,_swing.ay,_swing.az)>0.75) _swing=null;   // anchor carved out / glob evicted / impossible stretch — the rope lets go
+    }
+    // SWEPT SWING (anti-tunnel): only the two blocks above moved x/y/z since the
+    // capture — velocity flight (16 m/s lateral) + reel-taut projection can cover
+    // metres in one capped-dt frame, and ruin walls are 0.3m thin. Walk the whole
+    // displacement in 0.18m substeps with the same feet-sphere resolve the ground
+    // slide uses: the wall wins over the rope, no far-side eject.
+    {
+      const _mdx=playerPos.x-_sw0x, _mdy=playerPos.y-_sw0y, _mdz=playerPos.z-_sw0z;
+      const _md=Math.hypot(_mdx,_mdy,_mdz);
+      if(_md>0.18){
+        const _nS=Math.min(24,Math.ceil(_md/0.18));
+        playerPos.x=_sw0x; playerPos.y=_sw0y; playerPos.z=_sw0z;
+        for(let sI=0;sI<_nS;sI++){
+          playerPos.x+=_mdx/_nS; playerPos.y+=_mdy/_nS; playerPos.z+=_mdz/_nS;
+          _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
+          playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
+        }
+      }
+    }
     const _ix=playerPos.x, _iz=playerPos.z, _wasGrounded=playerPos.onGround;
     _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
     playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
@@ -6572,7 +7378,27 @@ function updatePlayer(dt){
       const sy=restOnSurface(playerPos.x,playerPos.y+0.45,playerPos.z);
       if(sy>playerPos.y-0.38){                 // a step down, not a cliff
         playerPos.y=sy;                        // exact: the ground is the ground
+        const _land=!playerPos.onGround;       // the TOUCHDOWN EDGE — was airborne, now planted
         playerPos.onGround=true; playerPos.velY=0;
+        if(_land){                             // MOMENTUM CHAIN resolves on the touchdown edge
+          // horizontal speed we're landing with: a slide-hop keeps it in velX/velZ; a plain
+          // jump's air step is positional (input×speed), so read that instead.
+          const _hvx=playerPos.launched?playerPos.velX:(rx*mx+fx*mz)*speed;
+          const _hvz=playerPos.launched?playerPos.velZ:(rz*mx+fz*mz)*speed;
+          const _hsp=Math.hypot(_hvx,_hvz), _slideMin=0.8*P('playerSpeed')*P('sprintMult');
+          if(airSlideArmed&&_hsp>=_slideMin){   // MID-AIR CROUCH cashed in — land straight into a slide carrying the momentum (a jump-out then hops at THAT speed: the loop closes)
+            slideDX=_hvx/_hsp; slideDZ=_hvz/_hsp;
+            slideV0=_hsp; slideVcur=_hsp; slideT=SLIDE_DUR; slideStand=false;
+            playerPos.isCrouching=true; sprintLatch=true;   // the slide owns the momentum now; the chain still resumes sprint when its hop lands
+            playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0;
+            sprintOn=false; playerPos.isSprinting=false; playSound('step');
+          }else{
+            if(playerPos.launched){ playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0; }   // slide-hop momentum spends on landing
+            if(sprintLatch){ sprintOn=true; sprintLatch=false; if(moving&&!playerPos.isCrouching&&!playerPos.isAiming) playerPos.isSprinting=true; }   // land the slide/hop chain STILL SPRINTING — ready to slide again
+            if(airSlideArmed) playerPos.isCrouching=true;   // armed but too slow: just a crouch, no slide
+          }
+          airSlideArmed=false;                  // consumed on the touchdown edge, slide or not
+        }
       }else playerPos.onGround=false;
     }
     else playerPos.onGround=false;
@@ -6586,7 +7412,12 @@ function updatePlayer(dt){
     // buffer: a press just before landing still lands the jump
     playerPos.jumpBufT = Math.max(0,playerPos.jumpBufT-dt);
     if(pressed('jump')&&!menus) playerPos.jumpBufT=0.12;
-    if(playerPos.jumpBufT>0&&playerPos.coyoteT>0&&!playerPos.isCrouching&&!menus){
+    if(playerPos.jumpBufT>0&&playerPos.coyoteT>0&&(!playerPos.isCrouching||slideT>0)&&!menus){
+      if(slideT>0){   // SLIDE-HOP: fling at the CAPTURED run momentum (slideV0), NOT the bled-down slideVcur — a late hop must leap as hard as an early one (the prior fix launched at the decayed speed, so a real-timing jump felt like a plain hop)
+        slideHopSpd=Math.max(slideV0,slideVcur);   // slideV0>=slideVcur always: the run's full, undecayed speed
+        playerPos.velX=slideDX*slideHopSpd; playerPos.velZ=slideDZ*slideHopSpd; playerPos.launched=true;
+        slideT=0; slideStand=false; playerPos.isCrouching=false;   // the stance ends — standing, airborne — but the momentum carries
+      }
       playerPos.velY=P('jumpVel'); playerPos.onGround=false;
       playerPos.coyoteT=0; playerPos.jumpBufT=0; playSound('step');
     }
@@ -6594,7 +7425,7 @@ function updatePlayer(dt){
 
   // stance & lean — leaning waits outside the menus
   const targetH=playerPos.isCrouching?0.72:1.32;
-  playerPos.baseHeight+=(targetH-playerPos.baseHeight)*10*dt;
+  playerPos.baseHeight+=(targetH-playerPos.baseHeight)*Math.min(1,(slideT>0?22:10)*dt);   // the slide ducks NOW
   const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5;
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
@@ -6605,22 +7436,42 @@ function updatePlayer(dt){
 
   // viewmodel sway/bob + recoil recovery
   if(moving&&playerPos.onGround) playerPos.walkCycle+=speed*dt*2.6;
-  const bobAmt=(moving&&playerPos.onGround?1:0)*(playerPos.isSprinting?1.5:1)*(1-playerPos.aimAmt*0.8);
+  const bobAmt=(moving&&playerPos.onGround&&!(slideT>0)?1:0)*(playerPos.isSprinting?1.5:1)*(1-playerPos.aimAmt*0.8);   // a slide GLIDES — no gait
   playerPos.bobX+=(Math.sin(playerPos.walkCycle)*0.010*bobAmt-playerPos.bobX)*Math.min(1,10*dt);
   playerPos.bobY+=((Math.abs(Math.cos(playerPos.walkCycle))*0.008-0.004)*bobAmt-playerPos.bobY)*Math.min(1,10*dt);
-  playerPos.viewKick*=Math.max(0,1-9*dt);
+  { const w0=16;                                     // recoil spring — see addKick
+    playerPos.kickV-=(2*w0*playerPos.kickV+w0*w0*playerPos.viewKick)*dt;
+    playerPos.viewKick=Math.max(0,Math.min(1,playerPos.viewKick+playerPos.kickV*dt));
+    const pk=playerPos.pitchPend*Math.min(1,26*dt);
+    cameraPitch=clamp(cameraPitch+pk,-1.5,1.5); playerPos.pitchPend-=pk; }
 
   // noise from movement + footfalls
   playerPos.noiseLevel=moving?(playerPos.isSprinting?9:(playerPos.isCrouching?1.0:3.4)):0.25;
-  if(moving&&playerPos.onGround){
+  if(slideT>0) playerPos.noiseLevel=Math.max(playerPos.noiseLevel,3.4);   // the slide scuffs — walk-loud, crouch-lit
+  if(moving&&playerPos.onGround&&!(slideT>0)){
     stepAcc+=speed*dt;
     if(stepAcc>2.1){ stepAcc=0; playSound(playerPos.isSprinting?'stepRun':'step'); }
   }
-  // lantern toggle
-  if(pressed('flash')&&!menus&&!isManualOpen&&heldWorld){ heldUse(heldWorld.w.item); }
-  else if(pressed('flash')&&!menus&&!isManualOpen){
-    if(res.flashlight){ playerPos.flashlightOn=!playerPos.flashlightOn; playSound('click'); }
-    else { toast('NO LANTERN RACKED IN TOOL'); playSound('empty'); }
+  // △ tap-vs-hold. The subject is the crosshair-CARRIED item if there is one, else the
+  // WIELDED gun. A long hold (≥0.35s) on a TOOL holsters it — belt · harness · rucksack ·
+  // floor — the hand going empty either way. A tap keeps the old verb: a carried item runs
+  // heldUse (grenade arm, food, gadget); the wielded gun toggles its lantern. Non-tool
+  // carried items just tap — a hold means nothing and never stows.
+  const flashSubj = heldWorld || activeTool || null;
+  if(menus||isManualOpen||!flashSubj||(heldUseArm&&heldUseArm.subj!==flashSubj)) heldUseArm=null;
+  if(!menus&&!isManualOpen&&flashSubj){
+    const subjIsTool = heldWorld ? (heldWorld.w.item instanceof Tool) : true;   // wielded is always a Tool
+    if(pressed('flash')) heldUseArm={t:0,subj:flashSubj};
+    else if(heldUseArm&&down('flash')){
+      heldUseArm.t+=dt;
+      if(heldUseArm.t>=0.35&&subjIsTool){ heldWorld ? stowHeldTool() : stowWieldedTool(); heldUseArm=null; }
+    }
+    else if(heldUseArm){                              // released before the hold matured — the tap verb
+      heldUseArm=null;
+      if(heldWorld) heldUse(heldWorld.w.item);
+      else if(res.flashlight){ playerPos.flashlightOn=!playerPos.flashlightOn; playSound('click'); }
+      else { toast('NO LANTERN RACKED IN TOOL'); playSound('empty'); }
+    }
   }
   if(pressed('throwHeld')&&heldWorld&&!menus) releaseHeld(true);
 
@@ -6632,16 +7483,74 @@ function updatePlayer(dt){
       st.burn-=b; dot+=b;
       playerPos.burnedMax=Math.min(playerPos.maxHealth-10, playerPos.burnedMax+b);
     }
-    if(st.bleedT>0){ st.bleedT=Math.max(0,st.bleedT-dt); dot+=dt/1.5; }   // 1 hurt / 1.5s · 30s
+    if(st.bleedT>0){ st.bleedT=Math.max(0,st.bleedT-dt); dot+=dt*(st.bleedN||1); if(st.bleedT<=0) st.bleedN=0; }   // 1 hp/s per stack · 15s
     if(dot>0){
       playerPos.health=Math.max(0, Math.min(playerPos.health,effMaxHP())-dot);
-      if(playerPos.health<=0){ st.burn=0; st.bleedT=0; onDeath(); }
+      if(playerPos.health<=0){ st.burn=0; st.bleedT=0; st.bleedN=0; onDeath(); }
     }
   }
 }
 
+// ---- the LIT core's POCKET twin: updateWorldItems only walks the WORLD list,
+// ---- so a core armed in the bag (useItem, owner's law: it detonates wherever
+// ---- it is) needs its own clock. The walk is the body — every equipped storage
+// ---- zone (folded too), pockets inside pocketed containers, racked cells of
+// ---- pocketed AND wielded AND carried tools. fn(it, grid, ref): exactly one of
+// ---- grid/ref names the home, so the blast can vacate it with one write.
+function invArmWalk(fn){
+  const seen=new Set(), grids=[], tools=[];
+  for(const z of storageZones()) grids.push(z.grid);
+  if(activeTool) tools.push(activeTool);
+  const hw=heldWorld&&heldWorld.w.item;    // the held thing itself ticks as a world item —
+  if(hw){ if(hw.inv) grids.push(hw.inv);   // only its INSIDES are ours to walk
+          if(hw instanceof Tool) tools.push(hw); }
+  for(const g of grids)
+    for(const row of g) for(const c of row){
+      if(!c||c.widget||seen.has(c)) continue; seen.add(c);
+      fn(c,g,null);
+      if(c.inv) for(const r2 of c.inv) for(const c2 of r2){
+        if(c2&&!c2.widget&&!seen.has(c2)){ seen.add(c2); fn(c2,c.inv,null); } }
+      if(c instanceof Tool) tools.push(c);
+    }
+  for(const t of tools) for(const c of toolColumns(t).cells){
+    const m=c.ref?readRef(c.ref):null;
+    if(m&&!seen.has(m)){ seen.add(m); fn(m,null,c.ref); }
+  }
+}
+function itemOnPlayer(q){ let on=false; invArmWalk(it=>{ if(it===q) on=true; }); return on; }
+function tickInvArm(dt){
+  const gen=_worldGen;
+  invArmWalk((it,g,ref)=>{
+    if(it._armT==null||gen!==_worldGen) return;   // the first blast may have killed you — the rest of the walk reads a wiped rig
+    it._armT-=dt;
+    it._beepT=(it._beepT||0)-dt;
+    if(it._beepT<=0){ it._beepT=it._armT>1.6?0.55:0.2; playSound('click'); }   // it ticks THROUGH the canvas
+    if(it._armT<=0){
+      if(g) removeFromGrid(it,g); else writeRef(ref,null);   // gone from its one home BEFORE the blast
+      explode({pos:new Vec3(playerPos.x,playerPos.y+0.9,playerPos.z), kind:'boom', dmg:34, owner:'player'});   // you wore it
+      refreshInvUI();
+    }
+  });
+}
 function updateWorldItems(dt){
-  for(const w of worldItems){
+  const gen=_worldGen;
+  for(let wi=worldItems.length-1;wi>=0;wi--){
+    if(gen!==_worldGen) return;              // the grenade below can kill its owner → teardown cleared this list mid-walk
+    const w=worldItems[wi]; if(!w) continue;
+    // ---- a LIT boom core counts down wherever it is — pinned, resting, or in
+    // ---- hand (a POCKETED one ticks in tickInvArm, the walk above)
+    const li=w.item;
+    if(li&&li._armT!=null){
+      li._armT-=dt;
+      w._beepT=(w._beepT||0)-dt;
+      if(w._beepT<=0){ w._beepT=li._armT>1.6?0.55:0.2; playSound('click'); addDyn(w.pos.x,w.pos.y+0.15,w.pos.z,[1,0.3,0.15],0.6,0.05); }   // blinks red, faster near the end
+      if(li._armT<=0){
+        if(heldWorld&&heldWorld.w===w) releaseHeld(false);
+        worldItems.splice(wi,1);                            // gone BEFORE the blast shove loop runs
+        explode({pos:new Vec3(w.pos.x,w.pos.y+0.15,w.pos.z), kind:'boom', dmg:34, owner:'player'});
+        continue;
+      }
+    }
     if(w.frozen&&!w.held){                         // PINNED mid-air: no gravity, no settle —
       beamSegs.push({a:new Vec3(w.pos.x,w.pos.y+0.30,w.pos.z),   // a faint steady needle
                      b:new Vec3(w.pos.x,w.pos.y-0.06,w.pos.z),   // marks the pin
@@ -6782,7 +7691,7 @@ function frame(){
     if(pressed('tool')&&!isDebugOpen&&!isTerminalOpen) toolMenuVerb();   // terminal owns ○ while open — termNav's back, not the rack
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
-    if(isDebugOpen) dbgNav();
+    if(isDebugOpen) dbgNav(dt);
     if(isTerminalOpen) termNav();
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
@@ -6793,10 +7702,12 @@ function frame(){
   const live = isPlayable() && !pausedUI();
   if(live){
     runClock+=dt; gameTime+=dt; worldClock+=dt;
+    padWheelStep(dt);          // d-pad up/down feed the wheel BEFORE its consumers (carry · rope reel)
     updatePlayer(dt);
     if(!uiMenusOpen()){
       updateInteract(dt);
       tryFirePlayer(dt);
+      tickMelee(dt);
       runBurstLasers(dt);
       runContinuousBeams(dt);
       runTacLaser(dt);
@@ -6808,20 +7719,23 @@ function frame(){
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
       if(pressed('cycleL')) cycleHolster(-1);   // d-pad ◀ — draw the previous holstered tool
       if(pressed('cycleR')) cycleHolster(1);    // d-pad ▶ / [T] — draw the next
-    }else if(beamActive) endBeam();
+    }else _endBeams();   // bag/tool/crate don't pause the world — rummaging drops the rope, the beam-held item, and the lanes' drain state (the old gate here tested a flag nothing ever raised: a free infinite skyhook)
     updateHeldPhysics(dt);
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
     if(fireCooldown>0) fireCooldown-=dt;
-    if(activeTool&&!beamActive) regenBatteries(activeTool,dt);
+    if(activeTool) regenBatteries(activeTool,dt);   // regen always ran (the old guard tested a flag nothing raised); thread drain in runContinuousBeams is priced against this
     if(activeTool&&activeTool._res&&activeTool._res.beltFeed) tickBeltFeed(dt);
 
     updateProjectiles(dt);
     updateWorldItems(dt);
+    tickInvArm(dt);        // the bagged grenade keeps its word
 
     highestDetection=0;
+    const _genE=_worldGen;
     for(const en of enemies){
       if(en.health>0&&en.position.distanceTo(playerPos)>70) en.reinforce();
       en.update(dt);
+      if(_genE!==_worldGen) break;           // a dry-mag swipe killed you mid-roster — the rest belong to a dead world
       if(en.health>0) highestDetection=Math.max(highestDetection,en.detection);
     }
     updateAttachedGlobs();                 // worn glue rides its host — sync after the zealots move
@@ -6912,7 +7826,7 @@ function frame(){
   gl.uniform1i(U.flashlightOn,(playerPos.flashlightOn&&resT&&resT.flashlight)?1:0);
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
-  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, 0);
+  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.3):0);
   gl.uniform1f(U.uExposure, playerPos.exposure);
 
   // items (nearest first) — cull follows the fog wall in: past uFar nothing uploads
