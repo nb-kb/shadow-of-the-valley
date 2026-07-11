@@ -189,6 +189,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #debugUI .drow span:last-child{color:var(--bone);}
 #debugUI input[type=range]{width:130px;accent-color:var(--alert);}
 #debugUI .dval{flex:0 0 6ch;text-align:right;} /* fixed value cell — free-width text re-flexed the row and walked the slider mid-drag */
+#debugUI button.cursor,#debugUI .drow.cursor,#debugUI label.cursor{outline:2px solid var(--exposed);} /* pad focus — the item-grid cursor look */
 #debugUI select,#debugUI button{background:#000;border:1px solid var(--line);color:var(--bone);
   font-family:inherit;font-size:12px;padding:3px 6px;cursor:pointer;letter-spacing:.08em;}
 #debugUI button:hover{border-color:var(--alert);color:var(--alert);}
@@ -6930,6 +6931,10 @@ function toggleDebug(){
 }
 let debugBuilt=false;
 let DBG_KEYS=[], dbgSel=0;
+// the pad cursor walks the WHOLE console: item grid → buttons → sliders → flags.
+// Mouse and keyboard handlers are untouched — the cursor only drives them.
+let dbgZone='grid', dbgBtnSel=0, dbgParSel=0, dbgFlagSel=0, dbgFocusedEl=null;
+let DBG_BTNS=[], DBG_PARAMS=[], DBG_FLAGS=[];   // buildDebugPanel fills these once
 function dbgSpawnToHand(key){
   if(heldWorld){ toast('HANDS FULL'); playSound('empty'); return; }
   handHold(ITEM_DEFS[key]());
@@ -6940,7 +6945,7 @@ function renderDebugItems(){
   box.innerHTML='';
   DBG_KEYS.forEach((k,i)=>{
     const d=document.createElement('div');
-    d.className='rcell'+(i===dbgSel?' cursor':'');
+    d.className='rcell'+(dbgZone==='grid'&&i===dbgSel?' cursor':'');
     d.style.width='36px'; d.style.height='36px';
     const it=ITEM_DEFS[k]();
     const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false; d.appendChild(img);
@@ -6949,19 +6954,56 @@ function renderDebugItems(){
     d.addEventListener('mousedown',()=>{ dbgSel=i; dbgSpawnToHand(k); });
     box.appendChild(d);
   });
+  if(dbgZone==='grid'&&box.children[dbgSel]&&box.children[dbgSel].scrollIntoView)
+    box.children[dbgSel].scrollIntoView({block:'nearest'});   // the grid scrolls — the cursor must not walk off-screen
+}
+function dbgFocusEl(){
+  return dbgZone==='btns'   ? DBG_BTNS[dbgBtnSel]
+       : dbgZone==='params' ? (DBG_PARAMS[dbgParSel]||{}).row
+       : dbgZone==='flags'  ? (DBG_FLAGS[dbgFlagSel]||{}).parentElement   // the <label> wraps box + word
+       : null;                                                            // the grid paints its own cursor
+}
+function dbgPaint(){
+  if(dbgFocusedEl) dbgFocusedEl.classList.remove('cursor');
+  dbgFocusedEl=dbgFocusEl()||null;
+  if(dbgFocusedEl){ dbgFocusedEl.classList.add('cursor');
+    if(dbgFocusedEl.scrollIntoView) dbgFocusedEl.scrollIntoView({block:'nearest'}); }
+  renderDebugItems();
 }
 function dbgNav(){
-  const cols=8;
+  if(INPUT.rawPad[1]){ toggleDebug(); return; }              // ○ backs out — Esc stays with frame()
+  const nav=navEdges(), take=nav.confirm||INPUT.rawPad[2];   // E · □ — press what the cursor rides
   let moved=false;
-  const step=d=>{ dbgSel=clamp(dbgSel+d,0,DBG_KEYS.length-1); moved=true; };
-  const nav=navEdges();
-  if(nav.left)  step(-1);
-  if(nav.right) step(1);
-  if(nav.up)    step(-cols);
-  if(nav.down)  step(cols);
-  if(INPUT.rawPad[1]){ toggleDebug(); return; }                       // ○ backs out — Esc stays with frame()
-  if(nav.confirm||INPUT.rawPad[2]) dbgSpawnToHand(DBG_KEYS[dbgSel]);   // □ takes
-  if(moved){ playSound('click'); renderDebugItems(); }
+  if(dbgZone==='grid'){
+    const cols=8, last=DBG_KEYS.length-1;
+    if(nav.left) { dbgSel=clamp(dbgSel-1,0,last); moved=true; }
+    if(nav.right){ dbgSel=clamp(dbgSel+1,0,last); moved=true; }
+    if(nav.up)   { dbgSel=clamp(dbgSel-cols,0,last); moved=true; }
+    if(nav.down) { if(dbgSel+cols>last) dbgZone='btns'; else dbgSel+=cols; moved=true; }
+    if(take) dbgSpawnToHand(DBG_KEYS[dbgSel]);               // □ takes
+  }else if(dbgZone==='btns'){
+    const cols=2, last=DBG_BTNS.length-1;
+    if(nav.left) { dbgBtnSel=Math.max(dbgBtnSel-1,0); moved=true; }
+    if(nav.right){ dbgBtnSel=Math.min(dbgBtnSel+1,last); moved=true; }
+    if(nav.up)   { if(dbgBtnSel<cols) dbgZone='grid'; else dbgBtnSel-=cols; moved=true; }
+    if(nav.down) { if(dbgBtnSel+cols>last) dbgZone='params'; else dbgBtnSel+=cols; moved=true; }
+    if(take&&DBG_BTNS[dbgBtnSel]){ DBG_BTNS[dbgBtnSel].click(); playSound('click'); }
+  }else if(dbgZone==='params'){
+    const u=DBG_PARAMS[dbgParSel];
+    if(nav.up)   { if(dbgParSel===0) dbgZone='btns'; else dbgParSel--; moved=true; }
+    if(nav.down) { if(dbgParSel>=DBG_PARAMS.length-1) dbgZone='flags'; else dbgParSel++; moved=true; }
+    if((nav.left||nav.right)&&u){                            // ◀▶ ride the slider one step,
+      nav.left ? u.inp.stepDown() : u.inp.stepUp();          // through the same 'input' path the mouse drags
+      u.inp.dispatchEvent(new Event('input')); moved=true;
+    }
+  }else{                                                     // flags
+    if(nav.left) { dbgFlagSel=Math.max(dbgFlagSel-1,0); moved=true; }
+    if(nav.right){ dbgFlagSel=Math.min(dbgFlagSel+1,DBG_FLAGS.length-1); moved=true; }
+    if(nav.up)   { dbgZone='params'; moved=true; }
+    if(take&&DBG_FLAGS[dbgFlagSel]){ const c=DBG_FLAGS[dbgFlagSel];
+      c.checked=!c.checked; c.dispatchEvent(new Event('change')); playSound('click'); }
+  }
+  if(moved){ playSound('click'); dbgPaint(); }
 }
 // step-true decimals into a FIXED 6ch cell (.dval) — the value used to print at
 // natural width, so "-1" → "-0.95" re-flexed the space-between row, the track
@@ -6969,9 +7011,8 @@ function dbgNav(){
 const dbgDec=s=>{ s=String(s); const i=s.indexOf('.'); return i<0?0:s.length-1-i; };
 const dbgFmt=p=>(+p.v).toFixed(dbgDec(p.step));
 function buildDebugPanel(){
-  if(debugBuilt){ renderDebugItems(); return; } debugBuilt=true;
+  if(debugBuilt){ dbgPaint(); return; } debugBuilt=true;
   DBG_KEYS=Object.keys(ITEM_DEFS);
-  renderDebugItems();
   document.getElementById('dbgSpawnEnemy').onclick=()=>{ const f=camForward();
     enemies.push(new Zealot(playerPos.x+f.x*8, playerPos.z+f.z*8)); };
   document.getElementById('dbgKillAll').onclick=()=>enemies.forEach(e=>{ if(e.health>0) e.hurt(999,'debug'); });
@@ -6984,6 +7025,10 @@ function buildDebugPanel(){
   document.getElementById('dbgGod').onchange=e=>FLAGS.god=e.target.checked;
   document.getElementById('dbgNoclip').onchange=e=>FLAGS.noclip=e.target.checked;
   document.getElementById('dbgSeeAll').onchange=e=>FLAGS.seeAll=e.target.checked;
+  DBG_BTNS=['dbgSpawnEnemy','dbgKillAll','dbgDeployA1','dbgDeployHide',       // pad order == visual order,
+            'dbgDeployValley','dbgResetSaves','dbgTpGate','dbgNextRing']      // two per row — new buttons join here
+           .map(id=>document.getElementById(id));
+  DBG_FLAGS=['dbgGod','dbgNoclip','dbgSeeAll'].map(id=>document.getElementById(id));
   const pp=document.getElementById('dbgParams');
   for(const k in PARAMS){
     const p=PARAMS[k];
@@ -6998,7 +7043,9 @@ function buildDebugPanel(){
     });
     row.appendChild(lbl); row.appendChild(inp); row.appendChild(val);
     pp.appendChild(row);
+    DBG_PARAMS.push({k,row,inp,val});
   }
+  dbgPaint();
 }
 let dbgWatchT=0;
 function updateDebugWatch(dt){
