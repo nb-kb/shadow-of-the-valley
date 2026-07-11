@@ -2972,7 +2972,7 @@ const ITEM_DEFS={
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core hunts the nearest warm thing ahead of it — hard turns, honest ones. Cover still works · +7⚡'),
   refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:10},'Next core rides free — energy cores waive their base ⚡, mag-fed cores fire without lead · +10⚡, never waived'),
-  chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core forgets the straight line. Threads arc like lightning; with SEEKER the arcs bite the nearest warm thing · +6⚡'),
+  chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core forgets the straight line. Threads arc like lightning; with SEEKER the arcs bite the nearest warm thing. Hits +45% harder per stack — two stacks cap it; the wild path is the price · +6⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glob of glue — sticks to the world and to its kin. Behind a BEAM: a physics gun'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
@@ -4144,6 +4144,7 @@ function globSlow(pos,host){                          // enemies wade through gl
 }
 let beamActive=false, beamWasHeld=false;
 
+function chaosMul(ch){ return ch?1+0.45*Math.min(2,ch):1; }   // CHAOS: wild path, heavy hand
 function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
   const p=shot.pend;
   // BOOM IS THE BLAST — no flight, no tracer slot: it detonates the frame it is
@@ -4157,7 +4158,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
     triggerPayload({
       pos:new Vec3(origin.x+dir.x*nud,origin.y+dir.y*nud,origin.z+dir.z*nud),
       vel:new Vec3(dir.x*26,dir.y*26,dir.z*26), owner, kind:'boom',
-      dmg:34+p.dmg, rMul:Math.round(p.twin)>1?1.4:1, split:p.split||0,
+      dmg:(34+p.dmg)*chaosMul(p.chaos), rMul:Math.round(p.twin)>1?1.4:1, split:p.split||0,
       relay:shot.relayNext||null, rdir:new Vec3(dir.x,dir.y,dir.z), rbase:base,
       src:src||null, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
     });
@@ -4174,7 +4175,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:kind==='orb'?6.0:kind==='saw'?0.16:2.2, owner, kind,   // saw reach ≈ 4m — SWIFT is its reach knob; orb: 6s aloft, then the payload pops
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything (slug: ×3 TOOL hurt, pend added after)
-      dmg:(kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg,   // wave flat 16 — enemy-fired included, declared
+      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg)*chaosMul(p.chaos),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
@@ -4434,15 +4435,15 @@ function runContinuousBeams(dt){
       const end=new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);
       st.acc[k]=(st.acc[k]||0)+dt;
       if((sh.kind==='bolt'||sh.kind==='saw')&&hitEn){
-        let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt;
+        let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
         if(hitHead){
           if(hitEn.helm){ hitEn._helmT=(hitEn._helmT||0)+dt; if(hitEn._helmT>=0.4){ hitEn._helmT-=0.4; crackHelm(hitEn); } }
           else bdmg*=2;
         }
         hitEn.hurt(bdmg,'player',hitHead?'head':undefined); applyStatus(hitEn,sh.pend);
       }
-      if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
-      if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul,owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
+      if(sh.kind==='spark'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,dmg:(12+sh.pend.dmg)*0.6*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }
+      if(sh.kind==='boom'&&st.acc[k]>0.45){ st.acc[k]=0; explode({pos:end,rMul:0.75,dmg:(14+sh.pend.dmg*0.6)*mul*chaosMul(sh.pend.chaos),owner:'player',burn:sh.pend.burn,bleed:sh.pend.bleed}); }   // BOOM thread: a drum of SMALL charges at the contact point — R 1.8, ~14 a beat, every 0.45s (26+8⚡ → 20.7⚡/s)
       if(sh.kind==='pick'&&st.acc[k]>0.16){ st.acc[k]=0; carveAt({pos:end,dmg:8,r:0.55}); }
       if(sh.kind==='grip'){
         if(!heldWorld&&!st.gripEn&&!_pgRegrabLock){
@@ -4510,7 +4511,7 @@ function fireHitscan(owner,origin,dir,shot,res,dt){
   const maxLen=60;
   let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
   let pierceLeft=p.pierce;
-  const dmg=(shot.kind==='boom'?34:shot.kind==='spark'?12:res.dmg)+p.dmg;
+  const dmg=((shot.kind==='boom'?34:shot.kind==='spark'?12:res.dmg)+p.dmg)*chaosMul(p.chaos);
   const hits=[];
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;
