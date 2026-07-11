@@ -397,7 +397,6 @@ const PARAMS = {
   maxEnemies:  {v:3,   min:0,   max:6,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
-  fogDensity:  {v:0.014,min:0,  max:0.1,  step:0.002,label:'fog density'},
   fogWeather:  {v:-1,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
   nightFloor:  {v:0.012,min:0.002,max:0.06,step:0.002,label:'night ambient'},
 };
@@ -2635,7 +2634,12 @@ function updateDayNight(){
   // dense cap, and the far plane follows the fog wall in: march no farther than
   // where transmittance ~2.5% (exp(-fog·far)=0.025 → far=3.7/fog). Fog-opaque
   // distance ≈ far, so shrinking uFar is pure FPS win — nothing visible is cut.
-  const baseFog=activeLevel&&activeLevel.atmos ? activeLevel.atmos.fog : P('fogDensity');
+  // the no-atmos fallback (the open valley) is pinned CLEAR. It was the
+  // fogDensity slider, and any nonzero base mixes skyColor() — sun disk, stars,
+  // clouds — through geometry with distance: the world reads translucent
+  // (KNOWN_BUGS backlog). Weather still thickens from zero via the lerp below;
+  // authored levels keep their own haze.
+  const baseFog=activeLevel&&activeLevel.atmos ? activeLevel.atmos.fog : 0.0;
   const baseFar=activeLevel&&activeLevel.atmos ? activeLevel.atmos.far : 180.0;
   dayNight.fogE=Math.max(baseFog, lerp(baseFog,0.085,fogW));      // full bank: see ~43m
   dayNight.farE=Math.min(baseFar, 3.7/Math.max(dayNight.fogE,1e-4));
