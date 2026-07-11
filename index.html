@@ -4186,8 +4186,9 @@ function globSlow(pos,host){                          // enemies wade through gl
 }
 
 function chaosMul(ch){ return ch?1+0.45*Math.min(2,ch):1; }   // CHAOS: wild path, heavy hand
-function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
+function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
   const p=shot.pend;
+  const _tl=owner==='player'?(srcTool||activeTool):null;   // pin the billing tool at FIRE time — relay extras (castRelay) charge it, not the live wield
   // BOOM IS THE BLAST — no flight, no tracer slot: it detonates the frame it is
   // cast. Muzzle-fired it goes off ~1.2m out (survivable, stupid); relay/contact
   // cast (atPoint) it goes off AT the cast point — explosive rounds, breach
@@ -4201,7 +4202,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
       vel:new Vec3(dir.x*26,dir.y*26,dir.z*26), owner, kind:'boom',
       dmg:(34+p.dmg)*chaosMul(p.chaos)*(shot.small||1), rMul:shot.small?0.75:(Math.round(p.twin)>1?1.4:1), split:p.split||0,   // small: a drummed half-beat (v22 C2)
       relay:shot.relayNext||null, rdir:new Vec3(dir.x,dir.y,dir.z), rbase:base,
-      src:src||null, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
+      src:src||null, tool:_tl, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
     });
     return;
   }
@@ -4221,7 +4222,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       timerT:p.timer||0,                                 // TIMER: the bell rides the flight
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
-      relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
+      relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null, tool:_tl,
       burn:Math.round((p.burn||0)*(shot.small||1)), bleed:!!p.bleed, chaos:p.chaos||0,
       col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[0.75,0.75,0.55]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[0.78,0.55,0.15]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; width tiers: sum<1.5 fat, <2.8 gossamer, ≥2.8 hairline — slug brass stays under 1.5 (fat shell), saw steel rides the gossamer tier
       silent:p.silent||base.silenced,
@@ -4244,6 +4245,10 @@ function roundsFor(sh){
   const own=sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0;
   return own+(sh.relayNext&&sh.relayNext.housed?roundsFor(sh.relayNext):0);
 }
+// CHAIN ⚡ mirrors the lead: resolveLane parks every deeper housed link's cost on
+// the chain ROOT, so a housed shot's own .cost is link-local — an extra delivery
+// must bill the whole sub-chain it casts (castRelay), not just the first link.
+function chainCost(sh){ return (sh.cost||0)+(sh.relayNext&&sh.relayNext.housed?chainCost(sh.relayNext):0); }
 // the fire cycle never rests on a housed payload — first live entry at/after cyc
 function cycleShotIdx(lane,cyc){
   const n=lane.shots.length;
@@ -4324,7 +4329,7 @@ function tryFirePlayer(dt){
         }else if(sh.pend.homing>0) f2=seekBias(camPos(),f2);
         let rays=Math.max(1,Math.round(sh.pend.twin));
         if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
-        for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f2,_jDir):f2,sh,res,dt);
+        for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f2,_jDir):f2,sh,res,dt,r===0);
       }else emitProjectile('player',origin,fireDir,sh,res);
       const silent=sh.pend.silent||res.silenced||lane.silenced;
       playSound(sh.pend.laser?'spark':sh.kind==='spark'?'spark':(silent?'silenced':'shoot'));
@@ -4784,7 +4789,7 @@ function _endBeams(){
 // rules: bare head x2, a helm eats the bonus and cracks), honors DRILL pierce, and
 // pays the core's FULL projectile hurt — no continuous-beam discount. Draws one
 // one-frame laser-tier flash (col sums >2.8 land in the shader's 0.004 ray).
-function fireHitscan(owner,origin,dir,shot,res,dt){
+function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
   const p=shot.pend;
   const o=owner==='player'?camPos():origin, f=dir;
   const maxLen=60;
@@ -4824,6 +4829,18 @@ function fireHitscan(owner,origin,dir,shot,res,dt){
     worldNormalJS(end.x,end.y,end.z,_n); addDecal(end,_n,0.14);
     addDyn(end.x,end.y,end.z,[1,0.4,0.4],1.0,0.05);
   }
+  // HOUSED DELIVERY (accounting fix): the pull/pulse already PAID the folded
+  // chain — spendCharge took the root-folded cost, roundsFor took the chain's
+  // lead — but this path used to discard shot.relayNext. Cast the housed
+  // payload at the pulse's contact point: aim ray only (doRelay mirrors
+  // emitProjectile's first-TWIN-copy rule), no touch no cast (the projectile
+  // miss precedent), _relayPaid unset — this first delivery is the pre-paid one.
+  if(doRelay&&owner==='player'&&shot.relayNext&&shot.relayNext.housed&&t<maxLen-0.1){
+    const flesh=hits.length>0&&!pierceAll;
+    let rx2=f.x,ry2=f.y,rz2=f.z;                       // flesh: the cast carries onward through the wound
+    if(!flesh){ worldNormalJS(end.x,end.y,end.z,_n); rx2=_n.x; ry2=_n.y; rz2=_n.z; }   // wall: the cast leaves the FACE (CONTACT law)
+    castRelay({owner,relay:shot.relayNext,pos:end,rdir:new Vec3(rx2,ry2,rz2),rbase:res,src:null,tool:activeTool},true);
+  }
 }
 // BURST LASERS — burst cam + BEAM on a damage core: the lane stops flowing and
 // VOLLEYS instead. `burst` pulses 70ms apart, re-trigger gated by fireRate like
@@ -4854,7 +4871,7 @@ function runBurstLasers(dt){
       }
       let rays=Math.max(1,Math.round(q.sh.pend.twin));
       if(rays>1) rays=Math.max(1,Math.min(rays,flashHeadroom()));
-      for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f,_jDir):f,q.sh,q.res,dt);
+      for(let r=0;r<rays;r++) fireHitscan('player',origin,rays>1?jitterDir(f,_jDir):f,q.sh,q.res,dt,r===0);
       const silent=q.sh.pend.silent||q.res.silenced||q.lane.silenced;
       playSound(silent?'silenced':'spark');
       addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
@@ -5148,15 +5165,16 @@ function castRelay(pr,term,cx,cy,cz){
   if(term) pr.relay=null;                              // one TERMINAL cast per corpse stands
   if(pr._relayPaid){
     if(pr.owner==='player'){
-      const c=Math.ceil((sh.cost||0)/3);
-      if(!activeTool||activeTool.charge<c) return;
+      const tl=pr.tool||activeTool;                      // the tool that FIRED the chain pays — projectiles outlive the wield, a holster swap must not bill the other tool's cells/mag
+      const c=Math.ceil(chainCost(sh)/3);                // the law: extras draw ceil(CHAIN ⚡/3) — sh.cost alone is link-local (fold sits on the root), a 0-cost housed POWDER was casting its 26⚡ BOOM sub-chain free
+      if(!tl||tl.charge<c) return;
       const rds=roundsFor(sh);
-      if(rds>0){ const mag=sh.lane?columnMag(activeTool,sh.lane.mountIdx,true):null; if(!mag||mag.loaded<rds) return; mag.loaded-=rds; }
-      spendCharge(activeTool,c);
+      if(rds>0){ const mag=sh.lane?columnMag(tl,sh.lane.mountIdx,true):null; if(!mag||mag.loaded<rds) return; mag.loaded-=rds; }
+      spendCharge(tl,c);
     }else if((pr._exCasts=(pr._exCasts||0)+1)>3) return;
   }
   pr._relayPaid=true;
-  emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge
+  emitProjectile(pr.owner,pr.pos,pr.rdir,sh,pr.rbase,pr.src,true,pr.tool);   // atPoint: a relay'd BOOM blasts AT the cast point, no muzzle nudge; the chain's tool rides into the sub-emit
 }
 function splinterBurst(pr){
   const nFrag=Math.min(4,pr.split);
@@ -5171,7 +5189,7 @@ function splinterBurst(pr){
       bounces:pr.bounces, pierce:pr.pierce, grav:6,
       fuse:0, split:0, stuck:false,                      // fragments never re-split
       contact:!!(pr.contact&&pr.relay), relay:pr.relay||null,
-      rdir:pr.rdir?pr.rdir.clone():null, rbase:pr.rbase||null, src:pr.src||null,
+      rdir:pr.rdir?pr.rdir.clone():null, rbase:pr.rbase||null, src:pr.src||null, tool:pr.tool||null,
       _relayPaid:true, chaos:0,                          // parent's terminal was the free cast — every shard delivery draws its third
       burn:Math.round((pr.burn||0)*0.45), bleed:!!pr.bleed,
       col:pr.col, silent:pr.silent,
