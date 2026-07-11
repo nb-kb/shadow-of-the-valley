@@ -3156,6 +3156,10 @@ let equip={helmet:null,goggles:null,headphones:null,plates:null,harness:null,hol
 let BAG_COLS=5,BAG_ROWS=6;
 const GUN_COLS=4,GUN_ROWS=4;
 let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
+// POCKETS — the four slots sewn to the player, not to any gear: present even naked,
+// even after a full-wipe death (the container is permanent; only its CONTENTS are taken).
+const POCKET_COLS=4, POCKET_ROWS=1;
+const pocketsGrid=Array(POCKET_ROWS).fill(null).map(()=>Array(POCKET_COLS).fill(null));
 // legacy surface: bagGrid aliases the EQUIPPED rucksack's own grid (live reference)
 function syncBagAlias(){
   const r=equip.rucksack;
@@ -3188,6 +3192,7 @@ const zoneFolds=it=>!!it&&FOLD_SLOTS.includes(it.armorType);
 const zoneShut=it=>zoneFolds(it)&&!it.zoneOpen;
 function playerZones(all){
   const z=[{id:'equip',label:'RIG',equipCol:true,cols:1,rows:EQUIP_SLOTS.length}];
+  z.push({id:'pockets',label:'POCKETS',grid:pocketsGrid,cols:POCKET_COLS,rows:POCKET_ROWS,storage:true});   // ALWAYS present — before every equipped container; storage:true wires it into storageZones/autoPlaceAny/ammo-count for free
   const push=slot=>{ const it=equip[slot];
     if(it&&it.inv&&it.invCols>0&&(all||!zoneShut(it)))
       z.push({id:slot,label:it.name.toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
@@ -3206,6 +3211,8 @@ function autoPlaceAny(item){
   const zs=storageZones().filter(z=>!z.external);
   const order=[...zs];
   const pref=id=>{ const i=order.findIndex(z=>z.id===id); if(i>0) order.unshift(order.splice(i,1)[0]); };
+  const defer=id=>{ const i=order.findIndex(z=>z.id===id); if(i>=0&&i<order.length-1) order.push(order.splice(i,1)[0]); };
+  defer('pockets');   // the always-there safety net catches overflow LAST — every real container gets first refusal
   if(item instanceof Tool) pref('holster');
   if(item instanceof Ammunition||item instanceof Magazine) pref('belt');
   for(const z of order){
@@ -3957,7 +3964,7 @@ function placeToolAway(t){
   // walks playerZones(true) — the FOLD-BLIND view — so a CLOSED harness or a folded
   // rucksack still takes the tool. Returns the zone label, or null when it hit the floor.
   const zs=storageZones().filter(z=>!z.external);
-  for(const id of ['belt','harness','rucksack']){
+  for(const id of ['belt','harness','rucksack','pockets']){
     const z=zs.find(z=>z.id===id); if(!z) continue;
     const ok=z.slotMode ? slotPlace(t,z) : autoPlace(t,z.grid,z.cols,z.rows);
     if(ok) return z.label;
@@ -5890,6 +5897,7 @@ function startRun(){
   clearHudFx();                                // a fresh run starts with a clean visor
   applyDebugTuning(null,null);                 // debug knobs are per-save now — a fresh run starts stock
   for(const k of EQUIP_SLOTS) equip[k]=null;   // you start with NOTHING on the body — the stash holds the kit
+  for(const row of pocketsGrid) row.fill(null);   // fresh run: empty hands AND empty pockets
   activeTool=null; holsterCur=-1;
   syncBagAlias(); clampZone();
   seedStashKit();                              // BEFORE deployTo — the hideout's guaranteed-spawn check reads the stash
@@ -5911,6 +5919,7 @@ function onDeath(){
     // (whatever was in-hand dies with the world — teardownWorld drops heldWorld)
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null; holsterCur=-1; reloadTimer=0;   // no wield, no draw memory, no reload landing on empty hands
+    for(const row of pocketsGrid) row.fill(null);    // the valley takes the pockets' contents too — the four slots stay, empty
     syncBagAlias(); clampZone();             // bagGrid falls back to the 1x1 stub; the cursor keeps a legal zone
     if(!activeLevel) depth=1;                // the ring count died with the run — the next OPEN VALLEY starts at I
     playerPos.health=Math.max(1,Math.round(playerPos.maxHealth*0.3));
@@ -6219,7 +6228,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash; + params/flags (additive — absent reads as defaults). v2 loads as an empty stash.
+const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
@@ -6283,9 +6292,14 @@ function saveGame(slot){
     const ch=stashInv[r][c];
     if(ch&&!seen.has(ch)&&ch.x===c&&ch.y===r){ seen.add(ch); stash.push(itemToJSON(ch)); }
   }
+  const pockets=[]; const pkSeen=new Set();                 // same top-left-anchored walk as the stash
+  for(let r=0;r<POCKET_ROWS;r++) for(let c=0;c<POCKET_COLS;c++){
+    const ch=pocketsGrid[r][c];
+    if(ch&&!pkSeen.has(ch)&&ch.x===c&&ch.y===r){ pkSeen.add(ch); pockets.push(itemToJSON(ch)); }
+  }
   const params={}; for(const k in PARAMS) params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
-              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash,
+              equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
               params, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll}};
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
@@ -6303,6 +6317,7 @@ function saveMeta(slot){
     for(const k in b.equip) walk(b.equip[k]);
     walk(b.wield);
     (b.stash||[]).forEach(walk);
+    (b.pockets||[]).forEach(walk);
     return {stamp:b.stamp, items:n};
   }catch(e){ return null; }
 }
@@ -6334,11 +6349,18 @@ function loadGame(slot){
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
       else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
     }
+    for(const row of pocketsGrid) row.fill(null);         // absent in old blobs → stays empty
+    for(const cj of (b.pockets||[])){
+      const ch=itemFromJSON(cj); if(!ch) continue;
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,pocketsGrid,POCKET_COLS,POCKET_ROWS)) placeInGrid(ch,cj.x,cj.y,pocketsGrid);
+      else autoPlace(ch,pocketsGrid,POCKET_COLS,POCKET_ROWS);
+    }
     applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
   }catch(e){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
     for(const row of stashInv) row.fill(null);
+    for(const row of pocketsGrid) row.fill(null);
     _retuneOrphans.length=0;
     syncBagAlias(); clampZone();
     applyDebugTuning(null,null);                          // a corrupt slot is an empty one — stock knobs
