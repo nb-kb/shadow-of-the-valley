@@ -4776,19 +4776,19 @@ function updateProjectiles(dt){
       // world
       const wd=mapWorldJS(pr.pos.x,pr.pos.y,pr.pos.z);
       if(wd<(pr.kind==='slug'?0.30:pr.kind==='orb'?0.12:0.04)){   // increased projectile size for fat ordnance
-        if(pr.contact&&!(pr.fuse>0)){                  // CONTACT: no patience — first touch triggers, the relay casts from here (on the same core FUSE governs: stick+timer; contact vents)
-          worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
-          pr.pos.addScaledVector(_n,0.06);
-          addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
-          dead=true;
-          triggerPayload(pr);
-        }else if(pr.bounces>0){
+        if(pr.bounces>0){
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           const dot=pr.vel.dot(_n);
           pr.vel.x-=2*dot*_n.x; pr.vel.y-=2*dot*_n.y; pr.vel.z-=2*dot*_n.z;
           pr.vel.multiplyScalar(0.8);
           pr.pos.addScaledVector(_n,0.08);
           pr.bounces--; playSound('click');
+        }else if(pr.contact&&!(pr.fuse>0)){            // CONTACT: the LAST touch triggers — RICOCHET spends its banks first; flesh triggers any time (on the same core FUSE governs: stick+timer; contact vents)
+          worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
+          pr.pos.addScaledVector(_n,0.06);
+          addDecal(pr.pos,_n,pr.kind==='spark'?0.7:pr.kind==='boom'?1.1:0.22);
+          dead=true;
+          triggerPayload(pr);
         }else if(pr.fuse>0){                             // FUSE: stick to the surface
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           pr.pos.addScaledVector(_n,0.06);
