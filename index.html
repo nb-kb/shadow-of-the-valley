@@ -82,7 +82,6 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #zoneStack{display:flex;gap:16px;align-items:flex-start;justify-content:center;}
 .zoneRight{display:flex;flex-direction:column;}
 .zoneBlock{margin-bottom:10px;}
-.zoneLabel{font-size:9px;letter-spacing:.16em;color:var(--dust);margin:0 0 3px 2px;}
 .equipCell{position:relative;}
 .slotGhost{font-size:11px;letter-spacing:.1em;color:#4a4a42;}
 .lockedCell{background:rgba(60,70,60,.12);}
@@ -115,7 +114,6 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #rackInspect .tt-body{font-size:13px;line-height:1.6;color:var(--bone);}
 #toolUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);z-index:40;
   text-align:center;pointer-events:none;}
-#backpackUI .stencil,#toolUI .stencil{text-shadow:0 1px 5px #000,0 0 14px #000;font-size:14px;letter-spacing:.28em;}
 .gridWrap{position:relative;display:grid;gap:3px;padding:6px;margin:12px auto 0;width:max-content;
   pointer-events:auto;background:rgba(6,8,10,.16);border:1px solid rgba(215,220,230,.13);border-radius:7px;
   backdrop-filter:blur(1.5px);}
@@ -228,13 +226,11 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- Rucksack -->
 <div id="backpackUI" class="hidden">
-  <div class="stencil">RUCKSACK · THE WORLD DOES NOT PAUSE</div>
   <div id="zoneStack"></div>
 </div>
 
 <!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
 <div id="toolUI" class="hidden">
-  <div class="stencil">THE TOOL · BARREL RACK</div>
   <div id="rackWrap"></div>
   <div class="seqReadout hidden"><div id="modSequence">—</div></div>
 </div>
@@ -262,7 +258,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- Field manual: controls & analog settings notes -->
 <div id="manualUI" class="hidden"><div class="inner panel">
-  <div class="stencil" style="font-size:16px;">📖 <b>Field Manual</b> — quartermaster's copy, margins full of a child's handwriting</div>
+  <div class="stencil" style="font-size:16px;">📖 <b>Field Manual</b></div>
+  <div style="margin-top:8px;font-size:14px;letter-spacing:.14em;color:var(--bone);">Shadow hides you. Light betrays you. Noise carries.</div>
   <table id="bindTable"></table>
   <div class="drow" style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:var(--dust);">
     <label>Mouse feel <input type="range" id="sensMouse" min="0.4" max="3" step="0.1"></label>
@@ -270,15 +267,15 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
     <label><input type="checkbox" id="invertY"> Invert look</label>
   </div>
   <div class="manualNote">
-    Pads pair through your system's Bluetooth, then press any button here — the engine listens for it.<br>
-    Settings live as objects: the <b>Pocket Watch</b> tells time on your HUD while carried · the <b>Compass</b> points to the beacon ·
-    the <b>Optics Dial</b> cycles render fidelity · the <b>Volume Knob</b> cycles sound. Lose them, lose the setting.<br>
-    In the pockets <b>△</b> speaks in order: a rig piece folds its zone · a pocketed container opens its pockets ·
-    a usable is used where it lies (food eaten from the cell; a LIT core counts down and blows from whoever carries it) ·
-    an empty cell beds the wielded tool. In hand, a <b>tap</b> opens a carried thing's pockets; a long <b>hold</b> stows a tool.<br>
-    Bindings hold for this session only. Close with the same key that opened this.<br>
-    With <b>GRIP fed by a BEAM</b> the triggers trade jobs — <b>LT/LMB</b> casts the thread and carries,
-    <b>RT/RMB</b> pins the carried load mid-air until gripped again. Other Tools keep the standard layout.
+    Pads: pair via system Bluetooth, then press any button here.<br>
+    Settings are objects: the <b>Pocket Watch</b> keeps HUD time · the <b>Compass</b> marks the beacon ·
+    the <b>Optics Dial</b> cycles render fidelity · the <b>Volume Knob</b> cycles sound. Lose the object, lose the setting.<br>
+    <b>△</b> in the pockets: a rig piece folds its zone · a container opens · a usable is used where it lies
+    (a LIT core blows from whoever carries it) · an empty cell beds the wielded tool.
+    In hand: <b>tap</b> opens pockets, <b>hold</b> stows a tool.<br>
+    Bindings hold for this session only. Close with the key that opened this.<br>
+    <b>GRIP fed by a BEAM</b> trades triggers: <b>LT/LMB</b> casts the thread and carries ·
+    <b>RT/RMB</b> pins the load mid-air until gripped again. Other Tools keep the standard layout.
   </div>
 </div></div>
 
@@ -347,15 +344,11 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <ellipse cx="798" cy="398" rx="14" ry="16" fill="#ddd6c6" stroke="none"/>
 <ellipse cx="846" cy="396" rx="15" ry="16" fill="#ddd6c6" stroke="none"/>
 </g></svg>
-  <p>The Ashen Covenant strings its camps along the valley floor.<br>Tonight the generator stuttered, and your cell door forgot its faith.</p>
-  <p><b>Follow the valley to the beacon.</b> Every zealot carries the same Tool you do — take theirs apart and make yours stranger.</p>
-  <p>Shadow hides you. Light betrays you. Noise carries.</p>
-  <p style="font-size:14px;">WASD move · <b>E</b> grab / reload / place · <b>LMB</b> fire or hurl · Shift sprint toggles · <b>B</b> rucksack · <b>Tab</b> tool · <b>X</b> inspect in menus · F light · M manual</p>
+  <p style="font-size:14px;">WASD · <b>E</b> interact · <b>LMB</b> fire · <b>M</b> manual</p>
   <div class="go" id="bootStatus">COMPILING THE VALLEY…</div>
 </div></div>
 <div id="deathScreen" class="screen hidden"><div class="inner panel">
   <h1 style="color:var(--alert);">RECLAIMED</h1>
-  <p>"The Covenant does not punish. It reteaches."</p>
   <p id="deathStats"></p>
   <div class="go">— any key: slip the door again —</div>
 </div></div>
@@ -6548,8 +6541,6 @@ function renderZones(){
   const zl=invZones();
   zl.forEach((z,zi)=>{
     const blk=document.createElement('div'); blk.className='zoneBlock';
-    const lab=document.createElement('div'); lab.className='zoneLabel stencil';
-    lab.textContent=z.label; blk.appendChild(lab);
     const g=document.createElement('div'); g.className='gridWrap';
     g.style.gridTemplateColumns='repeat('+z.cols+',44px)';
     if(z.equipCol){
