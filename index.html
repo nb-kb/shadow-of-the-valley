@@ -463,8 +463,8 @@ const ACTIONS = [
   {id:'leanR',    label:'Lean right',          kb:'KeyX',        pad:5},   // R1
   {id:'cycleL',   label:'Holster · prev tool', kb:null,          pad:14},  // d-left
   {id:'cycleR',   label:'Holster · next tool', kb:'KeyT',        pad:15},  // d-right (Q is spoken for — lean)
-  {id:'reelIn',  label:'Reel in (rope · carry)',  kb:null, pad:12},  // d-up
-  {id:'reelOut', label:'Reel out (rope · carry)', kb:null, pad:13},  // d-down
+  {id:'reelIn',  label:'Wheel up (reel · carry)',   kb:null, pad:12},  // d-up  = mouse-wheel up
+  {id:'reelOut', label:'Wheel down (reel · carry)', kb:null, pad:13},  // d-down = mouse-wheel down
   {id:'bag',      label:'Rucksack',            kb:'KeyB',        pad:8},   // share
   {id:'tool',     label:'Tool rack / close layer',kb:'Tab',       pad:1},   // circle
   {id:'manual',   label:'Field manual',        kb:'KeyM',        pad:9},   // options
@@ -473,7 +473,7 @@ const ACTIONS = [
 const BIND = {};            // action -> {kb, pad}
 ACTIONS.forEach(a=>BIND[a.id]={kb:a.kb, pad:a.pad});
 const INPUT = {
-  keys:{}, mouse:{}, mdx:0, mdy:0, wheel:0,
+  keys:{}, mouse:{}, mdx:0, mdy:0, wheel:0, padWheelT:0,
   padButtons:[], padPrevButtons:[], padAxes:[0,0,0,0], padConnected:false,
   sensMouse:1.0, sensPad:1.4, invertY:false,
   frameDown:{},             // action edges this frame
@@ -505,6 +505,21 @@ function navEdges(){        // one read for the three menu cursors — arrows + 
   return { up:!!(k['ArrowUp']||p[12]),    down:!!(k['ArrowDown']||p[13]),
            left:!!(k['ArrowLeft']||p[14]), right:!!(k['ArrowRight']||p[15]),
            confirm:!!k['KeyE'], back:!!k['Escape'] };   // kb halves only — each menu ORs its own pad face
+}
+// D-PAD UP/DOWN ARE THE MOUSE WHEEL — pad 12/13 (reelIn/reelOut) inject the SAME
+// notches the physical wheel does (one detent up = wheel-up, down = wheel-down) straight
+// into INPUT.wheel, so they drive EVERYTHING the wheel drives — carry distance AND the
+// rope reel — identically, not just "reel". First notch fires on the press EDGE, then
+// auto-repeats while held at ~one notch/0.12s (the wheel path is a discrete per-frame
+// accumulator, so a notch cadence — not a continuous rate — and a held d-pad still keeps
+// reeling). Gated OUT of menus, where these same buttons walk the list cursor (navEdges).
+function padWheelStep(dt){
+  if(uiMenusOpen()){ INPUT.padWheelT=0; return; }
+  const dir=(down('reelOut')?1:0)-(down('reelIn')?1:0);   // reelOut = wheel-down (+deltaY), reelIn = wheel-up (-deltaY)
+  if(dir===0){ INPUT.padWheelT=0; return; }
+  if(pressed('reelIn')||pressed('reelOut')){ INPUT.wheel+=dir; INPUT.padWheelT=0.12; return; }   // edge: the first notch, now
+  INPUT.padWheelT-=dt;
+  if(INPUT.padWheelT<=0){ INPUT.wheel+=dir; INPUT.padWheelT=0.12; }                               // held: repeat at the notch cadence
 }
 
 window.addEventListener('keydown',e=>{
@@ -3970,7 +3985,7 @@ function updateHeldPhysics(dt){
     releaseHeld(false); playSound('click'); toast('PINNED');
     return;
   }
-  const _rl=uiMenusOpen()?0:(clamp(INPUT.wheel,-2,2)*0.35+((down('reelOut')?1:0)-(down('reelIn')?1:0))*2.5*dt); if(_rl!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+_rl,1.1,heldWorld.mode==='beam'?16:3.2);   // menu gate covers the WHEEL too (scrolling a list dragged the carry), same 2-notch frame cap as the rope
+  const _rl=uiMenusOpen()?0:(clamp(INPUT.wheel,-2,2)*0.35); if(_rl!==0) heldWorld.holdDist=clamp(heldWorld.holdDist+_rl,1.1,heldWorld.mode==='beam'?16:3.2);   // carry distance rides the WHEEL — d-pad up/down feed the same notches (padWheelStep). Menu gate covers it too; 2-notch frame cap matches the rope
   const o=camPos(), f=camForward();
   const w=heldWorld.w;
   const off=itemWorldJS(heldWorld.lx,heldWorld.ly,heldWorld.lz, w.ry||0, w.pitch||0);
@@ -7216,7 +7231,7 @@ function updatePlayer(dt){
       // the step is the momentum: jump-and-hook keeps its run instead of halting dead.
       // A midair RE-grab (swinging still riding) keeps its live velocity untouched.
       if(playerPos.onGround||_fresh){ playerPos.velX=(rx*mx+fx*mz)*speed; playerPos.velZ=(rz*mx+fz*mz)*speed; }
-      _swing.len=clamp(_swing.len + clamp(INPUT.wheel,-2,2)*0.35 + ((down('reelOut')?1:0)-(down('reelIn')?1:0))*6*dt, 1.2, 26);   // reel: wheel notch 0.35 (holdDist verb), d-pad 6 m/s — under load the shrinking sphere PULLS you. Wheel capped at 2 notches a FRAME: smooth-scroll mice burst 10-30 events between frames and the taut sphere would yank metres in one step
+      _swing.len=clamp(_swing.len + clamp(INPUT.wheel,-2,2)*0.35, 1.2, 26);   // reel rides the WHEEL: 0.35 m/notch — d-pad up/down feed the same notches (padWheelStep). Capped at 2 notches a FRAME: smooth-scroll mice burst 10-30 events between frames and the taut sphere would yank metres in one step
     }
     if(playerPos.swinging&&!_swing&&playerPos.onGround){ playerPos.swinging=false; playerPos.velX=0; playerPos.velZ=0; }  // momentum spends itself on landing
     const _sw0x=playerPos.x, _sw0y=playerPos.y, _sw0z=playerPos.z;   // pre-flight pose — the swept resolve below walks from here
@@ -7571,6 +7586,7 @@ function frame(){
   const live = isPlayable() && !pausedUI();
   if(live){
     runClock+=dt; gameTime+=dt; worldClock+=dt;
+    padWheelStep(dt);          // d-pad up/down feed the wheel BEFORE its consumers (carry · rope reel)
     updatePlayer(dt);
     if(!uiMenusOpen()){
       updateInteract(dt);
