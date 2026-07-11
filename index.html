@@ -2967,7 +2967,7 @@ const ITEM_DEFS={
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks, blows 1.2s later, and casts the core after it OFF the face it stuck to · +4⚡'),
   contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core casts the core ABOVE it from its LAST touch — RICOCHET banks first, flesh triggers any time; the cast leaves along the struck face. Nothing above: plain impact. FUSE outranks it on the same core · +5⚡'),
-  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{fuseAdd:1.5,surcharge:3},'Next core waits +1.5s more on the fuse · +3⚡'),
+  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{timer:1.5,surcharge:3},'A clock, not glue — the next core triggers at the bell OR on first touch, whichever first, casting its payload either way. Feeding a FUSE: +1.5s patience instead · +3⚡'),
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact — under CONTACT the shards carry the payload to where THEY land (each extra delivery draws a third of the chain) · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core spends its flight, banks, and flies back to the hand that threw it — cutting both ways · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core hunts the nearest warm thing ahead of it — hard turns, honest ones. Cover still works · +7⚡'),
@@ -3875,7 +3875,7 @@ function updateHeldPhysics(dt){
 // (modifiers charge the next projectile core after them;
 //  utilities apply to the whole tool; stats are order-free)
 // ============================================================
-function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0,chaos:0}; }
+function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,timer:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0,chaos:0}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
 function foldFrame(out,m){
   const e=m.effect;
@@ -3924,7 +3924,7 @@ function resolveLane(col,out){
       if(e.twin) pend.twin*=e.twin;
       if(e.silent) pend.silent=true;
       if(e.fuse) pend.fuse+=e.fuse;
-      if(e.fuseAdd) pend.fuse+=e.fuseAdd;             // TIMER: more patience on the same fuse
+      if(e.timer) pend.timer+=e.timer;                // TIMER: a clock in flight — or, feeding a FUSE, more patience on it
       if(e.contact) pend.contact=true;
       if(e.split) pend.split+=e.split;
       if(e.laser) pend.laser=true;
@@ -3943,11 +3943,12 @@ function resolveLane(col,out){
       const e=m.effect;
       // THE PRICE: REFUND waives the core's base; POWDER waives the feeders' surcharges —
       // except REFUND's own (surchargeHard), and never under a thread (laser keeps full price).
+      if(pend.fuse>0&&pend.timer>0){ pend.fuse+=pend.timer; pend.timer=0; }   // TIMER feeds a standing FUSE: patience, not a second clock
       const cost=(pend.refund?0:(e.base||0)) + ((e.powder&&!pend.laser)?pend.surchargeHard:pend.surcharge);
       const shot={kind:e.kind,pend:{...pend},cost,core:m,spreadAdd:col.spreadAdd,lane};
       lane.shots.push(shot);
       const prev=lane.shots[lane.shots.length-2];      // FUSE-RELAY / CONTACT-RELAY: a fused core casts the NEXT core from its point of death; a contact core casts it from its FIRST TOUCH — no timer, no stick
-      if(prev&&(prev.pend.fuse>0||prev.pend.contact)&&!shot.pend.laser){
+      if(prev&&(prev.pend.fuse>0||prev.pend.contact||prev.pend.timer>0)&&!shot.pend.laser){
         prev.relayNext=shot;
         // HOUSED PAYLOAD (v22j): the relay target lives INSIDE its trigger — the
         // fire cycle passes over it (carrier→carrier, no bare-fired BOOMs in your
@@ -4153,7 +4154,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
   // charges. FUSE alone restores the lob: a fused boom still flies, sticks and
   // waits its turn. TWIN pools instead of fanning: ONE blast, radius ×1.4.
   // SPLINTER still shatters from the fire; its own relay casts onward from it.
-  if(shot.kind==='boom'&&!(p.fuse>0)){
+  if(shot.kind==='boom'&&!(p.fuse>0||p.timer>0)){
     const nud=atPoint?0:1.2;
     triggerPayload({
       pos:new Vec3(origin.x+dir.x*nud,origin.y+dir.y*nud,origin.z+dir.z*nud),
@@ -4178,6 +4179,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint){
       dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg)*chaosMul(p.chaos),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
+      timerT:p.timer||0,                                 // TIMER: the bell rides the flight
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null,
       burn:p.burn||0, bleed:!!p.bleed, chaos:p.chaos||0,
@@ -4680,6 +4682,7 @@ function updateProjectiles(dt){
     }
     pr.life-=dt;
     if(pr.life<=0){ if(pr.kind==='warp'||pr.kind==='orb') triggerPayload(pr); projectiles.splice(i,1); continue; }   // ORB pops at 6s; WARP: the end of the arc is arrival too
+    if(pr.timerT>0){ pr.timerT-=dt; if(pr.timerT<=0){ triggerPayload(pr); projectiles.splice(i,1); continue; } }   // TIMER: the bell rings mid-air — the payload casts where it hangs
     pr.vel.y-=pr.grav*dt;
     // RETURN: the way out is spent — the shot stalls, banks, and flies home to
     // the thrower's CURRENT position. Both passes cut; walls still kill it.
@@ -5881,7 +5884,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.burst) rows.push(e.burst+'-round burst · beam lanes: '+e.burst+'-pulse laser burst');
     if(e.silenced||e.silent) rows.push('silenced');
     if(e.fuse){ rows.push('fused '+e.fuse+'s — the death casts the next core in the lane from the blast point'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); }
-    if(e.fuseAdd) rows.push('+'+e.fuseAdd+'s fuse');
+    if(e.timer){ rows.push(e.timer+'s clock — bell or first touch, whichever first, casts the payload'); rows.push('feeding a FUSE: +'+e.timer+'s patience on it instead of a second clock'); }
     if(e.contact){ rows.push('LAST touch casts the NEXT core in the lane — RICOCHET banks first; the cast leaves along the struck face'); rows.push('that core is HOUSED: out of the fire cycle, its ⚡/lead billed to this carrier\'s pull'); rows.push('no core above: plain impact, the mod vents · with FUSE on the same core: the fuse governs, this vents'); }
     if(e.split) rows.push('splinters ×'+e.split);
     if(e.boomerang) rows.push('returns to the hand that threw it · both passes cut');
