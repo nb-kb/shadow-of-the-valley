@@ -2008,7 +2008,7 @@ const playerPos={
   flashlightOn:false,
   noiseLevel:0.2, exposure:0.5, muzzleGlow:0,
   camYawOffset:0,camPitchOffset:0,
-  aimAmt:0, bobX:0, bobY:0, viewKick:0, walkCycle:0,
+  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, walkCycle:0,
   velX:0, velZ:0, swinging:false,           // swing/momentum lateral velocity — the ONLY horizontal velocity state in the game
 };
 let cameraYaw=0.6, cameraPitch=0;
@@ -4226,6 +4226,10 @@ function cycleShotIdx(lane,cyc){
 }
 
 const _colsBuf=new Float32Array(32);
+// RECOIL, EASED — impulse → critically damped spring (ω=16): the kick rises to
+// peak over ~62ms (J/(ωe)≈0.39 ≈ the old +0.4 step) and settles by ~0.3s, C¹
+// smooth both ways. Pitch climb pays out over ~4 frames instead of stepping.
+function addKick(p){ playerPos.pitchPend+=p; playerPos.kickV+=17; }
 let fireCooldown=0, reloadTimer=0;
 let BARE_RES=null;
 function bareRes(){ return BARE_RES||(BARE_RES=resolveTool(null)); }
@@ -4295,7 +4299,7 @@ function tryFirePlayer(dt){
       playSound(sh.pend.laser?'spark':sh.kind==='spark'?'spark':(silent?'silenced':'shoot'));
       loudest=Math.max(loudest,toolNoise(silent));
       if(!silent&&kicked===0){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
-      if(kicked<3){ cameraPitch+=0.012+res.dmg*0.0004; playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4); kicked++; }
+      if(kicked<3){ addKick(0.012+res.dmg*0.0004); kicked++; }
     }
     if(!res.bare) lane.cycleRef.set((pick+1)%n);
     firedAny=true;
@@ -4791,7 +4795,7 @@ function runBurstLasers(dt){
       playSound(silent?'silenced':'spark');
       addNoise(playerPos.x,playerPos.y,playerPos.z,toolNoise(silent));
       if(!silent){ addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06); playerPos.muzzleGlow=Math.min(1,playerPos.muzzleGlow+0.45); }
-      cameraPitch+=0.012+q.res.dmg*0.0004; playerPos.viewKick=Math.min(1,playerPos.viewKick+0.4);
+      addKick(0.012+q.res.dmg*0.0004);
       updateToolReadout();
       q.left--; q.t+=0.07;
     }
@@ -4897,8 +4901,9 @@ function updateProjectiles(dt){
     // the thrower's CURRENT position. Both passes cut; walls still kill it.
     if(pr.retT>0){
       pr.retT-=dt;
-      pr.vel.multiplyScalar(Math.max(0.05,1-2.4*dt));            // bleed speed going out
-      if(pr.retT<=0){ pr.returning=true; pr.bounces=0; pr.life=Math.max(pr.life,1.8); }   // no ricochet on the way back
+      const os=1-Math.max(0,pr.retT)/0.55, oe=os*os*(3-2*os);    // smoothstep ramp:
+      pr.vel.multiplyScalar(Math.max(0.05,1-2.4*oe*dt));         // full pace off the muzzle, the stall lands soft
+      if(pr.retT<=0){ pr.returning=true; pr.bounces=0; pr.retPhase=0; pr.life=Math.max(pr.life,1.8); }   // no ricochet on the way back
     }
     if(pr.returning){
       const s=pr.owner==='player'?playerPos:(pr.src&&pr.src.position);
@@ -4906,9 +4911,11 @@ function updateProjectiles(dt){
         const hy=s===playerPos?s.y+0.9:s.y+0.95;
         const hd=Math.hypot(s.x-pr.pos.x,hy-pr.pos.y,s.z-pr.pos.z);
         if(hd<0.6){ addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[0.5,0.8,0.9],0.7,0.05); playSound('click'); projectiles.splice(i,1); continue; }   // caught
-        steerPr(pr,s.x,hy,s.z,4.5*dt);
+        pr.retPhase=Math.min(1,(pr.retPhase||0)+dt/0.35);
+        const te=pr.retPhase*pr.retPhase*(3-2*pr.retPhase);      // ease-in the bank: lazy arc, then committed
+        steerPr(pr,s.x,hy,s.z,4.5*te*dt);
         const sp=pr.vel.length();                                // wind back up to launch speed
-        if(sp>0.001&&sp<pr.retSp) pr.vel.multiplyScalar(Math.min(pr.retSp,sp+pr.retSp*3*dt)/sp);
+        if(sp>0.001&&sp<pr.retSp) pr.vel.multiplyScalar((sp+(pr.retSp-sp)*Math.min(1,4.5*dt))/sp);   // exponential approach: no clamp kink at cruise
       }
     }else if(pr.homing){
       // SEEKER: nearest live warmth in a forward cone (~40°, 45m) bends the
@@ -4930,7 +4937,10 @@ function updateProjectiles(dt){
           const d=Math.hypot(dx,dy,dz);
           if(d<best&&d>0.001&&(dx*fx+dy*fy+dz*fz)/d>=0.766){ best=d; tx=dx; ty=dy; tz=dz; }
         }
-        if(best<45) steerPr(pr,pr.pos.x+tx,pr.pos.y+ty,pr.pos.z+tz,3.2*pr.homing*dt);
+        if(best<45){ pr.lockT=Math.min(0.4,(pr.lockT||0)+dt);
+          const le=(pr.lockT/0.4)*(pr.lockT/0.4)*(3-2*pr.lockT/0.4);   // the lock WAKES: smoothstep over 0.4s
+          steerPr(pr,pr.pos.x+tx,pr.pos.y+ty,pr.pos.z+tz,3.2*pr.homing*le*dt);
+        }else pr.lockT=0;
       }
     }
     // CHAOS: the flight forgets the straight line — composes with SEEKER into a
@@ -5140,7 +5150,7 @@ function explode(pr){
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
   if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); applyStatus(playerPos,{burn:(pr.burn||0)+Math.round(pr.dmg*(1-pd/R)*0.35), bleed:pr.bleed});   // same flesh math the enemies eat — armor shaves it after; the blast SEARS both sides
-    playerPos.viewKick=Math.min(1,playerPos.viewKick+0.7); cameraPitch-=0.02*(1-pd/R); }   // the blast kicks — self-splash must READ
+    playerPos.kickV+=30; playerPos.pitchPend-=0.02*(1-pd/R); }   // the blast kicks — self-splash must READ (eased: 30/(ωe)≈0.69 peak ≈ the old +0.7 step; pitch dips DOWN)
   for(const w of worldItems){
     const d=w.pos.distanceTo(pr.pos);
     if(d<R){ const f=new Vec3().subVectors(w.pos,pr.pos).normalize(); w.vel.addScaledVector(f,(1-d/R)*14); w.vel.y+=3; }
@@ -6901,7 +6911,11 @@ function updatePlayer(dt){
   const bobAmt=(moving&&playerPos.onGround?1:0)*(playerPos.isSprinting?1.5:1)*(1-playerPos.aimAmt*0.8);
   playerPos.bobX+=(Math.sin(playerPos.walkCycle)*0.010*bobAmt-playerPos.bobX)*Math.min(1,10*dt);
   playerPos.bobY+=((Math.abs(Math.cos(playerPos.walkCycle))*0.008-0.004)*bobAmt-playerPos.bobY)*Math.min(1,10*dt);
-  playerPos.viewKick*=Math.max(0,1-9*dt);
+  { const w0=16;                                     // recoil spring — see addKick
+    playerPos.kickV-=(2*w0*playerPos.kickV+w0*w0*playerPos.viewKick)*dt;
+    playerPos.viewKick=Math.max(0,Math.min(1,playerPos.viewKick+playerPos.kickV*dt));
+    const pk=playerPos.pitchPend*Math.min(1,26*dt);
+    cameraPitch=clamp(cameraPitch+pk,-1.5,1.5); playerPos.pitchPend-=pk; }
 
   // noise from movement + footfalls
   playerPos.noiseLevel=moving?(playerPos.isSprinting?9:(playerPos.isCrouching?1.0:3.4)):0.25;
