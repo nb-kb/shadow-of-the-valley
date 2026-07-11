@@ -6930,6 +6930,9 @@ function updateDebugWatch(dt){
 function uiMenusOpen(){ return isInventoryOpen||isToolMenuOpen||isCrateOpen; }   // crate is a first-class menu: nav, render, close, mouse-lock all flow through here
 let stepAcc=0;
 let heldUseArm=null;           // △ tap-vs-hold: {t,w} while the button rides the carried item
+let sprintIdleT=0;             // a stopped run lets the sprint toggle go after a beat
+const SLIDE_DUR=0.9;           // SLIDE — crouch pressed at sprint speed rides the run's momentum out
+let slideT=0, slideV0=0, slideDX=0, slideDZ=1, slideStand=false;
 const _c1=new Vec3(), _c2=new Vec3();
 
 function updatePlayer(dt){
@@ -6944,7 +6947,6 @@ function updatePlayer(dt){
   }
   playerPos.isAiming=down('aim')&&!menus&&!heldWorld&&!physgunRes();   // the physgun repurposes aim: it freezes
   playerPos.aimAmt+=((playerPos.isAiming?1:0)-playerPos.aimAmt)*Math.min(1,12*dt);
-  if(pressed('crouch')&&!menus){ playerPos.isCrouching=!playerPos.isCrouching; }
 
   // move
   let mx=(down('right')?1:0)-(down('left')?1:0)+INPUT.padAxes[0];
@@ -6958,17 +6960,58 @@ function updatePlayer(dt){
   // sprint is a toggle — crouching or aiming drops it
   if(pressed('sprint')&&!menus) sprintOn=!sprintOn;
   if(playerPos.isCrouching||playerPos.isAiming) sprintOn=false;
+  const wasSprint=playerPos.isSprinting;
   playerPos.isSprinting=sprintOn&&moving&&!playerPos.isCrouching&&!playerPos.isAiming;
+  // ...and a run that STOPS lets the toggle go after a beat — walking again is a
+  // walk, not a surprise sprint. An untouched toggle still waits for its first step.
+  if(moving||!sprintOn) sprintIdleT=0;
+  else if(wasSprint||sprintIdleT>0){ sprintIdleT+=dt; if(sprintIdleT>=0.25){ sprintOn=false; sprintIdleT=0; } }
+
+  const fx=Math.sin(cameraYaw), fz=Math.cos(cameraYaw);
+  const rx=Math.cos(cameraYaw), rz=-Math.sin(cameraYaw);
+
+  // crouch is a toggle — but pressed AT SPRINT SPEED (>=80% of the sprint step,
+  // grounded) it becomes a SLIDE: the stance ducks NOW and the run's momentum
+  // keeps its line while friction spends it (the step block below). Mid-slide
+  // the same button flips the exit stance; a slide otherwise ends in a crouch.
+  if(pressed('crouch')&&!menus){
+    const m=Math.hypot(mx,mz);
+    if(slideT>0) slideStand=!slideStand;
+    else if(!playerPos.isCrouching&&playerPos.isSprinting&&playerPos.onGround&&m>=0.8){
+      const wx=rx*mx+fx*mz, wz=rz*mx+fz*mz;          // world-frame run direction, unit
+      slideDX=wx/m; slideDZ=wz/m;
+      slideV0=P('playerSpeed')*P('sprintMult')*Math.min(1,m);
+      slideT=SLIDE_DUR; slideStand=false;
+      playerPos.isCrouching=true; sprintOn=false; playerPos.isSprinting=false;
+      playSound('step');                             // the scuff — walk-loud (noise floor below)
+    }
+    else{ playerPos.isCrouching=!playerPos.isCrouching; if(playerPos.isCrouching){ sprintOn=false; playerPos.isSprinting=false; } }
+  }
 
   let speed=P('playerSpeed');
   if(playerPos.isSprinting) speed*=P('sprintMult');
   if(playerPos.isCrouching) speed*=P('crouchMult');
   if(playerPos.isAiming) speed*=0.55;
-
-  const fx=Math.sin(cameraYaw), fz=Math.cos(cameraYaw);
-  const rx=Math.cos(cameraYaw), rz=-Math.sin(cameraYaw);
+  if(playerPos.swinging) slideT=0;                   // the rope owns momentum — a hook ends the slide
   if(!(playerPos.swinging&&!playerPos.onGround)){ // substep the slide: ruin walls are 0.3m thin, one capped-dt sprint frame is wider — airborne swing/momentum x/z belong to VELOCITY (the rope block below), skip the positional step
-    const stepX=(rx*mx+fx*mz)*speed*dt, stepZ=(rz*mx+fz*mz)*speed*dt;
+    let stepX,stepZ;
+    if(slideT>0){
+      // SLIDE — eased friction: v rides smoothstep(k) from the captured sprint
+      // speed down to EXACTLY crouch-walk speed — monotone, flat at both ends
+      // (hold a beat, bleed, settle). The stance is already crouched, so the
+      // shadow math (exposure ×0.62) and the crouch speed floor apply for free.
+      slideT=Math.max(0,slideT-dt);
+      const k=slideT/SLIDE_DUR, e=k*k*(3-2*k);
+      const vEnd=P('playerSpeed')*P('crouchMult');
+      const v=vEnd+(slideV0-vEnd)*e;
+      const sx=rx*mx+fx*mz, sz=rz*mx+fz*mz;          // steering: a heavy nudge (~1 rad/s), never a turn
+      slideDX+=sx*1.0*dt; slideDZ+=sz*1.0*dt;
+      const dl=Math.hypot(slideDX,slideDZ); if(dl>1e-6){ slideDX/=dl; slideDZ/=dl; }
+      stepX=slideDX*v*dt; stepZ=slideDZ*v*dt;
+      if(slideT<=0){ if(slideStand) playerPos.isCrouching=false; slideStand=false; }   // spent: settle into crouch — or stand, if released
+    }else{
+      stepX=(rx*mx+fx*mz)*speed*dt; stepZ=(rz*mx+fz*mz)*speed*dt;
+    }
     const nSub=FLAGS.noclip?1:Math.max(1,Math.ceil(Math.hypot(stepX,stepZ)/0.18));
     for(let sI=0;sI<nSub;sI++){
       playerPos.x+=stepX/nSub; playerPos.z+=stepZ/nSub;
@@ -7071,7 +7114,8 @@ function updatePlayer(dt){
     // buffer: a press just before landing still lands the jump
     playerPos.jumpBufT = Math.max(0,playerPos.jumpBufT-dt);
     if(pressed('jump')&&!menus) playerPos.jumpBufT=0.12;
-    if(playerPos.jumpBufT>0&&playerPos.coyoteT>0&&!playerPos.isCrouching&&!menus){
+    if(playerPos.jumpBufT>0&&playerPos.coyoteT>0&&(!playerPos.isCrouching||slideT>0)&&!menus){
+      if(slideT>0){ slideT=0; slideStand=false; playerPos.isCrouching=false; }   // a jump ends the slide on your feet
       playerPos.velY=P('jumpVel'); playerPos.onGround=false;
       playerPos.coyoteT=0; playerPos.jumpBufT=0; playSound('step');
     }
@@ -7079,7 +7123,7 @@ function updatePlayer(dt){
 
   // stance & lean — leaning waits outside the menus
   const targetH=playerPos.isCrouching?0.72:1.32;
-  playerPos.baseHeight+=(targetH-playerPos.baseHeight)*10*dt;
+  playerPos.baseHeight+=(targetH-playerPos.baseHeight)*Math.min(1,(slideT>0?22:10)*dt);   // the slide ducks NOW
   const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5;
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
@@ -7090,7 +7134,7 @@ function updatePlayer(dt){
 
   // viewmodel sway/bob + recoil recovery
   if(moving&&playerPos.onGround) playerPos.walkCycle+=speed*dt*2.6;
-  const bobAmt=(moving&&playerPos.onGround?1:0)*(playerPos.isSprinting?1.5:1)*(1-playerPos.aimAmt*0.8);
+  const bobAmt=(moving&&playerPos.onGround&&!(slideT>0)?1:0)*(playerPos.isSprinting?1.5:1)*(1-playerPos.aimAmt*0.8);   // a slide GLIDES — no gait
   playerPos.bobX+=(Math.sin(playerPos.walkCycle)*0.010*bobAmt-playerPos.bobX)*Math.min(1,10*dt);
   playerPos.bobY+=((Math.abs(Math.cos(playerPos.walkCycle))*0.008-0.004)*bobAmt-playerPos.bobY)*Math.min(1,10*dt);
   { const w0=16;                                     // recoil spring — see addKick
@@ -7101,7 +7145,8 @@ function updatePlayer(dt){
 
   // noise from movement + footfalls
   playerPos.noiseLevel=moving?(playerPos.isSprinting?9:(playerPos.isCrouching?1.0:3.4)):0.25;
-  if(moving&&playerPos.onGround){
+  if(slideT>0) playerPos.noiseLevel=Math.max(playerPos.noiseLevel,3.4);   // the slide scuffs — walk-loud, crouch-lit
+  if(moving&&playerPos.onGround&&!(slideT>0)){
     stepAcc+=speed*dt;
     if(stepAcc>2.1){ stepAcc=0; playSound(playerPos.isSprinting?'stepRun':'step'); }
   }
