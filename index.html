@@ -376,7 +376,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.1-cfix3';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.1-cfix4';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1506,8 +1506,8 @@ vec2 raycast(vec3 o, vec3 dir){
 }
 
 float softShadow(vec3 o, vec3 dir, float maxDist){
-#ifdef PREVIEW
-  return 1.0;
+#if defined(PREVIEW) || defined(AUTHORED)
+  return 1.0;                              // AUTHORED: no cast shadows — drops 2x levelSDF from the compile (buildings still render, just unshadowed)
 #endif
   float res=1.0; float t=0.08;
   for(int i=0;i<uMaxSteps/6;i++){   // dynamic bound (was literal 24): stops ANGLE unrolling this shadow march (it inlines mapStatic, ~2x/pixel). ~25 steps at full detail.
@@ -1555,9 +1555,17 @@ void main(){
   vec2 hit=raycast(ro,rayDir);
   vec3 col;
 
+  vec3 p=ro+rayDir*hit.x;                  // hoisted above the branch so AUTHORED's derivative normal is valid across the pixel quad
+#ifdef AUTHORED
+  vec3 nDeriv=normalize(cross(dFdx(p),dFdy(p)));   // screen-space normal — drops calcNormal's 4x map()->levelSDF from the compile (faceted, AUTHORED-only; valley keeps smooth calcNormal)
+  if(dot(nDeriv,rayDir)>0.0) nDeriv=-nDeriv;
+#endif
   if(hit.y > 0.0){
-    vec3 p=ro+rayDir*hit.x;
+#ifdef AUTHORED
+    vec3 n=nDeriv;
+#else
     vec3 n=calcNormal(p);
+#endif
     float m=hit.y;
     vec3 matCol=vec3(0.5);
     float emiss=0.0;
@@ -1667,7 +1675,11 @@ void main(){
       float dif = clamp(dot(n,uLightDir),0.0,1.0);
       float sh  = dif > 0.01 ? softShadow(p+n*0.05, uLightDir, 60.0) : 0.0;
       vec3 lit = matCol * uLightCol * dif * sh;
+#ifdef AUTHORED
+      float ao = 1.0;                      // AUTHORED: skip AO — drops 1x levelSDF from the compile
+#else
       float ao = clamp(mapStatic(p+n*0.30).x/0.30, 0.0, 1.0);
+#endif
       lit += matCol * uAmbient * (0.55+0.45*n.y) * (0.45+0.55*ao);
 
       vec2 cellId=floor((p.xz+10.0)/20.0);
