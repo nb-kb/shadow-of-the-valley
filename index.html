@@ -376,7 +376,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.1-cfix4';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.1-cfix5';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1864,8 +1864,8 @@ function rebindProgram(prog){ gl.useProgram(prog); cacheUniforms(prog); setupAtt
 let _valleyLinked=false, _authoredLinked=false, _curProg=previewProgram;
 function _progDone(pr){ return parallelExt ? gl.getProgramParameter(pr,parallelExt.COMPLETION_STATUS_KHR) : true; }
 function ensureFullProgram(){
-  if(!_valleyLinked   && _progDone(valleyProgram)){   _valleyLinked=true;   if(!gl.getProgramParameter(valleyProgram,gl.LINK_STATUS))   fatal('valley program link:\n'+gl.getProgramInfoLog(valleyProgram)); }
-  if(!_authoredLinked && _progDone(authoredProgram)){ _authoredLinked=true; if(!gl.getProgramParameter(authoredProgram,gl.LINK_STATUS)) fatal('authored program link:\n'+gl.getProgramInfoLog(authoredProgram)); }
+  if(!_valleyLinked   && _progDone(valleyProgram)){   _valleyLinked=true;   if(!gl.getProgramParameter(valleyProgram,gl.LINK_STATUS))   fatal('valley program link:\n'+gl.getProgramInfoLog(valleyProgram)); if(isTerminalOpen) renderTerminal(); }
+  if(!_authoredLinked && _progDone(authoredProgram)){ _authoredLinked=true; if(!gl.getProgramParameter(authoredProgram,gl.LINK_STATUS)) fatal('authored program link:\n'+gl.getProgramInfoLog(authoredProgram)); if(isTerminalOpen) renderTerminal(); }
   const wantAuthored = !!(activeLevel && activeLevel.kind==='authored');
   const want = wantAuthored ? (_authoredLinked && authoredProgram) : (_valleyLinked && valleyProgram);
   const target = want || previewProgram;     // stay on preview until the needed variant links
@@ -6233,9 +6233,16 @@ const TERM_SCREENS={
     {label:'CLOSE', action:closeTerminal},
   ]}),
   deploy:()=>({title:'DESTINATIONS', rows:[
-    ...Object.values(LEVELS).filter(L=>L.id!=='hideout').map(L=>({
-      label:L.name, meta:L.kind==='rings'?'endless':'raid · via the valley',
-      action:()=>{ closeTerminal(); if(L.kind==='authored') travelTo(L.id); else deployTo(L.id); }})),
+    ...Object.values(LEVELS).filter(L=>L.id!=='hideout').map(L=>{
+      // Gate each destination on its render shader compiling: endless needs the valley variant;
+      // a raid routes via the valley then an authored level, so it needs both. Until ready, the row
+      // reads BOOTING… — the terminal-boot masks the one-time cold compile (cached after first).
+      const ready=(L.kind==='authored')?(_valleyLinked&&_authoredLinked):_valleyLinked;
+      return ready
+        ? { label:L.name, meta:L.kind==='rings'?'endless':'raid · via the valley',
+            action:()=>{ closeTerminal(); if(L.kind==='authored') travelTo(L.id); else deployTo(L.id); } }
+        : { label:L.name, meta:'BOOTING…', locked:true, action:()=>playSound('click') };
+    }),
     {label:'BACK', screen:'home'},
   ]}),
   saves:()=>({title:'MEMORY', rows:[
@@ -6271,7 +6278,8 @@ function renderTerminal(){
   const box=document.getElementById('termRows'); box.innerHTML='';
   sc.rows.forEach((r,i)=>{
     const d=document.createElement('div');
-    d.className='termRow'+(i===termSel?' sel':'');
+    d.className='termRow'+(i===termSel?' sel':'')+(r.locked?' locked':'');
+    if(r.locked) d.style.opacity='0.45';                     // BOOTING… destination — dimmed until its shader links
     d.innerHTML='<span>'+r.label+'</span>'+(r.meta?'<span class="trMeta">'+r.meta+'</span>':'');
     d.addEventListener('mouseenter',()=>{ termSel=i; renderTerminal(); });
     d.addEventListener('mousedown',()=>{ termSel=i; termActivate(); });
