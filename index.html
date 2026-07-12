@@ -376,7 +376,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.1-cfix1';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.1-cfix3';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1174,7 +1174,7 @@ float groundField(vec3 p){
 vec2 traceGround(vec3 o, vec3 dir, float maxT){
   float t=0.05;
   if(groundField(o+dir*t)<0.0) return vec2(t,1.0);
-  for(int i=0;i<240;i++){
+  for(int i=0;i<uMaxSteps+90;i++){   // dynamic bound (was literal 240): stops ANGLE unrolling this ground march. uMaxSteps+90 => 240 at full detail. Same anti-unroll fix as the main march.
     // near: fine enough to catch ridge crests (midpoint halves the spacing).
     // far: coarse is honest — fog owns everything out there anyway.
     float st = (t<600.0) ? clamp(t*0.045,0.35,8.0) : clamp(t*0.03,8.0,30.0);
@@ -1224,7 +1224,13 @@ vec2 mapProc(vec3 p){
 vec2 mapStatic(vec3 p){
   // AUTHORED AND VALLEY BOTH FEED THE EDIT/GLOB PASS — base, then carve/add,
   // then glob smin, exactly mapWorldJS = applyGlobsJS(applySdfEditsJS(base)).
-  vec2 res = (uLevelOn==1) ? levelSDF(p) : mapProc(p);
+#if defined(VALLEY)
+  vec2 res = mapProc(p);            // VALLEY variant: authored levelSDF() is dead-stripped by the compiler
+#elif defined(AUTHORED)
+  vec2 res = levelSDF(p);           // AUTHORED variant: procedural mapProc()/cellSDF() is dead-stripped
+#else
+  vec2 res = vec2(1e5, 1.0);   // PREVIEW: skip BOTH heavy fields — ground+sky only, ~instant compile; the VALLEY/AUTHORED full variant renders the real world once it links
+#endif
   for(int i=0;i<16;i++){                          // world edits — keep in lockstep with applySdfEditsJS
     if(i>=uEditCount) break;
     vec4 ed=uEdits[i];
@@ -1504,7 +1510,7 @@ float softShadow(vec3 o, vec3 dir, float maxDist){
   return 1.0;
 #endif
   float res=1.0; float t=0.08;
-  for(int i=0;i<24;i++){
+  for(int i=0;i<uMaxSteps/6;i++){   // dynamic bound (was literal 24): stops ANGLE unrolling this shadow march (it inlines mapStatic, ~2x/pixel). ~25 steps at full detail.
     float d=mapStatic(o+dir*t).x;
     if(d < 0.002) return 0.0;
     res = min(res, 9.0*d/t);
@@ -1788,20 +1794,23 @@ function makeShader(type,src){
   return s;   // status deferred to the poll — querying here forces a synchronous compile stall
 }
 const parallelExt=gl.getExtension('KHR_parallel_shader_compile');   // null on SwiftShader & many drivers
-const fragmentPreviewSource = fragmentShaderSource.replace('#version 300 es\n','#version 300 es\n#define PREVIEW 1\n');
-// PREVIEW program — cheap; comes up first so the player can move immediately
+const fragmentPreviewSource  = fragmentShaderSource.replace('#version 300 es\n','#version 300 es\n#define PREVIEW 1\n');
+const fragmentValleySource   = fragmentShaderSource.replace('#version 300 es\n','#version 300 es\n#define VALLEY 1\n');
+const fragmentAuthoredSource = fragmentShaderSource.replace('#version 300 es\n','#version 300 es\n#define AUTHORED 1\n');
+// PREVIEW program — cheap; comes up first so the player can move immediately. Level-kind-agnostic (runtime uLevelOn).
 const previewProgram=gl.createProgram();
 gl.attachShader(previewProgram,makeShader(gl.VERTEX_SHADER,vertexShaderSource));
 const _pfs=makeShader(gl.FRAGMENT_SHADER,fragmentPreviewSource);
 gl.attachShader(previewProgram,_pfs);
 gl.linkProgram(previewProgram);
-// FULL program — expensive; finishes in the background via the poll
-const program=gl.createProgram();
-const _vs=makeShader(gl.VERTEX_SHADER,vertexShaderSource);
-const _fs=makeShader(gl.FRAGMENT_SHADER,fragmentShaderSource);
-gl.attachShader(program,_vs); gl.attachShader(program,_fs);
-gl.linkProgram(program);
-// NO getProgramParameter / useProgram here — deferred to startBoot()'s poll.
+// FULL programs — SPLIT BY LEVEL KIND so neither carries the other's dead field: VALLEY drops the
+// authored levelSDF(); AUTHORED drops the procedural mapProc()/cellSDF(). Each is ~half the size, so both
+// link far faster than the old single combined program (which never linked on Chrome/ANGLE's D3D compiler).
+function buildFull(src){ const pr=gl.createProgram(); gl.attachShader(pr,makeShader(gl.VERTEX_SHADER,vertexShaderSource)); gl.attachShader(pr,makeShader(gl.FRAGMENT_SHADER,src)); gl.linkProgram(pr); return pr; }
+const valleyProgram   = buildFull(fragmentValleySource);
+const authoredProgram = buildFull(fragmentAuthoredSource);
+let program = authoredProgram;   // active full variant; boot deploys to the hideout (authored). ensureFullProgram() swaps it by level kind.
+// NO getProgramParameter / useProgram here — deferred to the poll + ensureFullProgram().
 
 const posBuf=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,posBuf);
@@ -1838,6 +1847,22 @@ function cacheUniforms(prog){
   U.dynC     = locArray(prog,'dynCol',       RLIM.DYN);
 }
 function rebindProgram(prog){ gl.useProgram(prog); cacheUniforms(prog); setupAttrib(prog); }
+
+// --- FULL-variant swap: bind the current level's full program once it links; stay on the level-agnostic preview until then ---
+let _valleyLinked=false, _authoredLinked=false, _curProg=previewProgram;
+function _progDone(pr){ return parallelExt ? gl.getProgramParameter(pr,parallelExt.COMPLETION_STATUS_KHR) : true; }
+function ensureFullProgram(){
+  if(!_valleyLinked   && _progDone(valleyProgram)){   _valleyLinked=true;   if(!gl.getProgramParameter(valleyProgram,gl.LINK_STATUS))   fatal('valley program link:\n'+gl.getProgramInfoLog(valleyProgram)); }
+  if(!_authoredLinked && _progDone(authoredProgram)){ _authoredLinked=true; if(!gl.getProgramParameter(authoredProgram,gl.LINK_STATUS)) fatal('authored program link:\n'+gl.getProgramInfoLog(authoredProgram)); }
+  const wantAuthored = !!(activeLevel && activeLevel.kind==='authored');
+  const want = wantAuthored ? (_authoredLinked && authoredProgram) : (_valleyLinked && valleyProgram);
+  const target = want || previewProgram;     // stay on preview until the needed variant links
+  if(target!==_curProg){
+    rebindProgram(target); _curProg=target; program=target;
+    previewScale = (target===previewProgram) ? 0.35 : 0; resize();
+    if(target!==previewProgram && !window.__tFull){ window.__bootPhase='full'; window.__tFull=performance.now(); bootDiag(); }
+  }
+}
 
 let dynScale=1.0, dynResT=0;            // auto resolution: rides under the Optics Dial
 let previewScale=0;                     // >0 during the boot preview: rough but instant
@@ -7714,6 +7739,7 @@ function frame(){
   // displays average a true 60 instead of snapping to a divisor.
   if(now-lastRender<FRAME_MS-0.5){ requestAnimationFrame(frame); return; }
   lastRender=Math.max(lastRender+FRAME_MS, now-FRAME_MS);
+  ensureFullProgram();          // bind the current level's full variant once it links (else the preview keeps rendering)
   const dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
   fpsEma=lerp(fpsEma,1/Math.max(dt,1e-4),0.04);
   pollGamepad();
@@ -8066,25 +8092,13 @@ function startBoot(){
   }
   function poll(){
     waited++; tickLoad();
-    if(phase==='preview'){
-      if(!ready(previewProgram)){ requestAnimationFrame(poll); return; }
-      if(!gl.getProgramParameter(previewProgram,gl.LINK_STATUS)) fatal('preview link:\n'+gl.getProgramInfoLog(previewProgram)+'\n'+gl.getShaderInfoLog(_pfs));
-      rebindProgram(previewProgram);             // useProgram + cacheUniforms(preview) + setupAttrib
-      previewScale=0.35; resize();               // low render scale — rough but instant
-      window.__firstRealFrame=true; window.__bootPhase='preview'; window.__tPreview=performance.now();
-      frame();                                   // start the ONE render loop (do not start it again)
-      if(DIAG){ window.__pvRGB=centerRGB(); } bootDiag();
-      phase='full'; waited=0; requestAnimationFrame(poll); return;
-    }
-    // phase==='full'
-    if(!ready(program)){ requestAnimationFrame(poll); return; }
-    if(!gl.getProgramParameter(program,gl.LINK_STATUS)) fatal('program link:\n'+gl.getProgramInfoLog(program)+'\n'+gl.getShaderInfoLog(_fs));
-    rebindProgram(program);                      // HOT SWAP: U re-cached for the full program, attrib re-pointed
-    previewScale=0; resize();                    // restore normal renderScale
-    window.__bootPhase='full'; window.__tFull=performance.now();
-    if(DIAG) window.__wantFullRGB=1;             // read the center pixel inside the next full frame (post-drawArrays)
-    bootDiag();
-    // do NOT call frame() again — the loop from preview keeps running and picks up the full program next frame
+    if(!ready(previewProgram)){ requestAnimationFrame(poll); return; }
+    if(!gl.getProgramParameter(previewProgram,gl.LINK_STATUS)) fatal('preview link:\n'+gl.getProgramInfoLog(previewProgram)+'\n'+gl.getShaderInfoLog(_pfs));
+    rebindProgram(previewProgram);             // useProgram + cacheUniforms(preview) + setupAttrib
+    previewScale=0.35; resize();               // low render scale — rough but instant
+    window.__firstRealFrame=true; window.__bootPhase='preview'; window.__tPreview=performance.now();
+    if(DIAG){ window.__pvRGB=centerRGB(); } bootDiag();
+    frame();                                   // start the ONE render loop; ensureFullProgram() swaps in the level's full variant once it links
   }
   requestAnimationFrame(poll);
 }
