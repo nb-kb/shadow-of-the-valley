@@ -376,7 +376,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.1';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.1-cfix1';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1482,7 +1482,7 @@ vec2 raycast(vec3 o, vec3 dir){
   gNoGround=true;
   float t=0.0; float m=-1.0;
   float tMax=min(min(uFar, tG+0.5), skyCap);
-  for(int i=0;i<150;i++){
+  for(int i=0;i<uMaxSteps;i++){   // BOUND MUST STAY A UNIFORM (was literal 150): a constant bound makes ANGLE/D3D unroll the whole scene body ~150x -> FULL shader over the instruction/register budget -> silent Chrome miscompile. Keep dynamic.
     if(i>=uMaxSteps) break;                       // DETAIL knob: fewer steps = cheaper, softer far detail
     vec3 pp=o+dir*t;
     vec2 r=map(pp);
