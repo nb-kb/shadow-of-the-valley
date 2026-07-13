@@ -8101,7 +8101,7 @@ function frame(){
     document.getElementById('healthFill').style.width=(playerPos.health/playerPos.maxHealth*100)+'%';
     document.getElementById('burnMask').style.width=(playerPos.burnedMax/playerPos.maxHealth*100)+'%';
     document.getElementById('bleedTick').classList.toggle('hidden',!(playerPos.status.bleedT>0));
-    document.getElementById('suspicionFill').style.width=(highestDetection*100)+'%';
+    const susp=document.getElementById('suspicionFill'); if(susp) susp.style.width=(highestDetection*100)+'%';   // optional HUD bar
     // watch reads time anywhere on the player (hand/pockets/packs/tool cells); other gadget rows still require the rucksack
     const wg=findGadgetOnPlayer('watch');
     const hasW=!!wg&&wg.on!==false, hasO=hasGadget('optics');
