@@ -4608,7 +4608,7 @@ function tryFirePlayer(dt){
       if(sh.pend.laser&&!bl&&!sh.powder) continue;       // continuous shots belong to the held-fire path — powder pulls, hitscan
       if(bl&&_laserBursts.some(q=>q.lane===lane)) continue;   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
-      const _ec=sh.powder?((sh.cost||0)-(sh.pend.surcharge||0)):(sh.cost||0);   // C14: powder makes ALL feeder ⚡ free (base only) — mirrors the retired powderCore's cost fold
+      const _ec=_pw?((sh.cost||0)-(sh.pend.surcharge||0)):(sh.cost||0);   // C14: a Powder Mag makes EVERY mod's ⚡ free across the whole barrel (base/core cost only) — for every shot in the lane, not just the bolt
       const okCharge=activeTool.charge>=(bl?Math.ceil(_ec/3):_ec);
       const okAmmo=rds===0||(mag&&mag.loaded>=rds);
       if(!okCharge) continue;                            // browned out — expected, silent; siblings may still fire
@@ -5705,26 +5705,42 @@ function findSwapMag(exclude){    // a spare Magazine from HARNESS then HOLSTER 
   }
   return null;
 }
+function tossMag(mag){            // heave a magazine out in a random horizontal direction — a light toss
+  const a=runRng()*6.2832, dx=Math.cos(a), dz=Math.sin(a);
+  spawnWorldItem(mag, playerPos.x+dx*0.8, playerPos.y+1.0, playerPos.z+dz*0.8, new Vec3(dx*2.2,1.8,dz*2.2));
+  playSound('reload'); addNoise(playerPos.x,playerPos.y,playerPos.z,4); refreshInvUI();
+}
+let _lastReloadT=-9, _lastSwap=null;   // _lastSwap: the last mag-swap, so a double-tap can UNDO it and eject the ORIGINAL mag you were holding
 function reloadSwapMag(cur){      // whole-mag swap: the racked mag rides home to the slot the fresh one came from
   const src=findSwapMag(cur.mag);
   if(!src){ toast('NO SPARE MAG'); playSound('empty'); return; }
   const ejected=cur.mag, fresh=src.mag;
   if(src.z.slotMode) src.z.grid[src.y][src.x]=null; else removeFromGrid(fresh,src.z.grid);   // lift the fresh mag first — frees the slot the old one drops into
   writeRef(cur.ref,fresh);                                                                   // rack it
-  if(src.z.slotMode){ src.z.grid[src.y][src.x]=ejected; ejected.x=src.x; ejected.y=src.y; }  // the ejected mag takes the vacated slot
-  else if(gridFits(ejected,src.x,src.y,src.z.grid,src.z.cols,src.z.rows)) placeInGrid(ejected,src.x,src.y,src.z.grid);
-  else if(!heldWorld) handHold(ejected);                                                      // no room, empty hand: eject to the fist first
-  else if(!autoPlaceAny(ejected)) dropItemToWorld(ejected,1.0,1.5);                            // last resort: anywhere it fits, else drop it — never void it
+  let parked;
+  if(src.z.slotMode){ src.z.grid[src.y][src.x]=ejected; ejected.x=src.x; ejected.y=src.y; parked='slot'; }  // the ejected mag takes the vacated slot
+  else if(gridFits(ejected,src.x,src.y,src.z.grid,src.z.cols,src.z.rows)){ placeInGrid(ejected,src.x,src.y,src.z.grid); parked='grid'; }
+  else if(!heldWorld){ handHold(ejected); parked='hand'; }                                    // no room, empty hand: eject to the fist first
+  else if(!autoPlaceAny(ejected)){ dropItemToWorld(ejected,1.0,1.5); parked='drop'; } else parked='auto';   // last resort: anywhere it fits, else drop it — never void it
+  _lastSwap={ejected,fresh,ref:cur.ref,z:src.z,x:src.x,y:src.y,slotMode:src.z.slotMode,parked,t:runClock};
   playSound('reload'); addNoise(playerPos.x,playerPos.y,playerPos.z,5); refreshInvUI();
 }
-let _lastReloadT=-9;
-function ejectMag(){              // double-tap reload: pop the racked mag and toss it a random way — a light heave
+function ejectMag(){              // double-tap reload: eject the mag you were HOLDING — if tap-1 just swapped a fresh one in, reverse that first so the original goes, not the newcomer
+  if(_lastSwap && runClock-_lastSwap.t<0.4 && readRef(_lastSwap.ref)===_lastSwap.fresh){
+    const s=_lastSwap; _lastSwap=null; let orig=null;
+    if(s.parked==='slot' && s.z.grid[s.y][s.x]===s.ejected){ s.z.grid[s.y][s.x]=null; orig=s.ejected; }
+    else if(s.parked==='grid'){ removeFromGrid(s.ejected,s.z.grid); orig=s.ejected; }
+    if(orig){
+      writeRef(s.ref,null); reloadTimer=0;                                                    // pull the fresh mag back out of the tool
+      if(s.slotMode){ s.z.grid[s.y][s.x]=s.fresh; s.fresh.x=s.x; s.fresh.y=s.y; }             // and send it home to the slot it came from
+      else if(gridFits(s.fresh,s.x,s.y,s.z.grid,s.z.cols,s.z.rows)) placeInGrid(s.fresh,s.x,s.y,s.z.grid);
+      else autoPlaceAny(s.fresh);
+      tossMag(orig); return;                                                                  // heave the ORIGINAL mag out
+    }
+  }
   const cur=toolMagazineRef(activeTool);
   if(!cur){ toast('NO MAGAZINE RACKED'); playSound('empty'); return; }
-  writeRef(cur.ref,null); reloadTimer=0;
-  const a=runRng()*6.2832, dx=Math.cos(a), dz=Math.sin(a);   // random X-Z heading
-  spawnWorldItem(cur.mag, playerPos.x+dx*0.8, playerPos.y+1.0, playerPos.z+dz*0.8, new Vec3(dx*2.2,1.8,dz*2.2));
-  playSound('reload'); addNoise(playerPos.x,playerPos.y,playerPos.z,4); refreshInvUI();
+  writeRef(cur.ref,null); reloadTimer=0; tossMag(cur.mag);
 }
 function tryReload(){
   if(!activeTool) return;
