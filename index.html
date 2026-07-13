@@ -4594,7 +4594,7 @@ function meleeStrike(){
     best.hurt(400,'player');                        // STEALTH TAKEDOWN: unsuspecting, from behind, close — the quiet kill
     addNoise(playerPos.x,playerPos.y,playerPos.z,3); playSound('hit'); toast('SILENCED');
   }else{
-    best.hurt(18,'player');                         // whip-snap: two swipes fell a bare zealot
+    best.hurt(35,'player');                         // whip-snap crack — 35 dmg (reach/cadence/anim: PATCH_PLAN C4b)
     best.velocity.addScaledVector(f,6); best.stagger=Math.max(best.stagger,0.25);
     addNoise(playerPos.x,playerPos.y,playerPos.z,10); playSound('hit');            // the crack CARRIES
   }
@@ -5537,12 +5537,12 @@ function explode(pr){
 // keep 1 cut per landed shot; DRILL's 0.1s in-body ticks keep their declared
 // ledger. Without this a SERRATED thread kiss stacked to cap 5 in ~83ms.
 function threadCut(en,on,dt){ if(!on) return false; en._cutT=(en._cutT===undefined?0.5:en._cutT)+dt; if(en._cutT<0.5) return false; en._cutT-=0.5; return true; }
-// ---- statuses: burn POOLS (capped) · bleed STACKS (cap 5), 15s from the freshest cut ----
+// ---- statuses: burn POOLS (uncapped — scars the ceiling) · bleed STACKS (cap 5), 15s from the freshest cut ----
 function effMaxHP(){ return playerPos.maxHealth-playerPos.burnedMax; }   // burned health stays burned until treated
 function applyStatus(t,pr){
   if(!t.status) return;
   const pl=t===playerPos;                              // worn resists shave the dose — both sides
-  if(pr.burn)  t.status.burn=Math.min(30, t.status.burn+pr.burn*(pl?playerResist('burn'):t.resist?t.resist('burn'):1));
+  if(pr.burn)  t.status.burn=t.status.burn+pr.burn*(pl?playerResist('burn'):t.resist?t.resist('burn'):1);
   if(pr.bleed){ const r=(pl?playerResist('bleed'):t.resist?t.resist('bleed'):1);
     t.status.bleedN=Math.min(5,(t.status.bleedN||0)+1);
     t.status.bleedT=Math.max(t.status.bleedT, 15*r); }   // 15s from the freshest cut; resists shave the clock
@@ -5627,7 +5627,7 @@ class Zealot{
     this.position=new Vec3(x, restOnSurface(x, gy+2.5, z), z);
     this.startPos=this.position.clone();
     this.velocity=new Vec3();
-    this.health=34;
+    this.health=100;
     this.yaw=runRng()*6.28;
     this.state=0;                       // 0 patrol · 1 suspicious · 2 alarm
     this.detection=0;
@@ -5893,7 +5893,7 @@ class Zealot{
     const a=runRng()*Math.PI*2, r=45+runRng()*15;
     this.position.set(playerPos.x+Math.cos(a)*r,0,playerPos.z+Math.sin(a)*r);
     this.startPos=this.position.clone();
-    this.health=34; this.detection=0; this.state=0; this.investigate=null;
+    this.health=100; this.detection=0; this.state=0; this.investigate=null;
     this._helmT=0;
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
     this.buildTool();
@@ -7065,7 +7065,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
 }
 function updateToolReadout(){
   const nm=document.getElementById('trName'), md=document.getElementById('trMode');
-  if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; document.getElementById('chargeFill').style.width='0%'; return; }
+  if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; document.getElementById('trPips').innerHTML=''; document.getElementById('chargeFill').style.width='0%'; return; }
   activeTool._res=activeTool._res||resolveTool(activeTool);
   const res=activeTool._res;
   nm.textContent=dispName(activeTool).toUpperCase();
@@ -7391,7 +7391,7 @@ function updatePlayer(dt){
   // the same button flips the exit stance; a slide otherwise ends in a crouch.
   if(pressed('crouch')&&!menus){
     const m=Math.hypot(mx,mz);
-    if(slideT>0) slideStand=!slideStand;
+    if(slideT>0){ slideT=0; playerPos.isCrouching=false; slideStand=false; sprintLatch=false; }   // uncrouch cancels the slide — stand up now, drop the sprint latch
     else if(!playerPos.onGround) airSlideArmed=!airSlideArmed;   // MID-AIR CROUCH: arm a landing-slide (toggle). No mid-air duck — keeping the air speed is what lets the touchdown clear the slide's speed gate; the slide (and its crouch) begin on landing
     else if(!playerPos.isCrouching&&playerPos.isSprinting&&playerPos.onGround&&m>=0.8){
       const wx=rx*mx+fx*mz, wz=rz*mx+fz*mz;          // world-frame run direction, unit
@@ -7625,13 +7625,13 @@ function updatePlayer(dt){
   if(gameState==='play'&&!FLAGS.god){
     const st=playerPos.status; let dot=0;
     if(st.burn>0){
-      const b=Math.min(st.burn,2*dt);                // 2 hp/s — a 12-burn runs ~6s
-      st.burn-=b; dot+=b;
+      const b=Math.min(st.burn,2*dt);                // burn no longer ticks damage — it only scars the ceiling (bleed owns DoT)
+      st.burn-=b;
       playerPos.burnedMax=Math.min(playerPos.maxHealth-10, playerPos.burnedMax+b);
     }
     if(st.bleedT>0){ st.bleedT=Math.max(0,st.bleedT-dt); dot+=dt*(st.bleedN||1); if(st.bleedT<=0) st.bleedN=0; }   // 1 hp/s per stack · 15s
-    if(dot>0){
-      playerPos.health=Math.max(0, Math.min(playerPos.health,effMaxHP())-dot);
+    if(dot>0 || playerPos.health>effMaxHP()){
+      playerPos.health=Math.max(0, Math.min(playerPos.health,effMaxHP())-dot);   // health follows the burned ceiling down; bleed subtracts on top
       if(playerPos.health<=0){ st.burn=0; st.bleedT=0; st.bleedN=0; onDeath(); }
     }
   }
