@@ -2814,6 +2814,7 @@ function magAccepts(m,t){ return !!m && (m.acceptedTypes.indexOf(t)>=0 || m.anyC
 function magCanLoad(m,t){ return magAccepts(m,t) && (m.loaded===0 || (m.loadedType||m.acceptedTypes[0])===t); }   // accepts the caliber AND is empty or already holding it (no mixing)
 function magPut(m,t,n){ if(!magCanLoad(m,t)) return 0; const k=Math.min(n, m.maxCapacity-m.loaded); if(k<=0) return 0; if(m.loaded===0) m.loadedType=t; m.loaded+=k; return k; }   // load k rounds of caliber t; the first round chambers it
 function magFeedType(m){ return magType(m) || m.acceptedTypes.find(t=>bagAmmoCount(t)>0) || m.acceptedTypes[0]; }   // caliber to pull from pockets: the chambered one, else any accepted type on hand
+function magLabel(m){ return magType(m) || (m.anyCaliber?'any':m.acceptedTypes[0]); }   // display caliber: the loaded round if any, else 'any' (Powder Mag) or the accepted one
 const AMMO={   // ballistic round catalog — read at FIRE time via magType(); energy cores (spark/boom/wave/...) never touch this
   '9mm':      {dmg:24},                                          // standard — 24 == the chamber default, so 9mm is inert
   '7.62':     {dmg:35, armorPen:0.5},                            // AP — harder hit, ignores half of armor (pen applied in the armor wave, C9)
@@ -3712,7 +3713,7 @@ function renderInspect(){
   const body=document.getElementById('inspectBody');
   if(inspectItem instanceof Magazine){
     body.innerHTML='<div style="margin-top:8px;font-size:14px;letter-spacing:.12em;">'
-      +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · '+inspectItem.acceptedType+'</div>';
+      +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · '+magLabel(inspectItem)+'</div>';
   }else if(inspectItem instanceof Tool){
     body.innerHTML='<div id="inspectRack"></div>';
     renderRack('inspectRack',inspectItem,2);
@@ -4456,7 +4457,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
       vel:new Vec3(dir.x*26,dir.y*26,dir.z*26), owner, kind:'boom',
       dmg:(34+p.dmg)*chaosMul(p.chaos)*(shot.small||1), rMul:shot.small?0.75:(Math.round(p.twin)>1?1.4:1), split:p.split||0,   // small: a drummed half-beat (v22 C2)
       relay:shot.relayNext||null, rdir:new Vec3(dir.x,dir.y,dir.z), rbase:base,
-      src:src||null, tool:_tl, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent,
+      src:src||null, tool:_tl, burn:p.burn||0, bleed:!!p.bleed, bounces:0, pierce:0, silent:p.silent, col:[0.95,0.3,0.1],   // instant boom needs a tracer col so its SPLINTER shards don't render null (crash fix)
     });
     return;
   }
@@ -4579,10 +4580,9 @@ function tryFirePlayer(dt){
       if(gen!==_worldGen) break;                         // dead men fire no follow-ups into the world they respawned to
       const rds=roundsFor(sh);
       if(rds>0){ if(!mag||mag.loaded<rds) break; mag.loaded-=rds; }
-      if(sh.powder){
-        // POWDER PULSE (C13, was v22 C1) — the owner's powder ROUND hitscans on every
-        // pull, with or without a feeding BEAM (AMMO.powder.hitscan): fireHitscan,
-        // 1 round + 0 feeder⚡, every lane mod
+      if(sh.powder&&sh.pend.laser){
+        // POWDER PULSE — a Powder Mag fed a BEAM mod hitscans on every pull; with NO beam
+        // mod it stays a normal projectile (the else below). 1 round + 0 feeder⚡, every lane mod
         // live (mirrors runBurstLasers' aim block). Rounds/noise/kick/sound around
         // this branch are UNTOUCHED — the pulse replaces only the emit.
         let f2=fireDir; const ch=sh.pend.chaos||0;
@@ -6613,7 +6613,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.laser){ rows.push('laser'); rows.push('burns — an equal dose per tick'); }
     return {kind,rows};
   }
-  if(it instanceof Magazine) return {kind:'MAGAZINE · '+it.acceptedType,
+  if(it instanceof Magazine) return {kind:'MAGAZINE · '+magLabel(it),
     rows:[it.loaded+' / '+it.maxCapacity+' rounds']};
   if(it instanceof Ammunition) return {kind:'AMMUNITION · '+it.ammoType, rows:['×'+it.count]};
   if(it instanceof Barrel) return {kind:'BARREL · '+it.rarity.toUpperCase(),
