@@ -77,6 +77,17 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   background:radial-gradient(ellipse at center, transparent 55%, rgba(190,30,10,.55) 100%);transition:opacity .1s;}
 #alertFlash{position:absolute;inset:0;pointer-events:none;z-index:7;opacity:0;box-shadow:inset 0 0 120px 30px rgba(224,73,46,.35);}
 
+/* optic scope glass — DOM housing ring + tint over the shader-drawn reticle (red-dot/holo only) */
+#scopeGlass{position:absolute;inset:0;pointer-events:none;z-index:6;opacity:0;transition:opacity .1s;}
+#scopeGlass.on{opacity:1;}
+#scopeGlass::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:78vmin;height:78vmin;border-radius:50%;
+  background:radial-gradient(circle, rgba(40,120,90,.05) 0%, rgba(40,120,90,.10) 62%, rgba(40,120,90,.17) 100%);}
+#scopeGlass::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:78vmin;height:78vmin;border-radius:50%;
+  box-shadow:0 0 0 6px #14150f, 0 0 0 7px rgba(200,205,190,.25), 0 0 0 100vmax rgba(4,5,3,.92);}
+#scopeGlass[data-optic="1"]::before{background:radial-gradient(circle, rgba(150,40,40,.05) 0%, rgba(120,30,30,.12) 62%, rgba(90,20,20,.18) 100%);}
+
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
 #backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
   text-align:center;pointer-events:none;}
@@ -98,6 +109,19 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .termRow.sel{border-color:var(--exposed);color:var(--exposed);background:rgba(80,200,120,.06);}
 .termRow .trMeta{color:var(--dust);font-size:13px;}
 .termHint{margin-top:12px;font-size:12px;letter-spacing:.12em;color:var(--dust);}
+/* DIEGETIC: the terminal shrinks onto the slab's phosphor — positioned per-frame by terminalFrame() */
+#terminalUI.diegetic{min-width:0;width:210px;padding:9px 12px;transform-origin:50% 50%;will-change:left,top,transform;
+  border-color:rgba(120,200,150,.55);background:rgba(4,12,8,.97);
+  box-shadow:0 0 22px rgba(20,80,50,.45) inset, 0 0 26px rgba(6,20,14,.85);}
+#terminalUI.diegetic .stencil{font-size:12px;letter-spacing:.16em;}
+#terminalUI.diegetic .termRow{font-size:11px;padding:4px 6px;margin:2px 0;letter-spacing:.08em;}
+#terminalUI.diegetic .termRow .trMeta{font-size:9px;}
+#terminalUI.diegetic .termHint{font-size:9px;margin-top:8px;}
+/* the crosshair's cursor glyph — a little pointer parked at screen-center over the mini-display */
+#termCursor{position:absolute;top:50%;left:50%;width:15px;height:15px;z-index:53;display:none;pointer-events:none;
+  background:var(--bone);filter:drop-shadow(0 0 2px #000);
+  clip-path:polygon(0 0, 0 72%, 22% 55%, 40% 100%, 55% 92%, 38% 50%, 68% 50%);}
+#termCursor.on{display:block;}
 #tipPanel{position:absolute;left:calc(50% + 205px);top:50%;transform:translateY(-50%);z-index:44;
   width:225px;pointer-events:none;}
 #tipMain{min-height:225px;padding:14px;border:1px solid var(--line);background:rgba(8,10,13,.72);
@@ -211,6 +235,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="interactPrompt"></div>
 <div id="vignette"></div>
 <div id="alertFlash"></div>
+<div id="scopeGlass"></div>
 
 <!-- HUD -->
 <div id="hud" class="panel">
@@ -246,8 +271,9 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="terminalUI" class="hidden">
   <div class="stencil" id="termTitle">TERMINAL</div>
   <div id="termRows"></div>
-  <div class="termHint">[E] select · [Esc / ○] back</div>
+  <div class="termHint">[□ / E / LMB] select · [Esc / ○] back</div>
 </div>
+<div id="termCursor"></div>  <!-- the mini-display's mouse pointer: the center crosshair drawn onto the slab -->
 
 <!-- Docked tip panel: one info square + one dashed detail square (any menu) -->
 <div id="tipPanel" class="hidden">
@@ -460,6 +486,7 @@ const ACTIONS = [
   {id:'cycleR',   label:'Holster · next tool', kb:'KeyT',        pad:15},  // d-right (Q is spoken for — lean)
   {id:'reelIn',  label:'Wheel up (reel · carry)',   kb:null, pad:12},  // d-up  = mouse-wheel up
   {id:'reelOut', label:'Wheel down (reel · carry)', kb:null, pad:13},  // d-down = mouse-wheel down
+  {id:'optic',    label:'Optic mode (adapter)',kb:'KeyV',        pad:null},
   {id:'bag',      label:'Rucksack',            kb:'KeyB',        pad:8},   // share
   {id:'tool',     label:'Tool rack / close layer',kb:'Tab',       pad:1},   // circle
   {id:'manual',   label:'Field manual',        kb:'KeyM',        pad:9},   // options
@@ -1428,7 +1455,7 @@ vec2 map(vec3 p){
         if(d<res.x) res=vec2(d,20.0);
       }
     }else if(uHasTool>0.5){
-      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, uSights>0.5?-0.115:-0.215), uAim);   // ADS y raised -0.215→-0.115 so the iron post (local y 0.115) lands on the center ray
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:-0.215), uAim);   // ADS y raised -0.215→-0.115: iron post (uSights) AND red-dot(1)/holo(2) ride the high line so the dot lands on the center ray; magnified 3×/4× stay low
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, 0.46-uBob.z);
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
@@ -2842,6 +2869,18 @@ const AMMO={   // ballistic round catalog — read at FIRE time via magType(); e
 };
 const AMMO_STACK=30;   // rounds one loose stack can hold — same-caliber stacks MERGE up to this instead of swapping (was capped only by per-def counts, max 12)
 const AMMO_ITEM={'9mm':'ammo9','7.62':'ammo762','flechette':'ammoFlch','slug':'ammoSlug','buckshot':'ammoBuck'};   // caliber → loose-round item (enemy-tool loadout + drop parity)
+function ammoStatRows(t){                           // human-readable stat bonuses for a caliber's tooltip (read from AMMO)
+  const a=AMMO[t]; if(!a) return [];
+  const r=[];
+  if(a.mult&&a.mult!==1) r.push('×'+a.mult+' base damage');
+  else if(a.dmg!=null) r.push(a.dmg+(a.pellets?' dmg per pellet':' damage'));
+  if(a.pellets) r.push(a.pellets+' pellets per shot');
+  if(a.armorPen) r.push('ignores '+Math.round(a.armorPen*100)+'% armor');
+  if(a.bleedChance) r.push(Math.round(a.bleedChance*100)+'% bleed chance');
+  if(a.burn) r.push('burns '+a.burn);
+  if(a.delay) r.push('+'+a.delay+'s tool delay');
+  return r;
+}
 const BARREL_TIERS={
   common:   {len:3,  spr:0.04, color:'#6e6a5e', w:1,h:2},
   uncommon: {len:5,  spr:0.03, color:'#4f7a5c', w:1,h:2},
@@ -3114,6 +3153,7 @@ const ITEM_DEFS={
   ironSights: ()=>new ToolMod('Iron Sights','#8a8f96','stat',{sights:true, reticle:5, unique:'fov'},'Bare steel post and notch · lines up the honest way'),
   scope2x:    ()=>new ToolMod('2× Optic','#283593','stat',{fov:0.31,spread:0.74,unique:'fov',reticle:3},'Twice as close, steadier hands · spread ×0.74'),
   scope3x:    ()=>new ToolMod('3× Optic','#1a237e','stat',{fov:0.21,spread:0.60,unique:'fov',reticle:4},'The far made near · spread ×0.60'),
+  scopeAdapter:()=>new ToolMod('Scope Adapter','#00695c','stat',{unique:'fov',adapter:true,near:{reticle:1,fov:0.60,spread:0.92},far:{reticle:3,fov:0.31,spread:0.74}},'[V] flips it: red dot ⇄ 2× — close and far on one rail'),
   suppressor: ()=>new ToolMod('Suppressor','#37474f','muzzle',{silenced:true},'Muzzle slot · this column whispers'),
   heavyBarrel:()=>new ToolMod('Heavy Frame','#4e5a63','stat',{dmg:8,spread:0.85},'+8 hurt, steadier'),
   compensator:()=>new ToolMod('Compensator','#546e7a','muzzle',{spread:0.55},'Muzzle slot · this column, spread ×0.55'),
@@ -4200,6 +4240,7 @@ function updateHeldPhysics(dt){
 // ============================================================
 function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,timer:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0,chaos:0}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
+let _foldOpticMode=0;   // 0 near · 1 far — set per-resolve by resolveTool from tool.opticMode, read by the Scope Adapter fold below
 function foldFrame(out,m){
   const e=m.effect;
   if(m.cat==='stat'){
@@ -4208,6 +4249,7 @@ function foldFrame(out,m){
     if(e.burst) out.burst=e.burst;
     if(e.spread) out.spread*=e.spread;
     if(e.dmg) out.dmg+=e.dmg;
+    if(e.adapter){ const p=_foldOpticMode?e.far:e.near; out.reticle=p.reticle; out.fovAim=p.fov; out.spread*=p.spread; out.hasAdapter=true; }   // Scope Adapter: one optic slot, two profiles switched by tool.opticMode
     if(e.fov) out.fovAim=e.fov;
     if(e.reticle!==undefined) out.reticle=e.reticle;
     if(e.sights) out.sights=true;
@@ -4313,6 +4355,7 @@ function resolveLane(col,out){
   return lane;
 }
 function resolveTool(tool){
+  _foldOpticMode=(tool&&tool.opticMode)?1:0;   // Scope Adapter: pick close/long profile for this resolve
   const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:24,silenced:false,
              fovAim:0.62,flashlight:false,pulse:false,reticle:0,sights:false,columns:[],shots:[]};
   if(tool) for(const col of toolColumns(tool)){
@@ -4718,6 +4761,15 @@ function physgunInputTick(){                // once per frame, right after the p
 }
 function fireDownEff(){ return physgunRes()?_pgFire:down('fire'); }
 function firePressedEff(){ return physgunRes()?_pgFireEdge:pressed('fire'); }
+// SCOPE ADAPTER — flip the tool between its close (red dot) and long (2×) profile, then re-fold
+function toggleOptic(){
+  if(!activeTool) return;
+  const r=activeTool._res||(activeTool._res=resolveTool(activeTool));
+  if(!r.hasAdapter) return;                          // only tools carrying a Scope Adapter switch
+  activeTool.opticMode=activeTool.opticMode?0:1;
+  activeTool._res=resolveTool(activeTool);
+  toast(activeTool.opticMode?'OPTIC · 2×':'OPTIC · RED DOT'); playSound('reload');
+}
 const _beamLanes=new Map();               // laneIdx -> {acc, engaged}
 let _swing=null;   // {ax,ay,az,len,li} — the grip thread hooked STATIC WORLD: the player is the moving end
 const _jDir=new Vec3(0,0,0);
@@ -6477,13 +6529,49 @@ const TERM_SCREENS={
 let _termSlot=0;
 function openTerminal(){ isTerminalOpen=true; termScreen='home'; termSel=0;
   INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={};   // the opening press is spent
-  document.getElementById('terminalUI').classList.remove('hidden');
-  document.exitPointerLock&&document.exitPointerLock();
-  playSound('click'); renderTerminal(); }
+  const ui=document.getElementById('terminalUI');
+  ui.classList.remove('hidden'); ui.classList.add('diegetic');    // an in-world mini-display on the slab, not a full-screen sheet
+  document.getElementById('termCursor').classList.add('on');
+  // pointer STAYS locked: the camera is live, the center crosshair IS the mouse — aim a row, □/E/LMB to pick.
+  // (If the pointer was already free, the row mouseenter/mousedown handlers still give a hover+click fallback.)
+  playSound('click'); renderTerminal(); terminalFrame(); }        // park it on the slab this frame — no open-flash
 function closeTerminal(){ isTerminalOpen=false;
   INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={};   // E on CLOSE must not re-open via updateInteract the same frame
-  document.getElementById('terminalUI').classList.add('hidden');
+  const ui=document.getElementById('terminalUI');
+  ui.classList.add('hidden'); ui.classList.remove('diegetic');
+  document.getElementById('termCursor').classList.remove('on');
   if(isPlayable()) requestLock(); playSound('click'); }
+// The terminal is a little screen ON the computer: each frame, project the slab's phosphor center to
+// screen px, park the panel there, and let the fixed CENTER crosshair pick rows (□/E/LMB confirm via
+// termNav). Pointer stays locked — the crosshair is the mouse, #termCursor is its glyph. Off-screen /
+// behind the camera → fall back to screen-center so the panel is never lost. Zero shader touched.
+function terminalFrame(){
+  const ui=document.getElementById('terminalUI');
+  const t=activeLevel&&activeLevel.terminal;
+  let placed=false;
+  if(t){
+    const ca=Math.cos(t.yaw), sa=Math.sin(t.yaw);            // phosphor-center anchor: slab-local (r2.x 0, r2.y .03), y 1.025
+    const ax=t.x - sa*0.03, ay=1.025, az=t.z + ca*0.03;
+    const o=camPos(), b=camBasis(), f=camForward();
+    const wx=ax-o.x, wy=ay-o.y, wz=az-o.z;
+    const fwd=wx*f.x+wy*f.y+wz*f.z;
+    if(fwd>0.05){
+      const fov=playerPos.currentFov||1;                     // shader normalizes uv by iResolution.y → CSS px, DPR cancels
+      const ndcx=(wx*b.right.x+wy*b.right.y+wz*b.right.z)/fwd/fov;
+      const ndcy=(wx*b.up.x   +wy*b.up.y   +wz*b.up.z   )/fwd/fov;
+      const k=Math.max(0.42,Math.min(1.25,0.72/fwd));        // rough in-world size read, clamped legible
+      ui.style.left=(innerWidth/2 +ndcx*innerHeight)+'px';
+      ui.style.top =(innerHeight/2-ndcy*innerHeight)+'px';
+      ui.style.transform='translate(-50%,-50%) scale('+k.toFixed(3)+')';
+      placed=true;
+    }
+  }
+  if(!placed){ ui.style.left='50%'; ui.style.top='50%'; ui.style.transform='translate(-50%,-50%)'; }
+  // the fixed center crosshair picks a row — hit-test screen-center against each row's on-screen box
+  const rows=document.getElementById('termRows').children, cx=innerWidth/2, cy=innerHeight/2;
+  for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect();
+    if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ if(i!==termSel){ termSel=i; renderTerminal(); } break; } }
+}
 function renderTerminal(){
   const sc=TERM_SCREENS[termScreen]();
   document.getElementById('termTitle').textContent=sc.title;
@@ -6509,7 +6597,7 @@ function termNav(){
   const nav=navEdges();
   if(nav.up){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
   if(nav.down){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
-  if(nav.confirm||INPUT.rawPad[0]) termActivate();
+  if(nav.confirm||INPUT.rawPad[0]||INPUT.rawPad[2]||pressed('fire')) termActivate();   // □ (pad2) / ✕ (pad0) / E / LMB all confirm the crosshair-picked row
   if(nav.back||INPUT.rawPad[1]){
     if(termScreen!=='home'){ termScreen='home'; termSel=0; playSound('click'); renderTerminal(); }
     else closeTerminal();
@@ -6752,7 +6840,7 @@ function tipBrief(it){                                  // the info square's row
   }
   if(it instanceof Magazine) return {kind:'MAGAZINE · '+magLabel(it),
     rows:[it.loaded+' / '+it.maxCapacity+' rounds']};
-  if(it instanceof Ammunition) return {kind:'AMMUNITION · '+it.ammoType, rows:['×'+it.count]};
+  if(it instanceof Ammunition) return {kind:'AMMUNITION · '+it.ammoType, rows:['×'+it.count].concat(ammoStatRows(it.ammoType))};
   if(it instanceof Barrel) return {kind:'BARREL · '+it.rarity.toUpperCase(),
     rows:[it.length+' slots','+'+it.addedSpread.toFixed(2)+' spread','own muzzle slot']};
   if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
@@ -8044,7 +8132,7 @@ function frame(){
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(isDebugOpen) dbgNav(dt);
-    if(isTerminalOpen) termNav();
+    if(isTerminalOpen){ terminalFrame(); termNav(); }   // place the mini-display + crosshair-pick a row, then run nav/confirm
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
       else if(uiMenusOpen())closeAllInv();
@@ -8056,7 +8144,7 @@ function frame(){
     runClock+=dt; gameTime+=dt; worldClock+=dt;
     padWheelStep(dt);          // d-pad up/down feed the wheel BEFORE its consumers (carry · rope reel)
     updatePlayer(dt);
-    if(!uiMenusOpen()){
+    if(!uiMenusOpen()&&!isTerminalOpen){   // terminal up: crosshair drives the panel — no fire/melee/interact; LMB is the confirm
       updateInteract(dt);
       tryFirePlayer(dt);
       tickMelee(dt);
@@ -8071,6 +8159,7 @@ function frame(){
       if(INPUT.rawKey['KeyR']) tryReload();     // hard fallback — E/□ is the intended reload
       if(pressed('cycleL')) cycleHolster(-1);   // d-pad ◀ — draw the previous holstered tool
       if(pressed('cycleR')) cycleHolster(1);    // d-pad ▶ / [T] — draw the next
+      if(pressed('optic')) toggleOptic();       // [V] — Scope Adapter: flip close red-dot ⇄ long 2×
     }else _endBeams();   // bag/tool/crate don't pause the world — rummaging drops the rope, the beam-held item, and the lanes' drain state (the old gate here tested a flag nothing ever raised: a free infinite skyhook)
     updateHeldPhysics(dt);
     if(reloadTimer>0){ reloadTimer-=dt; if(reloadTimer<=0) finishReload(); }
@@ -8274,6 +8363,10 @@ function frame(){
   gl.uniform1i(U.uGlobCount,GLOBS.length);
   gl.uniform1i(U.uReticle,(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0);
   gl.uniform1f(U.uSights, resT&&resT.sights?1:0);
+  { const ret=(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0;   // scope glass: red-dot(1)/holo(2) only, in lockstep with the shader reticle's uAim>0.55 gate
+    const sg=document.getElementById('scopeGlass');
+    if(sg){ const on=playerPos.aimAmt>0.55&&(ret===1||ret===2)&&!pausedUI();   // off while paused/dead/menu so the glass can't stick on screen
+      sg.classList.toggle('on',on); if(on) sg.dataset.optic=ret; } }
   for(let i=0;i<GLOBS.length;i++) gl.uniform4f(U.uGlobs[i],GLOBS[i].x,GLOBS[i].y,GLOBS[i].z,GLOBS[i].r);
   for(let i=0;i<SDF_EDITS.length;i++){
     const ed=SDF_EDITS[i];
