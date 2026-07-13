@@ -383,7 +383,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.2-wip5-diag';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.2-wip6-diag';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -6327,8 +6327,8 @@ function renderTerminal(){
     d.className='termRow'+(i===termSel?' sel':'')+(r.locked?' locked':'');
     if(r.locked) d.style.opacity='0.45';                     // BOOTING… destination — dimmed until its shader links
     d.innerHTML='<span>'+r.label+'</span>'+(r.meta?'<span class="trMeta">'+r.meta+'</span>':'');
-    d.addEventListener('mouseenter',()=>{ termSel=i; renderTerminal(); });
-    d.addEventListener('mousedown',e=>{ if(e.button===2) return; termSel=i; termActivate(); });   // primary = any non-right button (RMB=2 handled by contextmenu); admit 0/1/-1/undefined — trackpad tap may emit button 1
+    d.addEventListener('mouseenter',()=>{ if(termSel===i) return; termSel=i; renderTerminal(); });   // dedup: skip re-render if already on this row — its rebuild thrash eats the tap's mousedown on Chromium
+    d.addEventListener('mousedown',e=>{ if(e.button>0) return; termSel=i; termActivate(); });   // primary = any non-right button (RMB=2 handled by contextmenu); admit 0/1/-1/undefined — trackpad tap may emit button 1
     box.appendChild(d);
   });
 }
@@ -6813,9 +6813,10 @@ function renderZones(){
         if(currentFocus===0&&zoneIdx===zi&&cursorY===r) div.classList.add('cursor','cellFocus');
         if(!it) div.innerHTML='<span class="slotGhost">'+slot.slice(0,4).toUpperCase()+'</span>';
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
+          if(currentFocus===0&&zoneIdx===zi&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===2) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press so a DOM rebuild can't eat it (trackpad tap may emit button 1)
+        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press so a DOM rebuild can't eat it (trackpad tap may emit button 1)
         div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
         div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; quickUse(); });               // MMB = F (wield·feed) — desktop-mouse bonus
         g.appendChild(div);
@@ -6838,9 +6839,10 @@ function renderZones(){
           div.innerHTML='<div class="widg"><div class="widgLab">'+item.label+'</div><div class="widgVal">'+widgetValueText(item)+'</div></div>';
         }
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
+          if(currentFocus===0&&zoneIdx===zi&&cursorX===c&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===2) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
+        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
         div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
         div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; quickUse(); });               // MMB = F (wield·feed)
         g.appendChild(div);
@@ -6910,7 +6912,7 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       refreshInvUI();
     });
-    div.addEventListener('mousedown',e=>{ if(e.button===2) return;
+    div.addEventListener('mousedown',e=>{ if(e.button>0) return;
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       interactInventory();          // LMB = E — primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
@@ -7076,7 +7078,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
     refreshInvUI();
   });
-  d.addEventListener('mousedown',e=>{ if(e.button===2) return;
+  d.addEventListener('mousedown',e=>{ if(e.button>0) return;
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
     interactInventory();          // LMB = E — primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
