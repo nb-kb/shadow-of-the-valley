@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-11 (build beta 1.0.1).
+Last reviewed: 2026-07-13 (build beta 1.1.0).
 
 ## Open
 
@@ -18,16 +18,6 @@ Last reviewed: 2026-07-11 (build beta 1.0.1).
   BOTH feed the shared uEdits→uGlobs pass, matching
   `mapWorldJS = applyGlobsJS(applySdfEditsJS(base))` exactly — PICK carves
   render indoors. The authored-primitive height drifts above stay open.
-
-### 1. Chrome load crash — "cannot access gameState before initialization"
-- **Where:** initial top-level script exec (TDZ). Not the earlier `Menus`
-  forward-ref, which is already fixed — this is a separate one.
-- **Repro:** load in Chrome, often after a GPU overload. **Zen/Firefox run
-  clean.** Chrome is the odd one out.
-- **Status:** guard landed in v22a — early handlers (`anyKeyGate`, `uiOpen`)
-  no-op until `engineReady` flips at BOOT, so the TDZ access path is closed by
-  inspection. Kept open until a Chrome load confirms the banner stays quiet;
-  the *why-does-init-abort* question is still unpinned.
 
 ## Backlog (future — low priority)
 
@@ -76,6 +66,21 @@ Last reviewed: 2026-07-11 (build beta 1.0.1).
 
 ## Recently fixed
 
+- **beta 1.1.0** — Menu clicks were silently dropped on Chrome and Edge (Firefox
+  was fine). The inventory and terminal rebuilt their whole DOM (`innerHTML=''`)
+  on every `mouseenter`; Chromium re-fired `mouseenter` on the recreated cell
+  under a still pointer, looping the rebuild and eating the tap's `mousedown`
+  before it landed. Fixed with same-cell dedup guards on the `renderZones` and
+  terminal-row mouseenter handlers. Also: cold boot no longer flashes a black
+  screen while the shader compiles — `#introScreen` was translucent over an
+  uncleared (transparent-black) canvas; it is now opaque, with `gl.clear` to a
+  dark tone at context creation.
+- **beta 1.0.1** — Closes the old "Chrome load crash" open item. The whole world
+  was drawn by one fragment program too large for Chromium's D3D compiler, which
+  lost the GPU context and aborted init (the `gameState` TDZ was a downstream
+  symptom, not the root). Split into PREVIEW/VALLEY/AUTHORED variants via
+  `#define` so each links under the compiler limit — the game now loads and
+  plays on Chrome and Edge, confirmed through beta 1.1.0.
 - **v22r** — Fog translucency fixed at the blend target (diagnosed v22p). The
   one fog blend composited `skyColor(rayDir)` — the FULL directional sky, sun
   disk (`pow(sd,180)·2`), halo, clouds, stars — through geometry, so any nonzero
