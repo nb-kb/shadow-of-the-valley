@@ -380,7 +380,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.2-wip1';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.2-wip2';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -5658,7 +5658,7 @@ class Zealot{
     return new Vec3(this.startPos.x+Math.cos(a)*r, 0, clamp(this.startPos.z+Math.sin(a)*r,-46,46));
   }
   buildTool(){
-    const t=ITEM_DEFS.tool(); t.name='Zealot Tool';
+    const t=ITEM_DEFS.tool(); t.customName='ZEALOT TOOL';   // customName (not .name) so the lore name survives save/load
     const mag=ITEM_DEFS.magStd(); mag.loaded=8+Math.floor(runRng()*5);
     t.base.slots[0]=mag;
     t.base.slots[3]=ITEM_DEFS.battS();
@@ -5978,7 +5978,7 @@ function seedStashKit(){                       // the kit waits in the STASH now
   for(let i=0;i<2;i++){ const m=ITEM_DEFS.magStd(); m.loaded=8;
     autoPlace(m,rk.inv,rk.invCols,rk.invRows); }   // two more mags ride INSIDE the bag — grab it, find them
   const kit=[rk];
-  for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.name='Foundling Tool'; kit.push(t); }   // bare frames — no rack
+  for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.customName='FOUNDLING TOOL'; kit.push(t); }   // bare frames — no rack
   const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // ONE mag flat is all 6x4 affords: the fixed kit takes 22 of 24 cells
   kit.push(ITEM_DEFS.goggles(),ITEM_DEFS.headphones(),        // every settings utility, exactly once
            ITEM_DEFS.watch(),ITEM_DEFS.compass(),ITEM_DEFS.photometer(),
@@ -6309,7 +6309,7 @@ function renderTerminal(){
     if(r.locked) d.style.opacity='0.45';                     // BOOTING… destination — dimmed until its shader links
     d.innerHTML='<span>'+r.label+'</span>'+(r.meta?'<span class="trMeta">'+r.meta+'</span>':'');
     d.addEventListener('mouseenter',()=>{ termSel=i; renderTerminal(); });
-    d.addEventListener('mousedown',e=>{ if(e.button!==0) return; termSel=i; termActivate(); });
+    d.addEventListener('mousedown',e=>{ if(e.button===1||e.button===2) return; termSel=i; termActivate(); });   // primary = any non-aux button (a trackpad tap sends button -1/undefined, not 0)
     box.appendChild(d);
   });
 }
@@ -6796,7 +6796,7 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); else if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } });   // MMB opens a container's sub-inventory; RMB quick-uses (matches renderGrid)
+        div.addEventListener('mousedown',e=>{ currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } else interactInventory(); });   // primary = any non-aux button (trackpad taps send button -1/undefined); cursor set here so a tap without a prior hover still targets this cell
         g.appendChild(div);
       });
     }else{
@@ -6819,7 +6819,7 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); else if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } });   // MMB opens a container's sub-inventory; RMB quick-uses (matches renderGrid)
+        div.addEventListener('mousedown',e=>{ currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } else interactInventory(); });   // primary = any non-aux button (trackpad taps send button -1/undefined); cursor set here so a tap without a prior hover still targets this cell
         g.appendChild(div);
       }
     }
@@ -6890,9 +6890,9 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
     div.addEventListener('mousedown',e=>{
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
-      if(e.button===0) interactInventory();
-      else if(e.button===2) quickUse();
+      if(e.button===2) quickUse();
       else if(e.button===1){ e.preventDefault(); activateAtCursor(); }
+      else interactInventory();     // primary = any non-aux button (a trackpad tap sends button -1/undefined, not 0)
     });
     container.appendChild(div);
   }
@@ -7048,9 +7048,9 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   d.addEventListener('mousedown',e=>{
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
-    if(e.button===0) interactInventory();
-    else if(e.button===2) quickUse();
+    if(e.button===2) quickUse();
     else if(e.button===1){ e.preventDefault(); activateAtCursor(); }
+    else interactInventory();     // primary = any non-aux button (a trackpad tap sends button -1/undefined, not 0)
   });
   return d;
 }
