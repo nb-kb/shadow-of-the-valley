@@ -3818,6 +3818,12 @@ function hasGadget(kind){
   }
   return false;
 }
+function findGadgetOnPlayer(kind){                                    // like findGadget but ANYWHERE on the player (hand/pockets/packs/tool cells), not just the rucksack
+  const hw=heldWorld&&heldWorld.w.item;                              // invArmWalk walks only a held item's INSIDES — check the held item itself too
+  if(hw instanceof Gadget && hw.kind===kind) return hw;
+  let g=null; invArmWalk(it=>{ if(!g && it instanceof Gadget && it.kind===kind) g=it; });
+  return g;
+}
 // FOG EYES — a bank blinds the zealots too. ONE scale, shared by the AI rate,
 // the hard sight gate, and the photometer, so the drawn number never lies.
 function fogEye(){ return 1-0.65*fogW; }
@@ -8034,8 +8040,8 @@ function frame(){
     document.getElementById('burnMask').style.width=(playerPos.burnedMax/playerPos.maxHealth*100)+'%';
     document.getElementById('bleedTick').classList.toggle('hidden',!(playerPos.status.bleedT>0));
     document.getElementById('suspicionFill').style.width=(highestDetection*100)+'%';
-    // gadget rows exist only while the gadget is in the rucksack
-    const wg=findGadget('watch');
+    // watch reads time anywhere on the player (hand/pockets/packs/tool cells); other gadget rows still require the rucksack
+    const wg=findGadgetOnPlayer('watch');
     const hasW=!!wg&&wg.on!==false, hasO=hasGadget('optics');
     document.getElementById('clockRow').style.display=hasW?'':'none';
     document.getElementById('fpsRow').style.display=hasO?'':'none';
