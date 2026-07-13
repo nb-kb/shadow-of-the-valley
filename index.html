@@ -1277,10 +1277,11 @@ float sdGun(vec3 p, bool cfgd){
   d=min(d, sdCapsule(p, vec3(0.0,0.075,0.18), vec3(0.0,0.075,0.34), 0.021));     // barrel
   d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
   d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
-  if(uSights>0.5){ d=min(d, sdBox(p-vec3(-0.015,0.115,0.10), vec3(0.006,0.022,0.012))); d=min(d, sdBox(p-vec3(0.015,0.115,0.10), vec3(0.006,0.022,0.012))); } // iron sight — a NOTCH (hollow middle) to center the target in, not a solid post that blocks the aim
-  if(uReticle==1){ vec3 hp=p-vec3(0.0,0.118,0.05); float rd=sdCapsule(hp, vec3(0.0,0.0,-0.008), vec3(0.0,0.0,0.008), 0.034); rd=max(rd, -sdCapsule(hp, vec3(0.0,0.0,-0.06), vec3(0.0,0.0,0.06), 0.026)); d=min(d, rd); } // red dot — SHALLOW cylindrical ring you sight through
-  else if(uReticle==2){ vec3 hp=p-vec3(0.0,0.118,0.05); d=min(d, max(sdBox(hp,vec3(0.034,0.030,0.028)), -sdBox(hp,vec3(0.026,0.022,0.09)))); } // holo — box housing, HALF as deep
   if(cfgd){
+    // SIGHTS/RETICLE are the PLAYER's activeTool optic — gate behind cfgd (like uToolCfg) so world/dropped guns never mirror the player. Only the viewmodel + menu prop pass cfgd=true. (enemy-tool mirror fix)
+    if(uSights>0.5){ d=min(d, sdBox(p-vec3(-0.015,0.115,0.10), vec3(0.006,0.022,0.012))); d=min(d, sdBox(p-vec3(0.015,0.115,0.10), vec3(0.006,0.022,0.012))); } // iron sight — a NOTCH (hollow middle) to center the target in, not a solid post that blocks the aim
+    if(uReticle==1){ vec3 hp=p-vec3(0.0,0.118,0.05); float rd=sdCapsule(hp, vec3(0.0,0.0,-0.008), vec3(0.0,0.0,0.008), 0.034); rd=max(rd, -sdCapsule(hp, vec3(0.0,0.0,-0.06), vec3(0.0,0.0,0.06), 0.026)); d=min(d, rd); } // red dot — SHALLOW cylindrical ring you sight through
+    else if(uReticle==2){ vec3 hp=p-vec3(0.0,0.118,0.05); d=min(d, max(sdBox(hp,vec3(0.034,0.030,0.028)), -sdBox(hp,vec3(0.026,0.022,0.09)))); } // holo — box housing, HALF as deep
     if(uToolCfg.x>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.075,0.34), vec3(0.0,0.075,0.45), 0.032)); // suppressor
     if(uToolCfg.y>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.135,0.00), vec3(0.0,0.135,0.11), 0.026)); // long glass
     if(uToolCfg.z>0.5) d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));        // magazine
@@ -1766,6 +1767,7 @@ void main(){
     col = skyColor(rayDir);   // a true miss is sky; the ground march owns the land
   }
   col = pow(col, vec3(0.4545));
+  col = mix(vec3(dot(col, vec3(0.299,0.587,0.114))), col, 1.2); // modest global saturation lift — post-gamma so no pow() NaN, pre-HUD so reticle stays neutral
   // ---- optic reticle: the player looks THROUGH the glass while aiming ----
   if(uReticle>0 && uAim>0.55){
     vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
@@ -2616,7 +2618,7 @@ function buildLevelTexData(level,bake){
     if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
     if(r.kind===K.PROPS){ B=[r.kind,r.term?1:0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0]));
       if(r.term) items.push([r.term[0],r.term[1],r.term[2],0]); }   // terminal rides the last slot; B.y flags it
-    if(r.kind!==K.PITS) C[1]=items.length;
+    if(r.kind!==K.PITS && r.kind!==K.TREES) C[1]=items.length;   // TREES keeps its shrub flag in C[1] (set above) so GLSL draws the understory bushes JS already collides with — fixes an invisible-collision desync AND adds forest cover
     C[0]=pool;
     const hi=i*3, hput=(o,a,b2,c2,e)=>put((hi+o)%W, 16+Math.floor((hi+o)/W), a,b2,c2,e);
     hput(0, cx,cz,hx,hz);
@@ -4270,12 +4272,13 @@ function foldFrame(out,m){
 // non-sequence items are cargo (skipped), the column's muzzle folds per-lane,
 // and a lane-final BEAM becomes the tactical laser instead of venting.
 function resolveLane(col,out){
-  const lane={shots:[],vented:[],flow:[],seq:[],tacLaser:false,
+  const lane={shots:[],vented:[],flow:[],seq:[],tacLaser:false,isPowder:false,
               spreadAdd:col.spreadAdd,silenced:false,spreadMul:1,mountIdx:col.mountIdx};
   let pend=freshPend(), feeders=[];
   for(const ref of col.refs){
     const m=readRef(ref);
     if(!m) continue;
+    if(m instanceof Magazine && m.powder) lane.isPowder=true;   // a Powder Mag rides this lane → C3 refund frees the housed payload; the bare fallback must keep the synth round
     if(ref.muzzle){                                 // active muzzle: per-COLUMN stats
       if(m instanceof ToolMod && m.cat==='muzzle'){
         if(m.effect.silenced) lane.silenced=true;
@@ -4358,7 +4361,11 @@ function resolveLane(col,out){
   // dmg/grav/spread, a trailing BEAM makes it PULSE hitscan. Built latent here (cost
   // folds to 0 under powder's all-feeders-free waiver), activated only when mag.powder
   // in the fire loop; inert for every other mag, so non-powder lanes still need a bolt core.
-  if(feeders.length) lane.powderShot={kind:'bolt',pend:{...pend},cost:pend.surcharge||0,core:null,spreadAdd:col.spreadAdd,lane,powder:false,synth:true};
+  if(!lane.shots.length){
+    lane.powderShot={kind:'bolt',pend:{...pend},cost:pend.surcharge||0,core:null,spreadAdd:col.spreadAdd,lane,powder:false,synth:true};
+    // POWDER C4: REFUND on a core-less powder round has no housed payload to bill free — spend it on a TWIN instead (exactly one extra copy; capped as TWIN caps at 6; i===0-carries-chain keeps it chainless).
+    if(pend.refund) lane.powderShot.pend.twin=Math.min(6,Math.round(lane.powderShot.pend.twin||1)+1);
+  }
   return lane;
 }
 function resolveTool(tool){
@@ -4374,7 +4381,8 @@ function resolveTool(tool){
   // ORDER IS LAW: saw floor first, slug penalty after — the woodchipper is a trap on purpose.
   if(out.shots.some(sh=>sh.kind==='saw')) out.fireRate=0.06;
   if(out.shots.some(sh=>sh.kind==='slug'&&!out.shots.some(o=>o.relayNext===sh))) out.fireRate+=0.45;
-  if(!tool || out.shots.length===0){
+  const _livePow = tool && out.columns.some(c=>{ if(!c.powderShot) return false; const mg=columnMag(tool,c.mountIdx,true); return !!(mg&&mg.powder); });   // a LOADED Powder Mag on a core-less lane fires its synth round — the bare fallback must NOT discard it
+  if(!tool || (out.shots.length===0 && !_livePow)){
     const bare={shots:[{kind:'bolt',pend:freshPend(),cost:0,spreadAdd:0}],vented:[],flow:[],
                 seq:[],tacLaser:false,spreadAdd:0,silenced:false,spreadMul:1,mountIdx:0,bare:true};
     bare.shots[0].lane=bare;
@@ -4574,6 +4582,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       timerT:p.timer||0,                                 // TIMER: the bell rides the flight
+      synthDet:!!(shot.synth&&!(shot.relayNext&&shot.relayNext.housed)&&(p.fuse>0||p.contact||p.timer>0)),   // POWDER C1: a payload-less powder round carrying a TRIGGER (FUSE/CONTACT/TIMER) IS the charge — self-detonates at that trigger instead of fizzling on an empty relay
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null, tool:_tl,
       burn:Math.round(((p.burn||0)+(_am&&_am.burn||0))*(shot.small||1)), bleed:(!!p.bleed)||(!!(_am&&_am.bleedChance)&&runRng()<_am.bleedChance), armorPen:(_am&&_am.armorPen)||0, chaos:p.chaos||0,
@@ -4596,6 +4605,7 @@ function toolNoise(silent){ return silent?4:22; }
 // itself is the way to waive that link.
 function roundsFor(sh){
   const own=sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0;
+  if(sh.pend.refund && sh.lane && sh.lane.isPowder) return own;   // POWDER C3: REFUND in a powder lane frees the HOUSED payload's deferred rounds too, not just its own lead (the global carrier rule below — own lead only — still stands for every non-powder core)
   return own+(sh.relayNext&&sh.relayNext.housed?roundsFor(sh.relayNext):0);
 }
 // CHAIN ⚡ mirrors the lead: resolveLane parks every deeper housed link's cost on
@@ -5583,6 +5593,7 @@ function triggerPayload(pr){
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick'&&pr.kind!=='boom') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
   // FUSE/CONTACT-RELAY: the death casts the next core — the pull pre-paid the first delivery
+  if(pr.synthDet) explode(pr);                          // POWDER C1: no payload to cast — detonate for the round's own flight damage (bolt → small splash)
   castRelay(pr,true);
 }
 // EXTRA CASTS COST A THIRD — the pull pre-pays ONE delivery of the housed chain.
@@ -6267,7 +6278,7 @@ function resetLevel(){
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
   placeValleyExfil();                         // after the edit wipe AND the spawn reset — the ground snap reads the fresh ring (mapWorldJS culls cell props by player cell)
   cameraYaw=Math.atan2(GATE.x,GATE.z);
-  PARAMS.maxEnemies.v=Math.min(14, 4+2*legDepth());
+  PARAMS.maxEnemies.v=Math.min(14, 6+2*legDepth());   // denser early legs (leg1 6->8, leg2 8->10); render still hard-caps at RLIM.ENEMIES=10 nearest, so the perf ceiling is untouched
   enemies.length=0;
   const _lo=Math.min(-34, GATE.x*1.1), _hi=Math.max(34, GATE.x*1.1);
   for(let i=0;i<P('maxEnemies');i++){
@@ -7460,7 +7471,7 @@ function updateToolReadout(){
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
     if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS');
-    if(p.refund&&!(s.relayNext&&s.relayNext.housed))tags.push('FREE');   // a carrier billing a housed chain is NOT free — refund waived its own base only
+    if(p.refund&&((s.lane&&s.lane.isPowder)||!(s.relayNext&&s.relayNext.housed)))tags.push('FREE');   // FREE when refund waives everything: a powder lane frees the housed payload too (C3), or there's no housed chain to bill
     if(p.bounce)tags.push('RIC'); if(p.pierce)tags.push('DRILL'); if(p.grav)tags.push('MASS'); if(p.vel>1)tags.push('SWIFT');
     return (tags.length?tags.join('·')+' ':'')+(s.housed?'⌂':'')+s.kind.toUpperCase();
   }).join(' / ');
