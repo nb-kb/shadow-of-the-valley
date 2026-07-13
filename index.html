@@ -1250,7 +1250,7 @@ float sdGun(vec3 p, bool cfgd){
   d=min(d, sdCapsule(p, vec3(0.0,0.075,0.18), vec3(0.0,0.075,0.34), 0.021));     // barrel
   d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
   d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
-  if(uSights>0.5) d=min(d, sdBox(p-vec3(0.0,0.115,0.10), vec3(0.008,0.02,0.012))); // iron sight (mod-gated)
+  if(uSights>0.5){ d=min(d, sdBox(p-vec3(-0.015,0.115,0.10), vec3(0.006,0.022,0.012))); d=min(d, sdBox(p-vec3(0.015,0.115,0.10), vec3(0.006,0.022,0.012))); } // iron sight — a NOTCH (hollow middle) to center the target in, not a solid post that blocks the aim
   if(cfgd){
     if(uToolCfg.x>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.075,0.34), vec3(0.0,0.075,0.45), 0.032)); // suppressor
     if(uToolCfg.y>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.135,0.00), vec3(0.0,0.135,0.11), 0.026)); // long glass
@@ -3060,6 +3060,10 @@ function toolMagazine(tool){                      // any mag, base first — rel
 function toolMagazineRef(tool){                   // same walk, but keep the ref — the mag-for-mag swap writes into it
   for(const col of toolColumns(tool))
     for(const r of col.refs){ const it=readRef(r); if(it instanceof Magazine) return {ref:r,mag:it}; }
+  return null;
+}
+function emptyMagSlot(tool){                      // first empty column slot to rack a mag into (base first) — reload uses it when the tool has no mag
+  for(const col of toolColumns(tool)) for(const r of col.refs) if(!readRef(r)) return {ref:r};
   return null;
 }
 class Gadget extends Item{
@@ -5748,7 +5752,15 @@ function tryReload(){
   _lastReloadT=runClock;
   if(reloadTimer>0) return;
   const cur=toolMagazineRef(activeTool);
-  if(!cur){ toast('NO MAGAZINE RACKED'); playSound('empty'); return; }
+  if(!cur){                                                    // no mag racked → pull one from harness/holster/pockets and rack it into an empty slot
+    const src=findSwapMag(null), slot=emptyMagSlot(activeTool);
+    if(src&&slot){
+      if(src.z.slotMode) src.z.grid[src.y][src.x]=null; else removeFromGrid(src.mag,src.z.grid);
+      writeRef(slot.ref,src.mag);
+      playSound('reload'); addNoise(playerPos.x,playerPos.y,playerPos.z,5); refreshInvUI(); return;
+    }
+    toast(src?'NO MAG SLOT':'NO SPARE MAG'); playSound('empty'); return;
+  }
   const mag=cur.mag;
   if(mag.reloadMode==='mag'){ reloadSwapMag(cur); return; }   // mag-for-mag swap — atomic, no timer
   // single-load (shotgun barrels, sniper tube): ONE round per press from the bag's matching ammo — no auto top-off
