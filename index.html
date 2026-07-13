@@ -2228,21 +2228,25 @@ LEVELS.area1={
     zealots:[ {region:'pits',n:3},{region:'armory',n:2},{region:'forest',n:3},
               {region:'testing',n:3},{region:'tentsA',n:3},{region:'tentsB',n:3},
               {region:'lab',n:2},{region:'facility',n:3,outside:true} ],
-    lootN:32, minSpace:6,
+    lootN:48, minSpace:6,
     lootTiers:{
-      common:['ammo9','ammo9','ammo9','ration','ration','battS','battS','battM',
-              'magStd','magStd','watch','compass','gummies','bandAid','barrelC','barrelC'],
+      common:['ammo9','ammo9','ammo9','powderMag','ration','ration','battS','battS','battM',
+              'magStd','magStd','watch','compass','gummies','bandAid','barrelC','barrelC',
+              'barrelMagI','smgMagI','rifleMagI'],
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
               'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies','photometer',
-              'platS','platS','beltFeeder'],
+              'platS','platS','beltFeeder',
+              'ammo762','ammoFlch','ammoSlug','ammoBuck',
+              'pistolMag','barrelMagII','smgMagII','rifleMagII','sniperMagI','shotMagI'],
       mods:  ['dmgPlus','velPlus','twin','gripField','reflex','ironSights','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
               'barrelC','heavyBarrel','serrated','boomerangMod','homingMod','refundMod','chaoticMod'],
-      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore','boomCore','powderCore','sawCore','slugCore','waveCore','orbCore'],
+      cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore','boomCore','sawCore','waveCore','orbCore'],
       rare:  ['scope','scope2x','scope3x','suppressor','barrelU','barrelR','barrelE',
               'barrelL','platS','platM','platL','harnessM','harnessH','platesL',
               'platesH','helmetSteel','helmetRig','autoSear','burstCam','rucksack',
-              'tool','cyanide','warpCore']
+              'tool','cyanide','warpCore',
+              'barrelMagIII','smgMagIII','sniperMagII','shotMagII']
     },
     regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
                  testing:['mods','common','rare'], tentsA:['common','gear','gear'],
@@ -2276,7 +2280,7 @@ LEVELS.hideout={
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
   crates:[[6,-3,0.85],[7.2,-2.4,0.7],[-5,6,0.8],[-6,-5,0.7],[8,5,0.85],[-3,8,0.75]],
   crateTiers:['common','gear','mods'],
-  spawn:{lootN:26} };   // the endless world — supplies scattered through the ruins
+  spawn:{lootN:60} };   // the endless world — supplies scattered through the ruins
 
 // ---- bake: tile -> (<=2) region ids. Throws loudly if authoring breaks the budget. ----
 function bakeLevel(level){
@@ -2800,20 +2804,23 @@ class Magazine extends Item{
   constructor(name,color,acceptedTypes,maxCapacity,opts){ super(name,1,2,color);
     this.acceptedTypes=Array.isArray(acceptedTypes)?acceptedTypes.slice():[acceptedTypes];   // one or more calibers this mag will hold
     this.maxCapacity=maxCapacity; this.loaded=0; this.loadedType=null;                        // loadedType = the caliber currently chambered (multi-cal mags); null falls back to acceptedTypes[0]
-    opts=opts||{}; this.adsTier=opts.adsTier||1; this.reloadMode=opts.reloadMode||'single'; } // adsTier 1/2/3 = ADS+/++/+++ ; reloadMode 'single' (auto-refill) | 'mag' (whole-mag swap)
+    opts=opts||{}; this.adsTier=opts.adsTier||1; this.reloadMode=opts.reloadMode||'single'; this.spreadMul=opts.spreadMul||1; this.powder=!!opts.powder; this.anyCaliber=!!opts.anyCaliber; } // powder mag powders any round; anyCaliber takes any round; adsTier 1/2/3 = ADS+/++/+++ ; reloadMode 'single' (auto-refill) | 'mag' (whole-mag swap) ; spreadMul steadies the sniper tubes (feature 19)
   get acceptedType(){ return this.acceptedTypes[0]; }   // back-compat: single-caliber reads (~12 call sites unchanged)
   get renderType(){ return 2; }
   desc(){ return 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
 }
 function magType(m){ return m&&m.loaded>0 ? (m.loadedType||m.acceptedTypes[0]) : null; }   // the caliber chambered right now — fire-time damage (C12) reads this
-function magAccepts(m,t){ return !!m && m.acceptedTypes.indexOf(t)>=0; }                    // multi-caliber acceptance (C13 barrel/shotgun mags)
+function magAccepts(m,t){ return !!m && (m.acceptedTypes.indexOf(t)>=0 || m.anyCaliber); }    // multi-caliber acceptance; a Powder Mag (anyCaliber) takes any round
+function magCanLoad(m,t){ return magAccepts(m,t) && (m.loaded===0 || (m.loadedType||m.acceptedTypes[0])===t); }   // accepts the caliber AND is empty or already holding it (no mixing)
+function magPut(m,t,n){ if(!magCanLoad(m,t)) return 0; const k=Math.min(n, m.maxCapacity-m.loaded); if(k<=0) return 0; if(m.loaded===0) m.loadedType=t; m.loaded+=k; return k; }   // load k rounds of caliber t; the first round chambers it
+function magFeedType(m){ return magType(m) || m.acceptedTypes.find(t=>bagAmmoCount(t)>0) || m.acceptedTypes[0]; }   // caliber to pull from pockets: the chambered one, else any accepted type on hand
 const AMMO={   // ballistic round catalog — read at FIRE time via magType(); energy cores (spark/boom/wave/...) never touch this
   '9mm':      {dmg:24},                                          // standard — 24 == the chamber default, so 9mm is inert
   '7.62':     {dmg:35, armorPen:0.5},                            // AP — harder hit, ignores half of armor (pen applied in the armor wave, C9)
   'flechette':{dmg:5,  pellets:4, bleedChance:0.2, spread:0.5},  // a tight 4-pellet cluster, each light, 20% to open a bleed
   'slug':     {mult:3, delay:0.45},                              // one heavy shell — 3x the chamber base, +0.45s tool delay
   'buckshot': {mult:1, pellets:5, spread:2.2},                   // 5-pellet blast — close hits stack (~5x), the wide fan IS the range falloff
-  'powder':   {dmg:24, hitscan:true},                            // the owner's powder round — hitscan (wired with the powder-pulse path, C13)
+  // powder is no longer a caliber — it's the Powder Mag trait (anyCaliber + powder:true); damage comes from whatever round is loaded
 };
 const BARREL_TIERS={
   common:   {len:3,  spr:0.04, color:'#6e6a5e', w:1,h:2},
@@ -3039,8 +3046,27 @@ class Gadget extends Item{
 // factory table — debug spawner + loot rolls read from this
 const ITEM_DEFS={
   ammo9:      ()=>new Ammunition('9mm','#a07c2c','9mm',12),
+  ammo762:    ()=>new Ammunition('7.62 AP','#8a6a2c','7.62',10),
+  ammoFlch:   ()=>new Ammunition('Flechette','#9aa0a8','flechette',12),
+  ammoSlug:   ()=>new Ammunition('Slug','#7a5a3c','slug',6),
+  ammoBuck:   ()=>new Ammunition('Buckshot','#5a5f55','buckshot',8),
+  powderMag:  ()=>new Magazine('Powder Mag','#8d6e63',['9mm'],10,{adsTier:1,reloadMode:'single',powder:true,anyCaliber:true}),   // takes ANY round and powders it — hitscan + feeders cost no ⚡ (retired powderCore trait)
   magStd:     ()=>new Magazine('Std Mag','#23262b','9mm',12),
   magDrum:    ()=>new Magazine('Drum','#2c3138','9mm',28),
+  // --- magazine lineup (feature 19): caliber + ADS tier + reload behaviour ---
+  barrelMagI:  ()=>new Magazine('Barrel i','#5f6a3a',['flechette','slug'],6,{adsTier:2,reloadMode:'single'}),
+  barrelMagII: ()=>new Magazine('Barrel ii','#6a7040',['flechette','slug'],10,{adsTier:2,reloadMode:'single'}),
+  barrelMagIII:()=>new Magazine('Barrel iii','#4a5a2c',['flechette','slug'],12,{adsTier:2,reloadMode:'single'}),
+  pistolMag:   ()=>new Magazine('Pistol','#2a2d33',['9mm'],12,{adsTier:1,reloadMode:'mag'}),
+  smgMagI:     ()=>new Magazine('SMG i','#33383f',['9mm'],20,{adsTier:1,reloadMode:'mag'}),
+  smgMagII:    ()=>new Magazine('SMG ii','#3a4048',['9mm'],30,{adsTier:1,reloadMode:'mag'}),
+  smgMagIII:   ()=>new Magazine('SMG iii','#2c3138',['9mm'],40,{adsTier:1,reloadMode:'mag'}),
+  rifleMagI:   ()=>new Magazine('Rifle i','#2a2f26',['7.62'],15,{adsTier:2,reloadMode:'mag'}),
+  rifleMagII:  ()=>new Magazine('Rifle ii','#323a2c',['7.62'],30,{adsTier:2,reloadMode:'mag'}),
+  sniperMagI:  ()=>new Magazine('Sniper i','#3a2f26',['7.62'],8,{adsTier:3,reloadMode:'single',spreadMul:0.6}),
+  sniperMagII: ()=>new Magazine('Sniper ii','#4a3a2c',['7.62'],15,{adsTier:3,reloadMode:'mag',spreadMul:0.4}),
+  shotMagI:    ()=>new Magazine('Shotgun i','#5a2f2c',['buckshot','slug','flechette'],5,{adsTier:3,reloadMode:'mag'}),
+  shotMagII:   ()=>new Magazine('Shotgun ii','#6a3a30',['buckshot','slug','flechette'],10,{adsTier:3,reloadMode:'mag'}),
   tool:       ()=>new Tool('Covenant Tool','#3a4048'),
   barrelC:    ()=>new Barrel('common'),
   barrelU:    ()=>new Barrel('uncommon'),
@@ -3076,8 +3102,8 @@ const ITEM_DEFS={
   waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a slow wide wall· 10⚡'),
   sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · point-blank teeth · 1⚡'),
   warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · where am I...? · 15⚡'),
-  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · fires a round; mods feeding it cost no ⚡.'),
-  slugCore:   ()=>new ToolMod('SLUG','#a1887f','proj',{kind:'slug',base:0},'Core · three rounds, one heavy shot — +0.45s cycle'),
+  // POWDER & SLUG cores retired (C13): slug is now the 'slug' round (×3 mult); powder is the
+  // Powder Mag (anyCaliber + powder:true) — takes any round and rides the powder trait (hitscan/no-⚡).
   orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · a slow orb — weak alone · 8⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡'),
@@ -3549,9 +3575,8 @@ function interactInventory(){
     if(f.external){ toast('SUPPLY CRATE'); playSound('empty'); return; }
     // held rounds pour straight into a magazine under the cursor
     if(it instanceof Ammunition && cell instanceof Magazine
-       && cell.acceptedType===it.ammoType && cell.loaded<cell.maxCapacity){
-      const t=Math.min(cell.maxCapacity-cell.loaded, it.count);
-      cell.loaded+=t; it.count-=t;
+       && magCanLoad(cell,it.ammoType) && cell.loaded<cell.maxCapacity){
+      const t=magPut(cell,it.ammoType,it.count); it.count-=t;
       if(it.count<=0) consumeHeld();
       playSound('reload'); refreshInvUI(); return;
     }
@@ -3662,9 +3687,8 @@ function activateAtCursor(){
   if(cell instanceof Gadget){ useGadget(cell); refreshInvUI(); return; }
   if(cell instanceof Ammunition && activeTool){         // X on rounds feeds the wielded mag
     const mag=toolMagazine(activeTool);
-    if(mag && mag.acceptedType===cell.ammoType && mag.loaded<mag.maxCapacity){
-      const t=Math.min(mag.maxCapacity-mag.loaded, cell.count);
-      mag.loaded+=t; cell.count-=t;
+    if(mag && magCanLoad(mag,cell.ammoType) && mag.loaded<mag.maxCapacity){
+      const t=magPut(mag,cell.ammoType,cell.count); cell.count-=t;
       if(cell.count<=0){ if(f.rack) writeRef(refAt(f),null); else removeFromGrid(cell,f.grid); }
       playSound('reload'); refreshInvUI(); return;
     }
@@ -3736,17 +3760,17 @@ function quickUse(){
     menuInspect(cell); playSound('click'); return;
   }
   if(cell instanceof Magazine && cell.loaded>0 && !heldWorld){   // F: shake the rounds out into your hand
-    const rounds=new Ammunition(cell.acceptedType+' rounds','#a07c2c',cell.acceptedType,cell.loaded);
-    cell.loaded=0;
+    const _lt=magType(cell);                                     // the chambered caliber, not just the first accepted
+    const rounds=new Ammunition(_lt+' rounds','#a07c2c',_lt,cell.loaded);
+    cell.loaded=0; cell.loadedType=null;
     handHold(rounds);
     toast('UNLOADED '+rounds.count+' ROUNDS');
     playSound('reload'); refreshInvUI(); return;
   }
   if(cell instanceof Ammunition && activeTool){
     const mag=toolMagazine(activeTool);
-    if(mag && mag.acceptedType===cell.ammoType && mag.loaded<mag.maxCapacity){
-      const t=Math.min(mag.maxCapacity-mag.loaded, cell.count);
-      mag.loaded+=t; cell.count-=t;
+    if(mag && magCanLoad(mag,cell.ammoType) && mag.loaded<mag.maxCapacity){
+      const t=magPut(mag,cell.ammoType,cell.count); cell.count-=t;
       if(cell.count<=0){ if(f.rack) writeRef(refAt(f),null); else removeFromGrid(cell,f.grid); }
       playSound('reload'); refreshInvUI(); return;
     }
@@ -4003,8 +4027,8 @@ function canSipFrom(it){
   if(!activeTool) return false;
   const mag=toolMagazine(activeTool);
   if(!mag || mag.loaded>=mag.maxCapacity) return false;
-  if(it instanceof Ammunition && it.ammoType===mag.acceptedType && it.count>0) return true;
-  if(it instanceof Magazine && it.acceptedType===mag.acceptedType && it!==mag && it.loaded>0) return true;
+  if(it instanceof Ammunition && magCanLoad(mag,it.ammoType) && it.count>0) return true;
+  if(it instanceof Magazine && it.loaded>0 && it!==mag && magCanLoad(mag,magType(it))) return true;
   return false;
 }
 function sipFromHeld(){
@@ -4013,14 +4037,14 @@ function sipFromHeld(){
   if(!mag||!canSipFrom(it)) return;
   const space=mag.maxCapacity-mag.loaded;
   if(it instanceof Ammunition){
-    const t=Math.min(space,it.count); mag.loaded+=t; it.count-=t;
+    const t=magPut(mag,it.ammoType,it.count); it.count-=t;
     toast('FED '+t+' ROUNDS');
     if(it.count<=0){
       const wi=worldItems.indexOf(heldWorld.w); if(wi>=0) worldItems.splice(wi,1);
       heldWorld=null; document.getElementById('crosshair').classList.remove('carrying');
     }
   }else if(it instanceof Magazine){
-    const t=Math.min(space,it.loaded); mag.loaded+=t; it.loaded-=t;
+    const t=magPut(mag,magType(it),it.loaded); it.loaded-=t; if(it.loaded<=0) it.loadedType=null;
     toast('SWAPPED '+t+' ROUNDS ACROSS');
   }
   playSound('reload'); addNoise(playerPos.x,playerPos.y,playerPos.z,4); refreshInvUI();
@@ -4525,6 +4549,8 @@ function tryFirePlayer(dt){
     const n=lane.shots.length; if(!n) continue;
     const cyc=res.bare?0:lane.cycleRef.get();
     const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true);   // bare bolt still drinks from the rack's mag
+    const _pw=!!(mag&&mag.powder);                        // C13: a Powder Mag powders whatever's loaded → this lane PULSES hitscan & feeders cost no ⚡ (retired powderCore trait)
+    for(let s=0;s<n;s++){ const sx=lane.shots[s]; if(sx.kind==='bolt') sx.powder=_pw; }
     let pick=-1, passed=false;                           // passed = a LIVE entry was walked over (housed ones are invisible, no click)
     for(let k=0;k<n;k++){
       const i=(cyc+k)%n, sh=lane.shots[i];
@@ -4533,7 +4559,8 @@ function tryFirePlayer(dt){
       if(sh.pend.laser&&!bl&&!sh.powder){ passed=true; continue; }   // continuous shots belong to the held-fire path — powder pulls, hitscan
       if(bl&&_laserBursts.some(q=>q.lane===lane)){ passed=true; continue; }   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
-      const okCharge=activeTool.charge>=(bl?Math.ceil((sh.cost||0)/3):(sh.cost||0));
+      const _ec=sh.powder?((sh.cost||0)-(sh.pend.surcharge||0)+(sh.pend.surchargeHard||0)):(sh.cost||0);   // powder waives the feeders' surcharge (mirrors the retired powderCore's cost fold)
+      const okCharge=activeTool.charge>=(bl?Math.ceil(_ec/3):_ec);
       const okAmmo=rds===0||(mag&&mag.loaded>=rds);
       if(okCharge&&okAmmo){ pick=i; if(passed) skippedAny=true; break; }
       passed=true;
@@ -4546,15 +4573,16 @@ function tryFirePlayer(dt){
       lane.cycleRef.set((pick+1)%n);
       firedAny=true; continue;
     }
-    wearRoll(spendCharge(activeTool,sh.cost||0));        // price the shot, not the copies — and roll the dice
+    wearRoll(spendCharge(activeTool,sh.powder?((sh.cost||0)-(sh.pend.surcharge||0)+(sh.pend.surchargeHard||0)):(sh.cost||0)));   // price the shot, not the copies (powder waives the feeders' ⚡) — and roll the dice
     const gen=_worldGen;                                 // a bare BOOM / powder pulse detonates IN this loop and can kill the shooter
     for(let b=0;b<res.burst;b++){
       if(gen!==_worldGen) break;                         // dead men fire no follow-ups into the world they respawned to
       const rds=roundsFor(sh);
       if(rds>0){ if(!mag||mag.loaded<rds) break; mag.loaded-=rds; }
-      if(sh.powder&&sh.pend.laser){
-        // POWDER PULSE (v22 C1) — the owner's rounds-powered hitscan laser: each
-        // pull fires a pulse through fireHitscan, 1 round + 0⚡, every lane mod
+      if(sh.powder){
+        // POWDER PULSE (C13, was v22 C1) — the owner's powder ROUND hitscans on every
+        // pull, with or without a feeding BEAM (AMMO.powder.hitscan): fireHitscan,
+        // 1 round + 0 feeder⚡, every lane mod
         // live (mirrors runBurstLasers' aim block). Rounds/noise/kick/sound around
         // this branch are UNTOUCHED — the pulse replaces only the emit.
         let f2=fireDir; const ch=sh.pend.chaos||0;
@@ -4737,7 +4765,8 @@ function runContinuousBeams(dt){
     const hi=cycleShotIdx(lane,lane.cycleRef.get()%n);  // the cycle skips housed payloads here too — a pull can park cycleRef on one
     if(hi<0) continue;
     const sh=lane.shots[hi];
-    if(!sh.pend.laser||sh.powder) continue;           // POWDER never threads — it pulses on the PULL path (v22 C1)
+    if(sh.kind==='bolt'){ const _pm=columnMag(activeTool,lane.mountIdx,true); sh.powder=!!(_pm&&_pm.powder); }   // C13: keep the powder flag consistent with the pull path each frame
+    if(!sh.pend.laser||sh.powder) continue;           // POWDER never threads — it pulses on the PULL path
     if(burstLaser(res,sh)) continue;                  // burst cam owns that lane: pulses, not a thread
     const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
     if(activeTool.charge<rate*dt){ if(_swing&&_swing.li===li)_swing=null; continue; }   // a guttering grip lane drops its rope
@@ -5077,7 +5106,9 @@ function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
   const maxLen=60;
   let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
   const pierceAll=p.pierce>0;                          // DRILL: the pulse takes every body in the sweep before the wall
-  const dmg=((shot.kind==='boom'?34:shot.kind==='spark'?12:res.dmg)+p.dmg)*chaosMul(p.chaos);
+  const _am=(shot.kind==='bolt')?AMMO[shot._ammo]:null;                              // powder-mag hitscan carries the loaded round's damage (C13)
+  const _ballBase=_am?(_am.mult?res.dmg*_am.mult:_am.dmg+(res.dmg-24)):res.dmg;      // mirrors emitProjectile — 9mm==res.dmg stays inert
+  const dmg=((shot.kind==='boom'?34:shot.kind==='spark'?12:_ballBase)+p.dmg)*chaosMul(p.chaos);
   const hits=[];
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;
@@ -5613,8 +5644,9 @@ function tickBeltFeed(dt){
     const it=readRef(r);
     if(it instanceof Magazine&&it.loaded<it.maxCapacity&&(!mag||it.loaded/it.maxCapacity<mag.loaded/mag.maxCapacity)) mag=it;
   }
-  if(!mag||takeBagAmmo(mag.acceptedType,1)<1) return;
-  mag.loaded++; playSound('click');
+  if(!mag) return;
+  const _bt=magFeedType(mag); if(!_bt||takeBagAmmo(_bt,1)<1) return;
+  magPut(mag,_bt,1); playSound('click');
   if(!activeTool._res.silenced) addNoise(playerPos.x,playerPos.y,playerPos.z,3);   // the belt ticks — a suppressed tool feeds silent
 }
 function tryReload(){
@@ -5622,7 +5654,7 @@ function tryReload(){
   const mag=toolMagazine(activeTool);
   if(!mag){ toast('NO MAGAZINE RACKED'); playSound('empty'); return; }
   if(mag.loaded>=mag.maxCapacity){ playSound('click'); return; }
-  if(bagAmmoCount(mag.acceptedType)<=0){ toast('POCKETS EMPTY'); playSound('empty'); return; }
+  if(bagAmmoCount(magFeedType(mag))<=0){ toast('POCKETS EMPTY'); playSound('empty'); return; }
   reloadTimer=1.1;
   playSound('reload');
   addNoise(playerPos.x,playerPos.y,playerPos.z,5);
@@ -5630,7 +5662,7 @@ function tryReload(){
 function finishReload(){
   const mag=activeTool?toolMagazine(activeTool):null;
   if(!mag) return;
-  mag.loaded+=takeBagAmmo(mag.acceptedType, mag.maxCapacity-mag.loaded);
+  const _rt=magFeedType(mag); magPut(mag,_rt,takeBagAmmo(_rt, mag.maxCapacity-mag.loaded));
   refreshInvUI();
 }
 
@@ -6208,6 +6240,17 @@ function seedLevelSpawns(L){
         if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break;
       }
     }
+    // C13 empty-crate floor: the scatter above is balls-in-bins, so many boxes roll
+    // empty. Give every still-bare, non-stash crate ONE guaranteed roll from its own
+    // tier character — lootN stays the "extra richness" dial on top.
+    for(const cr of crateRegistry){
+      if(cr.stash||cr.inv.flat().some(Boolean)) continue;
+      const tn=cr.tiers[Math.floor(rng()*cr.tiers.length)];
+      const list=TIERS[tn]||TIERS.common;
+      const it=ITEM_DEFS[list[Math.floor(rng()*list.length)]]();
+      if(it instanceof Magazine) it.loaded=Math.floor(rng()*it.maxCapacity);
+      autoPlace(it,cr.inv,cr.invCols,cr.invRows);
+    }
   }
   // guaranteed: the level promises these regardless of the roll — a promise KEPT,
   // not re-given: one already in a crate, the stash, or on the rig satisfies it
@@ -6345,7 +6388,7 @@ function itemToJSON(it){
   if(!it) return null;
   const j={k:it.defKey, x:it.x, y:it.y};
   if(it.customName) j.cn=it.customName;
-  if(it instanceof Magazine) j.loaded=it.loaded;
+  if(it instanceof Magazine){ j.loaded=it.loaded; if(it.loadedType) j.magType=it.loadedType; }
   if(it instanceof Ammunition) j.count=it.count;
   if(it instanceof Battery){ j.cap=it.cap; j.charge=it.charge; }
   if(it instanceof Gadget && it.on!==undefined) j.on=it.on;
@@ -6368,7 +6411,7 @@ function itemFromJSON(j){
   if(!j||!ITEM_DEFS[j.k]) return null;
   const it=ITEM_DEFS[j.k]();
   if(typeof j.cn==='string') it.customName=sanitizeName(j.cn)||null;
-  if(j.loaded!==undefined) it.loaded=j.loaded;
+  if(j.loaded!==undefined){ it.loaded=Math.max(0,Math.min(j.loaded|0,it.maxCapacity)); if(j.magType) it.loadedType=j.magType; }
   if(j.count!==undefined) it.count=j.count;
   if(j.cap!==undefined){ it.cap=j.cap; it.charge=Math.min(j.charge,j.cap); }
   if(j.on!==undefined) it.on=j.on;
@@ -6667,8 +6710,8 @@ if(window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundR
 const iconCache=new Map();
 function iconKey(it){
   if(it instanceof Tool) return 'tool';
-  if(it instanceof Magazine) return 'mag:'+(it.maxCapacity>20?'drum':'std');
-  if(it instanceof Ammunition) return 'ammo';
+  if(it instanceof Magazine) return 'mag:'+(it.defKey||(it.maxCapacity>20?'drum':'std'));
+  if(it instanceof Ammunition) return 'ammo:'+it.ammoType;
   if(it instanceof ToolMod) return 'mod:'+it.cat+':'+it.color+':'+it.name;
   if(it instanceof Gadget) return 'gad:'+it.kind;
   return 'box:'+(it.color||'');
@@ -6710,11 +6753,11 @@ function makeIcon(it){
     g.fillStyle='#c9a24a'; rr(-W*0.08,-H*0.42,W*0.16,H*0.10,2); g.fill();   // seated round
     g.fillStyle=lo;   rr(-W*0.18,H*0.26,W*0.36,H*0.10,3); g.fill();         // baseplate
     g.restore();
-  }else if(it instanceof Ammunition){                        // three cartridges
+  }else if(it instanceof Ammunition){                        // three cartridges, tinted per caliber
     for(let i=0;i<3;i++){
       g.save(); g.translate(W*(0.28+i*0.22),H*0.56); g.rotate(-0.12);
-      g.fillStyle='#c9a24a'; rr(-W*0.055,-H*0.20,W*0.11,H*0.34,2); g.fill();
-      g.fillStyle='#8a6f33'; g.beginPath();
+      g.fillStyle=hi; rr(-W*0.055,-H*0.20,W*0.11,H*0.34,2); g.fill();
+      g.fillStyle=lo; g.beginPath();
       g.moveTo(-W*0.055,-H*0.20); g.lineTo(0,-H*0.32); g.lineTo(W*0.055,-H*0.20); g.closePath(); g.fill();
       g.restore();
     }
