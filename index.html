@@ -18,9 +18,10 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 /* ---------- crosshair + carry pin ---------- */
 #crosshair{position:absolute;top:50%;left:50%;width:12px;height:12px;transform:translate(-50%,-50%);pointer-events:none;z-index:5;}
-#crosshair::before,#crosshair::after{content:'';position:absolute;background:#fff;mix-blend-mode:difference;}
-#crosshair::before{top:5px;left:0;width:12px;height:2px;}
-#crosshair::after{top:0;left:5px;width:2px;height:12px;}
+/* bare crosshair draws NOTHING; only the .carrying diamond (carry-pin) renders */
+#crosshair.carrying::before,#crosshair.carrying::after{content:'';position:absolute;background:#fff;mix-blend-mode:difference;}
+#crosshair.carrying::before{top:5px;left:0;width:12px;height:2px;}
+#crosshair.carrying::after{top:0;left:5px;width:2px;height:12px;}
 #crosshair.carrying{transform:translate(-50%,-50%) rotate(45deg);}
 #interactPrompt{position:absolute;left:50%;top:57%;transform:translateX(-50%);pointer-events:none;z-index:5;
   font-size:15px;letter-spacing:.14em;color:var(--bone);text-shadow:0 1px 2px #000;opacity:0;transition:opacity .12s;}
@@ -703,7 +704,8 @@ uniform float uMenu;        // 0..1 — inventory presentation blend
 uniform int   uMenuMode;    // 1 rucksack · 2 tool
 uniform int   uColCount;    // rack columns (menu presentation only)
 uniform vec4  uCols[8];     // x len(slots) · y x-offset · z chain joints · w hasMuzzleMod
-uniform int   uReticle;     // 0 none · 1 red dot · 2 holo · 3 2x · 4 3x
+uniform int   uReticle;     // 0 none · 1 red dot · 2 holo · 3 2x · 4 3x · 5 iron
+uniform float uSights;      // >0.5 → draw the iron-sight post (mod-gated)
 uniform int   uGlobCount;   // glue globs
 uniform vec4  uGlobs[10];   // xyz center · w radius
 uniform float uAim;         // 0..1 aim-down blend
@@ -1260,7 +1262,7 @@ float sdGun(vec3 p, bool cfgd){
   d=min(d, sdCapsule(p, vec3(0.0,0.075,0.18), vec3(0.0,0.075,0.34), 0.021));     // barrel
   d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
   d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
-  d=min(d, sdBox(p-vec3(0.0,0.115,0.10), vec3(0.008,0.02,0.012)));               // iron sight
+  if(uSights>0.5) d=min(d, sdBox(p-vec3(0.0,0.115,0.10), vec3(0.008,0.02,0.012))); // iron sight (mod-gated)
   if(cfgd){
     if(uToolCfg.x>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.075,0.34), vec3(0.0,0.075,0.45), 0.032)); // suppressor
     if(uToolCfg.y>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.135,0.00), vec3(0.0,0.135,0.11), 0.026)); // long glass
@@ -1438,7 +1440,7 @@ vec2 map(vec3 p){
         if(d<res.x) res=vec2(d,20.0);
       }
     }else if(uHasTool>0.5){
-      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0,-0.215), uAim);
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0,-0.115), uAim);   // ADS y raised -0.215→-0.115 so the iron post (local y 0.115) lands on the center ray
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, 0.46-uBob.z);
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
@@ -1756,6 +1758,11 @@ void main(){
     }else if(uReticle==2){                              // holo: ring + dot
       float ring=smoothstep(0.0026,0.0,abs(r-0.035));
       col+=vec3(0.2,1.0,0.75)*a*(ring*0.9+smoothstep(0.004,0.0,r)*1.2);
+    }else if(uReticle==5){                              // iron: neutral post-and-notch (no magnify)
+      float post=smoothstep(0.0016,0.0,abs(uv.x))*smoothstep(0.0,-0.055,uv.y)*step(-0.055,uv.y); // thin vertical post rising to center
+      float notchL=smoothstep(0.0016,0.0,abs(uv.x+0.030))*step(abs(uv.y),0.012);                  // left shoulder of the notch
+      float notchR=smoothstep(0.0016,0.0,abs(uv.x-0.030))*step(abs(uv.y),0.012);                  // right shoulder
+      col+=vec3(0.86,0.88,0.90)*a*(post+notchL+notchR)*0.7;
     }else{                                              // magnified: vignette + fine cross
       float rad=(uReticle==3)?0.40:0.31;
       col*=mix(1.0, smoothstep(rad+0.10,rad-0.01,r), a*0.92);
@@ -1840,7 +1847,7 @@ function setupAttrib(prog){
 const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
-  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
@@ -2240,7 +2247,7 @@ LEVELS.area1={
       gear:  ['beltBasic','holster1','holster2','holster3','goggles','headphones',
               'helmetCap','harnessL','battH','lantern','magDrum','aloe','gummies','photometer',
               'platS','platS','beltFeeder'],
-      mods:  ['dmgPlus','velPlus','twin','gripField','reflex','silentMod','fuseMod',
+      mods:  ['dmgPlus','velPlus','twin','gripField','reflex','ironSights','silentMod','fuseMod',
               'splinter','contactMod','slowFuse','bounce','pierce','heavy','compensator','hairTrigger',
               'barrelC','heavyBarrel','serrated','boomerangMod','homingMod','refundMod','chaoticMod'],
       cores: ['boltCore','sparkCore','pickCore','beamCore','pulse','emberCore','decoyCore','boomCore','powderCore','sawCore','slugCore','waveCore','orbCore'],
@@ -3047,6 +3054,7 @@ const ITEM_DEFS={
   // --- basic rack mods (order-independent stats) ---
   reflex:     ()=>new ToolMod('Red Dot','#c62828','stat',{fov:0.60,spread:0.92,unique:'fov',reticle:1},'A red point of agreement · spread ×0.92'),
   scope:      ()=>new ToolMod('Holo Sight','#00897b','stat',{fov:0.56,spread:0.86,unique:'fov',reticle:2},'A ring of light that does not lie · spread ×0.86'),
+  ironSights: ()=>new ToolMod('Iron Sights','#8a8f96','stat',{fovAim:0.62, sights:true, reticle:5},'Bare steel post and notch · lines up the honest way'),
   scope2x:    ()=>new ToolMod('2× Optic','#283593','stat',{fov:0.31,spread:0.74,unique:'fov',reticle:3},'Twice as close, steadier hands · spread ×0.74'),
   scope3x:    ()=>new ToolMod('3× Optic','#1a237e','stat',{fov:0.21,spread:0.60,unique:'fov',reticle:4},'The far made near · spread ×0.60'),
   suppressor: ()=>new ToolMod('Suppressor','#37474f','muzzle',{silenced:true},'Muzzle slot · this column whispers'),
@@ -4133,6 +4141,7 @@ function foldFrame(out,m){
     if(e.dmg) out.dmg+=e.dmg;
     if(e.fov) out.fovAim=e.fov;
     if(e.reticle!==undefined) out.reticle=e.reticle;
+    if(e.sights) out.sights=true;
   }else{
     if(e.pulse) out.pulse=true;
     if(e.flashlight) out.flashlight=true;
@@ -4230,7 +4239,7 @@ function resolveLane(col,out){
 }
 function resolveTool(tool){
   const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:24,silenced:false,
-             fovAim:0.62,flashlight:false,pulse:false,reticle:0,columns:[],shots:[]};
+             fovAim:0.62,flashlight:false,pulse:false,reticle:0,sights:false,columns:[],shots:[]};
   if(tool) for(const col of toolColumns(tool)){
     const lane=resolveLane(col,out);
     lane.cycleRef=col.cycleRef; lane.micro=!!col.micro; lane.x=col.x;
@@ -8045,6 +8054,7 @@ function frame(){
   gl.uniform1i(U.uEditCount,SDF_EDITS.length);
   gl.uniform1i(U.uGlobCount,GLOBS.length);
   gl.uniform1i(U.uReticle,(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0);
+  gl.uniform1f(U.uSights, resT&&resT.sights?1:0);
   for(let i=0;i<GLOBS.length;i++) gl.uniform4f(U.uGlobs[i],GLOBS[i].x,GLOBS[i].y,GLOBS[i].z,GLOBS[i].r);
   for(let i=0;i<SDF_EDITS.length;i++){
     const ed=SDF_EDITS[i];
