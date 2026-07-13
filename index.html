@@ -82,11 +82,11 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #scopeGlass.on{opacity:1;}
 #scopeGlass::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   width:78vmin;height:78vmin;border-radius:50%;
-  background:radial-gradient(circle, rgba(40,120,90,.05) 0%, rgba(40,120,90,.10) 62%, rgba(40,120,90,.17) 100%);}
+  background:radial-gradient(circle, rgba(60,150,110,.03) 0%, rgba(60,150,110,.06) 62%, rgba(60,150,110,.10) 100%);}
 #scopeGlass::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   width:78vmin;height:78vmin;border-radius:50%;
-  box-shadow:0 0 0 6px #14150f, 0 0 0 7px rgba(200,205,190,.25), 0 0 0 100vmax rgba(4,5,3,.92);}
-#scopeGlass[data-optic="1"]::before{background:radial-gradient(circle, rgba(150,40,40,.05) 0%, rgba(120,30,30,.12) 62%, rgba(90,20,20,.18) 100%);}
+  box-shadow:0 0 0 6px #14150f, 0 0 0 7px rgba(200,205,190,.25), 0 0 0 100vmax rgba(4,5,3,.55);}
+#scopeGlass[data-optic="1"]::before{background:radial-gradient(circle, rgba(190,70,70,.03) 0%, rgba(170,60,60,.07) 62%, rgba(150,50,50,.10) 100%);}
 
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
 #backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
@@ -1278,7 +1278,8 @@ float sdGun(vec3 p, bool cfgd){
   d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
   d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
   if(uSights>0.5){ d=min(d, sdBox(p-vec3(-0.015,0.115,0.10), vec3(0.006,0.022,0.012))); d=min(d, sdBox(p-vec3(0.015,0.115,0.10), vec3(0.006,0.022,0.012))); } // iron sight — a NOTCH (hollow middle) to center the target in, not a solid post that blocks the aim
-  if(uReticle==1||uReticle==2){ vec3 hp=p-vec3(0.0,0.118,0.05); d=min(d, max(sdBox(hp,vec3(0.034,0.030,0.055)), -sdBox(hp,vec3(0.026,0.022,0.09)))); } // red-dot(1)/holo(2) BOX HOUSING — a hollow-window optic block on the receiver (geometry, not a DOM frame)
+  if(uReticle==1){ vec3 hp=p-vec3(0.0,0.118,0.05); float rd=sdCapsule(hp, vec3(0.0,0.0,-0.008), vec3(0.0,0.0,0.008), 0.034); rd=max(rd, -sdCapsule(hp, vec3(0.0,0.0,-0.06), vec3(0.0,0.0,0.06), 0.026)); d=min(d, rd); } // red dot — SHALLOW cylindrical ring you sight through
+  else if(uReticle==2){ vec3 hp=p-vec3(0.0,0.118,0.05); d=min(d, max(sdBox(hp,vec3(0.034,0.030,0.028)), -sdBox(hp,vec3(0.026,0.022,0.09)))); } // holo — box housing, HALF as deep
   if(cfgd){
     if(uToolCfg.x>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.075,0.34), vec3(0.0,0.075,0.45), 0.032)); // suppressor
     if(uToolCfg.y>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.135,0.00), vec3(0.0,0.135,0.11), 0.026)); // long glass
@@ -1456,8 +1457,9 @@ vec2 map(vec3 p){
         if(d<res.x) res=vec2(d,20.0);
       }
     }else if(uHasTool>0.5){
-      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.215:-0.05)), uAim);   // ADS y: iron/red-dot(1)/holo(2) ride -0.115; magnified 3×/4× (>=3) stay low -0.215; a BARE tool (no reticle) rides near eye level -0.05
-      vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, 0.46-uBob.z);
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.215:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 low -0.215; BARE -0.09 (lowered a touch for see-past visibility)
+      float gz=0.46 - uAim*((uReticle==1||uReticle==2)?0.10:0.0);   // red-dot/holo: pull the gun ~0.10 CLOSER at full ADS so you sight THROUGH the housing window
+      vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
       // lengths compressed and clamped so a legendary chain reads long without
@@ -2290,7 +2292,7 @@ LEVELS.area1={
               'beltFeeder','pulse','lantern','beltFeeder',
               'rucksack','helmetRig','platesH','harnessH',
               'cyanide','aloe','ration','gummies',
-              'barrelE','barrelL','platL','tool','scope3x','autoSear','burstCam']
+              'barrelE','barrelL','platL','tool','scope3x','autoSear','burstCam','scopeAdapter']
     },
     regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
                  testing:['mods','common','rare'], tentsA:['common','gear','gear'],
@@ -2851,7 +2853,7 @@ class Magazine extends Item{
     opts=opts||{}; this.adsTier=opts.adsTier||1; this.reloadMode=opts.reloadMode||'single'; this.spreadMul=opts.spreadMul||1; this.powder=!!opts.powder; this.anyCaliber=!!opts.anyCaliber; this.reloadTime=opts.reloadTime||0.6; }  // reloadTime = per-shell single-load cadence (barrel tiers speed up) // powder mag powders any round; anyCaliber takes any round; adsTier 1/2/3 = ADS+/++/+++ ; reloadMode 'single' (one round per reload) | 'mag' (whole-mag swap) ; spreadMul steadies the sniper tubes (feature 19)
   get acceptedType(){ return this.acceptedTypes[0]; }   // back-compat: single-caliber reads (~12 call sites unchanged)
   get renderType(){ return 2; }
-  desc(){ return 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
+  desc(){ return this.powder ? 'Powder Mag · fires ANY loaded round with NO bolt core — feeder mods ride free (1 round each)' : 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
 }
 function magType(m){ return m&&m.loaded>0 ? (m.loadedType||m.acceptedTypes[0]) : null; }   // the caliber chambered right now — fire-time damage (C12) reads this
 function magAccepts(m,t){ return !!m && (m.acceptedTypes.indexOf(t)>=0 || m.anyCaliber); }    // multi-caliber acceptance; a Powder Mag (anyCaliber) takes any round
@@ -3154,7 +3156,7 @@ const ITEM_DEFS={
   ironSights: ()=>new ToolMod('Iron Sights','#8a8f96','stat',{sights:true, reticle:5, unique:'fov'},'Bare steel post and notch · lines up the honest way'),
   scope2x:    ()=>new ToolMod('2× Optic','#283593','stat',{fov:0.31,spread:0.74,unique:'fov',reticle:3},'Twice as close, steadier hands · spread ×0.74'),
   scope3x:    ()=>new ToolMod('3× Optic','#1a237e','stat',{fov:0.21,spread:0.60,unique:'fov',reticle:4},'The far made near · spread ×0.60'),
-  scopeAdapter:()=>new ToolMod('Scope Adapter','#00695c','stat',{unique:'fov',adapter:true,near:{reticle:1,fov:0.60,spread:0.92},far:{reticle:3,fov:0.31,spread:0.74}},'[V] flips it: red dot ⇄ 2× — close and far on one rail'),
+  scopeAdapter:()=>{ const m=new ToolMod('Scope Adapter','#00695c','stat',{unique:'fov',adapter:true},'[V] cycles between the two sights mounted on it'); m.invCols=2; m.invRows=1; m.inv=[[null,null]]; m.opticSel=0; return m; },
   suppressor: ()=>new ToolMod('Suppressor','#37474f','muzzle',{silenced:true},'Muzzle slot · this column whispers'),
   heavyBarrel:()=>new ToolMod('Heavy Frame','#4e5a63','stat',{dmg:8,spread:0.85},'+8 hurt, steadier'),
   compensator:()=>new ToolMod('Compensator','#546e7a','muzzle',{spread:0.55},'Muzzle slot · this column, spread ×0.55'),
@@ -3599,6 +3601,8 @@ function consumeHeld(){
   document.getElementById('crosshair').classList.remove('carrying');
 }
 
+// a SIGHT = any fov-class rack part that is NOT the adapter itself (the 5 reticles: iron/dot/holo/2×/3×)
+function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.unique==='fov' && !it.effect.adapter; }
 function interactInventory(){
   const f=focusGrid(); if(!f.grid&&!f.rack&&!f.equipCol) return;
   clampCursor(f);
@@ -3664,6 +3668,9 @@ function interactInventory(){
       playSound('reload'); refreshInvUI(); return;
     }
     if(it===inspectItem || (f.rack&&it===f.rack)){ playSound('empty'); return; }   // no nesting a tool in itself
+    // Scope Adapter is a SIGHTS-ONLY 2-slot container — its grid takes reticles, nothing else
+    if(f.inspectGrid && inspectItem && inspectItem.effect && inspectItem.effect.adapter && !isSight(it)){
+      toast('SIGHTS ONLY'); playSound('empty'); return; }
 
     if(f.rack){
       const ref=refAt(f);
@@ -4241,7 +4248,6 @@ function updateHeldPhysics(dt){
 // ============================================================
 function freshPend(){ return {dmg:0,vel:1,bounce:0,pierce:0,grav:0,twin:1,silent:false,fuse:0,timer:0,split:0,contact:false,burn:0,bleed:false,boomerang:false,homing:0,surcharge:0,laser:false,refund:false,surchargeHard:0,chaos:0}; }
 // fold one stat/util mod into the whole-tool frame — identical to the old fold
-let _foldOpticMode=0;   // 0 near · 1 far — set per-resolve by resolveTool from tool.opticMode, read by the Scope Adapter fold below
 function foldFrame(out,m){
   const e=m.effect;
   if(m.cat==='stat'){
@@ -4250,7 +4256,7 @@ function foldFrame(out,m){
     if(e.burst) out.burst=e.burst;
     if(e.spread) out.spread*=e.spread;
     if(e.dmg) out.dmg+=e.dmg;
-    if(e.adapter){ const p=_foldOpticMode?e.far:e.near; out.reticle=p.reticle; out.fovAim=p.fov; out.spread*=p.spread; out.hasAdapter=true; }   // Scope Adapter: one optic slot, two profiles switched by tool.opticMode
+    if(e.adapter){ const held=(m.inv?m.inv.flat():[]).filter(Boolean); const pick=held.length?held[(m.opticSel||0)%held.length]:null; if(pick) foldFrame(out,pick); out.hasAdapter=true; out.adapterItem=m; }   // Scope Adapter: 2-slot sight container; the active held sight drives reticle/fov/spread/sights
     if(e.fov) out.fovAim=e.fov;
     if(e.reticle!==undefined) out.reticle=e.reticle;
     if(e.sights) out.sights=true;
@@ -4356,7 +4362,6 @@ function resolveLane(col,out){
   return lane;
 }
 function resolveTool(tool){
-  _foldOpticMode=(tool&&tool.opticMode)?1:0;   // Scope Adapter: pick close/long profile for this resolve
   const out={fireRate:0.42,auto:false,burst:1,spread:0.05,dmg:24,silenced:false,
              fovAim:0.62,flashlight:false,pulse:false,reticle:0,sights:false,columns:[],shots:[]};
   if(tool) for(const col of toolColumns(tool)){
@@ -4762,14 +4767,16 @@ function physgunInputTick(){                // once per frame, right after the p
 }
 function fireDownEff(){ return physgunRes()?_pgFire:down('fire'); }
 function firePressedEff(){ return physgunRes()?_pgFireEdge:pressed('fire'); }
-// SCOPE ADAPTER — flip the tool between its close (red dot) and long (2×) profile, then re-fold
+// SCOPE ADAPTER — cycle which of the two mounted sights is active, then re-fold
 function toggleOptic(){
   if(!activeTool) return;
   const r=activeTool._res||(activeTool._res=resolveTool(activeTool));
-  if(!r.hasAdapter) return;                          // only tools carrying a Scope Adapter switch
-  activeTool.opticMode=activeTool.opticMode?0:1;
+  const ad=r.adapterItem; if(!ad) return;           // only tools carrying a Scope Adapter switch
+  const held=(ad.inv?ad.inv.flat():[]).filter(Boolean);
+  if(held.length<2){ toast(held.length?'ONE SIGHT MOUNTED':'NO SIGHTS'); playSound('empty'); return; }
+  ad.opticSel=((ad.opticSel||0)+1)%held.length;
   activeTool._res=resolveTool(activeTool);
-  toast(activeTool.opticMode?'OPTIC · 2×':'OPTIC · RED DOT'); playSound('reload');
+  toast('OPTIC · '+dispName(held[ad.opticSel]).toUpperCase()); playSound('reload');
 }
 const _beamLanes=new Map();               // laneIdx -> {acc, engaged}
 let _swing=null;   // {ax,ay,az,len,li} — the grip thread hooked STATIC WORLD: the player is the moving end
@@ -5846,9 +5853,11 @@ class Zealot{
     this._believer=runRng()<0.10;         // feature 15: 1 in 10 walks in as a tool-less bomber
     this.health=this._believer?60:100;
     this.yaw=runRng()*6.28;
+    this.patrolDir=runRng()*6.28; this.dwellT=0;   // LINE PATROL: straight-line heading + short mill-in-place timer at obstacles
     this.state=0;                       // 0 patrol · 1 suspicious · 2 alarm
     this.detection=0;
     this.investigate=null;
+    this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;   // COVER/SUPPRESS squad state (set on alarm)
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
@@ -5861,6 +5870,23 @@ class Zealot{
   newPatrolTarget(){
     const a=runRng()*Math.PI*2, r=2+runRng()*6;
     return new Vec3(this.startPos.x+Math.cos(a)*r, 0, clamp(this.startPos.z+Math.sin(a)*r,-46,46));
+  }
+  // LINE PATROL heuristics — pure SDF/ground reads, no navmesh
+  patrolBlocked(fx,fz){                                 // wall/prop or steep incline a step ahead of the current heading
+    const ahead=1.6, hx=this.position.x+fx*ahead, hz=this.position.z+fz*ahead;
+    if(Math.abs(hz)>46) return true;                    // stay off the canyon walls (mirrors the old z-clamp)
+    if(mapWorldJS(hx,this.position.y+0.9,hz)<0.7) return true;   // solid at body height (radius 0.42 + buffer)
+    const gh=activeLevel?levelGroundJS:terrainHJS;      // slope from BARE ground — props already handled above
+    const rise=gh(hx,hz)-gh(this.position.x,this.position.z);
+    return rise>ahead*0.8 || rise<-1.8;                 // too steep to climb, or a drop it would tumble down
+  }
+  patrolAvoidDir(fx,fz){                                // fresh heading biased away from the blocking obstacle
+    const base=Math.atan2(fx,fz), side=runRng()<0.5?1:-1;
+    for(const o of [side*1.05,-side*1.05,side*1.9,-side*1.9,Math.PI]){
+      const a=base+o;
+      if(!this.patrolBlocked(Math.sin(a),Math.cos(a))) return a;
+    }
+    return base+Math.PI;                                // boxed in — about-face
   }
   buildTool(){
     const t=ITEM_DEFS.tool(); t.customName='ZEALOT TOOL';   // customName (not .name) so the lore name survives save/load
@@ -5987,7 +6013,10 @@ class Zealot{
     const dx=px-this.position.x, dz=pz-this.position.z;
     const dist=Math.hypot(dx,dz);
     const eyeY=this.position.y+1.55;
-    const seesLOS = dist<34*fogEye()*dayEye() && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz));
+    const losRay = FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz);   // pure sightline (reused for cover)
+    const seesLOS = dist<34*fogEye()*dayEye() && losRay;
+    this.inCover = this.state===2 && this.alarmRole==='cover' && !!this.coverPoint && this.position.distanceTo(this.coverPoint)<1.2;   // only an ALARMED cover-role zealot committed to its cover point counts — not oblivious patrollers, facing-away enemies, or Believers
+    if(this._coveringFire>0) this._coveringFire-=dt;
     const fwdX=Math.sin(this.yaw), fwdZ=Math.cos(this.yaw);
     const cone=(fwdX*dx+fwdZ*dz)/Math.max(0.001,dist);
     const fovCos=Math.cos((P('enemyFovDeg')*Math.PI/180)/2);
@@ -6017,13 +6046,16 @@ class Zealot{
     // --- state machine ---
     if(this.detection>=1&&this.state<2){
       this.state=2; playSound('alert');
+      const _hasSup=enemies.some(o=>o!==this&&o.health>0&&o.state===2&&o.alarmRole==='suppress');   // guarantee >=1 suppressor per alarmed squad so a small all-cover squad never freezes (the fire-gate always has covering fire)
+      this.alarmRole = _hasSup ? (runRng()<0.5?'cover':'suppress') : 'suppress';   // COVER/SUPPRESS role as it wakes — the first waker always suppresses
+      this.coverPoint=null; this._coverT=0;
       document.getElementById('alertFlash').style.opacity=1;
       setTimeout(()=>document.getElementById('alertFlash').style.opacity=0,400);
       for(const o of enemies){ if(o!==this&&o.health>0&&o.position.distanceTo(this.position)<18){
         o.detection=Math.max(o.detection,0.65); o.investigate=new Vec3(px,0,pz); if(o.state===0)o.state=1; } }
     }
-    if(this.state===2&&this.detection<0.35) this.state=1;
-    if(this.state===1&&this.detection<=0.02){ this.state=0; this.investigate=null; }
+    if(this.state===2&&this.detection<0.35){ this.state=1; this.alarmRole=null; this.coverPoint=null; }
+    if(this.state===1&&this.detection<=0.02){ this.state=0; this.investigate=null; this.alarmRole=null; this.coverPoint=null; }
 
     let speed=P('enemySpeed')*globSlow(this.position,this), moveTo=null, faceTo=null;   // glue is glue
     if(this.state===2){
@@ -6032,7 +6064,17 @@ class Zealot{
       if(seesLOS){
         this.lostSightT=0;
         if(this._believer){ moveTo=this.investigate; this.tryBoom(dt,dist); }   // a bomber only closes in — no retreat, no bullets
-        else{
+        else if(this.alarmRole==='cover'){
+          // SEEK COVER: sit on a spot that breaks the sightline; peek-fire only if the squad allows it
+          if(!this.coverPoint||this._coverT<=0){ this.coverPoint=this.findCover(px,pz); this._coverT=2.5; }
+          this._coverT-=dt;
+          if(this.coverPoint){
+            moveTo=this.coverPoint;
+            if(this.position.distanceTo(this.coverPoint)<1.0){ moveTo=null; }   // arrived — hold the cover
+          }else{ if(dist>7) moveTo=this.investigate; else if(dist<3) moveTo=new Vec3(this.position.x-dx/dist*2,0,this.position.z-dz/dist*2); }   // nowhere to hide — behave like a shooter
+          if(this.squadMayFire()) this.tryShoot(dt,dist,seesLOS);
+        }else{
+          // COVERING FIRE (suppress): press the attack and lay it down — exempt from fire-discipline (it IS the covering fire)
           if(dist>7) moveTo=this.investigate;
           else if(dist<3) moveTo=new Vec3(this.position.x-dx/dist*2,0,this.position.z-dz/dist*2);
           this.tryShoot(dt,dist,seesLOS);
@@ -6056,9 +6098,17 @@ class Zealot{
       }
     }else{
       speed*=0.55;
-      moveTo=this.targetPoint;
-      if(Math.hypot(this.targetPoint.x-this.position.x,this.targetPoint.z-this.position.z)<1) this.targetPoint=this.newPatrolTarget();
-      faceTo=this.targetPoint;
+      const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
+      if(this.dwellT>0){                                 // mill in place at a blocked spot, then resume on a fresh heading
+        this.dwellT-=dt;
+        this.yaw+=Math.sin(gameTime*1.7+this.startPos.x)*dt*1.5;
+        if(this.dwellT<=0) this.patrolDir=(this._reDir!=null)?this._reDir:runRng()*6.28;
+      }else if(this.patrolBlocked(fx,fz)){               // wall/steep ahead — pause briefly, pick a turn away
+        this.dwellT=1.5+runRng(); this._reDir=this.patrolAvoidDir(fx,fz);
+      }else{                                             // clear — walk the straight line
+        moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3);
+        faceTo=moveTo;
+      }
     }
 
     if(moveTo){
@@ -6090,6 +6140,33 @@ class Zealot{
       if(sy>this.position.y-0.7) this.position.y+=(sy-this.position.y)*Math.min(1,12*dt);
     }
   }
+  findCover(px,pz){                                  // ring-sample a nearby standable spot that breaks LOS to the player (~8 rays, throttled to a re-pick)
+    const y=this.position.y+0.9, py=playerPos.y+0.9;
+    let best=null,bestD=1e9;
+    for(let i=0;i<8;i++){
+      const a=i/8*6.283, r=3.0;
+      const cx=this.position.x+Math.cos(a)*r, cz=this.position.z+Math.sin(a)*r;
+      if(Math.abs(cz)>46) continue;                  // stay off the canyon walls
+      if(mapWorldJS(cx,y,cz)<0.5) continue;          // standable, not buried in a wall
+      if(losClearJS(cx,y,cz, px,py,pz)) continue;    // player can still see it — not cover
+      const d=(cx-this.position.x)**2+(cz-this.position.z)**2;
+      if(d<bestD){ bestD=d; best=new Vec3(cx,0,cz); }
+    }
+    return best;                                      // null = nothing nearby breaks LOS
+  }
+  squadMayFire(){                                     // SQUAD FIRE-DISCIPLINE: read-only scan of live allies within 18m (n<=maxEnemies)
+    if(this.alarmRole==='suppress') return true;      // the suppressor IS the covering fire — exempt
+    let allies=0,coverCnt=0,suppressing=false;
+    for(const o of enemies){
+      if(o===this||o.health<=0) continue;
+      if(o.position.distanceTo(this.position)>=18) continue;
+      allies++;
+      if(o._coveringFire>0) suppressing=true;         // (a) an ally is actively laying down fire
+      if(o.inCover) coverCnt++;                        // (b) allies dug into cover
+    }
+    if(allies===0) return true;                        // a lone zealot has no squad to coordinate with — it fights
+    return suppressing||coverCnt>2;
+  }
   tryShoot(dt,dist,seesLOS){
     if(this._dormant||this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
     const mag=toolMagazine(this.tool);
@@ -6109,6 +6186,7 @@ class Zealot{
     const aim=new Vec3(playerPos.x-origin.x,(playerPos.y+0.85)-origin.y,playerPos.z-origin.z).normalize();
     const base={spread:0.075,dmg:P('enemyDamage'),silenced:this.res.silenced};
     emitProjectile('enemy',origin,aim,shot,base,this);   // src: a boomerang flies home to ITS zealot
+    this._coveringFire=1.5;                               // squad-visible: it is actively laying down fire (decays in update)
     this.muzzle=1;
     const silent=shot.pend.silent||this.res.silenced;
     playSound(shot.kind==='spark'?'spark':(silent?'silenced':'shoot'));
@@ -6119,10 +6197,12 @@ class Zealot{
   tryBoom(dt,dist){                                  // feature 15: the Believer's whole attack — walk in and light the core
     if(this._dormant||this.health<=0) return;        // culled past the render cap can't act (so it can't mis-flag a self-kill)
     if(dist<2.8){
+      const gen=_worldGen;                           // teardown guard: the blast can kill the player → rebuild the world mid-frame
       const p=new Vec3(this.position.x,this.position.y+0.9,this.position.z);
       this.muzzle=1;                                 // the body flashes the tell
       this._selfBoom=true;                           // mark BEFORE the blast: a splash-death drops nothing
       explode({pos:p,kind:'boom',dmg:34,owner:'enemy',src:this});
+      if(gen!==_worldGen) return;                    // player died → this object is off a dead roster; don't die() into the fresh world
       if(this.health>0){ this.health=0; this.die(); }   // guarantee the bomber dies to its own blast even if splash undershot
     }
   }
@@ -6133,6 +6213,8 @@ class Zealot{
     this.startPos=this.position.clone();
     this._believer=runRng()<0.10; this._selfBoom=false;   // re-roll the bomber odds on every respawn
     this.health=this._believer?60:100; this.detection=0; this.state=0; this.investigate=null;
+    this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;
+    this.patrolDir=runRng()*6.28; this.dwellT=0;
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
     if(this._believer){ this.helm=this.plates=this.pack=null; }
@@ -6626,13 +6708,14 @@ function itemToJSON(it){
   if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
   if(it instanceof Tool){ j.slots=it.base.slots.map(itemToJSON); j.muzzle=itemToJSON(it.base.muzzle);
     j.cycle=it.baseCycle; j.wielded=(it===activeTool); }
-  if(it instanceof Armor && it.inv && !it.settingsDevice){
+  if((it instanceof Armor && it.inv && !it.settingsDevice) || (it instanceof ToolMod && it.effect && it.effect.adapter && it.inv)){
     j.inv=[];
     const seen=new Set();
     for(let r=0;r<it.invRows;r++) for(let c=0;c<it.invCols;c++){
       const ch=it.inv[r][c];
       if(ch&&!seen.has(ch)&&ch.x===c&&ch.y===r){ seen.add(ch); j.inv.push(itemToJSON(ch)); }
     }
+    if(it instanceof ToolMod) j.sel=it.opticSel||0;   // which mounted sight is active
   }
   return j;
 }
@@ -6664,6 +6747,14 @@ function itemFromJSON(j){
       else if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,it.inv,it.invCols,it.invRows)) placeInGrid(ch,cj.x,cj.y,it.inv);
       else autoPlace(ch,it.inv,it.invCols,it.invRows);
     }
+  }
+  if(it instanceof ToolMod && it.effect && it.effect.adapter && it.inv){
+    if(j.inv) for(const cj of j.inv){
+      const ch=itemFromJSON(cj); if(!ch||!isSight(ch)) continue;   // adapter holds SIGHTS only — drop anything else on load (a corrupt adapter-in-adapter would recurse foldFrame)
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,it.inv,it.invCols,it.invRows)) placeInGrid(ch,cj.x,cj.y,it.inv);
+      else autoPlace(ch,it.inv,it.invCols,it.invRows);
+    }
+    if(j.sel!==undefined) it.opticSel=j.sel|0;
   }
   return it;
 }
