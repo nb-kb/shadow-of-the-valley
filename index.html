@@ -2807,6 +2807,14 @@ class Magazine extends Item{
 }
 function magType(m){ return m&&m.loaded>0 ? (m.loadedType||m.acceptedTypes[0]) : null; }   // the caliber chambered right now — fire-time damage (C12) reads this
 function magAccepts(m,t){ return !!m && m.acceptedTypes.indexOf(t)>=0; }                    // multi-caliber acceptance (C13 barrel/shotgun mags)
+const AMMO={   // ballistic round catalog — read at FIRE time via magType(); energy cores (spark/boom/wave/...) never touch this
+  '9mm':      {dmg:24},                                          // standard — 24 == the chamber default, so 9mm is inert
+  '7.62':     {dmg:35, armorPen:0.5},                            // AP — harder hit, ignores half of armor (pen applied in the armor wave, C9)
+  'flechette':{dmg:5,  pellets:4, bleedChance:0.2, spread:0.5},  // a tight 4-pellet cluster, each light, 20% to open a bleed
+  'slug':     {mult:3, delay:0.45},                              // one heavy shell — 3x the chamber base, +0.45s tool delay
+  'buckshot': {mult:1, pellets:5, spread:2.2},                   // 5-pellet blast — close hits stack (~5x), the wide fan IS the range falloff
+  'powder':   {dmg:24, hitscan:true},                            // the owner's powder round — hitscan (wired with the powder-pulse path, C13)
+};
 const BARREL_TIERS={
   common:   {len:3,  spr:0.04, color:'#6e6a5e', w:1,h:2},
   uncommon: {len:5,  spr:0.03, color:'#4f7a5c', w:1,h:2},
@@ -4428,9 +4436,11 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
     });
     return;
   }
-  const count=Math.max(1,Math.round(p.twin));
+  const _am=(shot.kind==='bolt')?AMMO[shot._ammo]:null;                              // the ballistic round chambered this shot (player only); energy cores stay null
+  const _ballBase=_am?(_am.mult?base.dmg*_am.mult:_am.dmg+(base.dmg-24)):base.dmg;   // ammo sets the caliber base; stat mods (base.dmg-24) ride on top — 9mm==24 stays inert
+  const count=Math.max(1,Math.round(p.twin))*(_am&&_am.pellets?_am.pellets:1);       // flechette/buckshot fan several pellets per pull
   for(let i=0;i<count;i++){
-    const spr=base.spread*(count>1?1.8:1.0)*(playerPos.isAiming&&owner==='player'?0.45:1);
+    const spr=base.spread*(count>1?1.8:1.0)*(_am&&_am.spread?_am.spread:1)*(playerPos.isAiming&&owner==='player'?0.45:1);
     const d=new Vec3(dir.x+(runRng()-0.5)*spr*2, dir.y+(runRng()-0.5)*spr*2, dir.z+(runRng()-0.5)*spr*2).normalize();
     const kind=shot.kind;
     const speed=(kind==='spark'?34:kind==='pick'?60:kind==='decoy'?22:kind==='boom'?26:kind==='saw'?26:kind==='warp'?40:kind==='slug'?48:kind==='wave'?10:kind==='orb'?6:82)*p.vel;
@@ -4439,13 +4449,13 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:kind==='orb'?6.0:kind==='saw'?0.16:2.2, owner, kind,   // saw reach ≈ 4m — SWIFT is its reach knob; orb: 6s aloft, then the payload pops
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything (slug: ×3 TOOL hurt, pend added after)
-      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:base.dmg)+p.dmg)*chaosMul(p.chaos)*(shot.small||1),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand; small: drummed half-beat (v22 C2)
+      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:_ballBase)+p.dmg)*chaosMul(p.chaos)*(shot.small||1),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand; small: drummed half-beat (v22 C2)
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       timerT:p.timer||0,                                 // TIMER: the bell rides the flight
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null, tool:_tl,
-      burn:Math.round((p.burn||0)*(shot.small||1)), bleed:!!p.bleed, chaos:p.chaos||0,
+      burn:Math.round(((p.burn||0)+(_am&&_am.burn||0))*(shot.small||1)), bleed:(!!p.bleed)||(!!(_am&&_am.bleedChance)&&runRng()<_am.bleedChance), armorPen:(_am&&_am.armorPen)||0, chaos:p.chaos||0,
       col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[0.75,0.75,0.55]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[0.78,0.55,0.15]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; width tiers: sum<1.5 fat, <2.8 gossamer, ≥2.8 hairline — slug brass stays under 1.5 (fat shell), saw steel rides the gossamer tier
       silent:p.silent||base.silenced,
     });
@@ -4508,7 +4518,7 @@ function tryFirePlayer(dt){
   // (click), fire the first that fits, advance ITS cycle. A column that can
   // afford nothing HOLDS its cycle and retries next pull. Expensive cores
   // brown out first at the margin; the cheap bolt lane keeps you shooting.
-  let firedAny=false, skippedAny=false, loudest=0, kicked=0;
+  let firedAny=false, skippedAny=false, loudest=0, kicked=0, firedDelay=0;
   const cols=res.columns;
   for(let ci=0;ci<cols.length;ci++){
     const lane=cols[ci];
@@ -4530,6 +4540,7 @@ function tryFirePlayer(dt){
     }
     if(pick<0) continue;                                 // starved column: cycle HOLDS
     const sh=lane.shots[pick];
+    if(sh.kind==='bolt'){ sh._ammo=magType(mag)||'9mm'; const _sa=AMMO[sh._ammo]; if(_sa&&_sa.delay) firedDelay=Math.max(firedDelay,_sa.delay); }   // C12: stamp the chambered caliber for the emit; slug ammo slows the tool
     if(burstLaser(res,sh)){                              // queue the volley — pays per pulse, first lands this frame
       _laserBursts.push({lane,sh,res,left:res.burst,t:0});
       lane.cycleRef.set((pick+1)%n);
@@ -4570,7 +4581,7 @@ function tryFirePlayer(dt){
     return;
   }
   if(loudest>0) addNoise(playerPos.x,playerPos.y,playerPos.z,loudest);
-  fireCooldown=res.fireRate;
+  fireCooldown=res.fireRate+firedDelay;
   updateToolReadout();
 }
 
