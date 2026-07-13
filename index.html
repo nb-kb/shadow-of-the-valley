@@ -110,13 +110,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .termRow .trMeta{color:var(--dust);font-size:13px;}
 .termHint{margin-top:12px;font-size:12px;letter-spacing:.12em;color:var(--dust);}
 /* DIEGETIC: the terminal shrinks onto the slab's phosphor — positioned per-frame by terminalFrame() */
-#terminalUI.diegetic{min-width:0;width:210px;padding:9px 12px;transform-origin:50% 50%;will-change:left,top,transform;
+#terminalUI.diegetic{min-width:0;width:340px;padding:14px 18px;transform-origin:50% 50%;will-change:left,top,transform;
   border-color:rgba(120,200,150,.55);background:rgba(4,12,8,.97);
   box-shadow:0 0 22px rgba(20,80,50,.45) inset, 0 0 26px rgba(6,20,14,.85);}
-#terminalUI.diegetic .stencil{font-size:12px;letter-spacing:.16em;}
-#terminalUI.diegetic .termRow{font-size:11px;padding:4px 6px;margin:2px 0;letter-spacing:.08em;}
-#terminalUI.diegetic .termRow .trMeta{font-size:9px;}
-#terminalUI.diegetic .termHint{font-size:9px;margin-top:8px;}
+#terminalUI.diegetic .stencil{font-size:17px;letter-spacing:.16em;}
+#terminalUI.diegetic .termRow{font-size:15px;padding:6px 9px;margin:3px 0;letter-spacing:.08em;}
+#terminalUI.diegetic .termRow .trMeta{font-size:12px;}
+#terminalUI.diegetic .termHint{font-size:12px;margin-top:10px;}
 /* the crosshair's cursor glyph — a little pointer parked at screen-center over the mini-display */
 #termCursor{position:absolute;top:50%;left:50%;width:15px;height:15px;z-index:53;display:none;pointer-events:none;
   background:var(--bone);filter:drop-shadow(0 0 2px #000);
@@ -1278,6 +1278,7 @@ float sdGun(vec3 p, bool cfgd){
   d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
   d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
   if(uSights>0.5){ d=min(d, sdBox(p-vec3(-0.015,0.115,0.10), vec3(0.006,0.022,0.012))); d=min(d, sdBox(p-vec3(0.015,0.115,0.10), vec3(0.006,0.022,0.012))); } // iron sight — a NOTCH (hollow middle) to center the target in, not a solid post that blocks the aim
+  if(uReticle==1||uReticle==2){ vec3 hp=p-vec3(0.0,0.118,0.05); d=min(d, max(sdBox(hp,vec3(0.034,0.030,0.055)), -sdBox(hp,vec3(0.026,0.022,0.09)))); } // red-dot(1)/holo(2) BOX HOUSING — a hollow-window optic block on the receiver (geometry, not a DOM frame)
   if(cfgd){
     if(uToolCfg.x>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.075,0.34), vec3(0.0,0.075,0.45), 0.032)); // suppressor
     if(uToolCfg.y>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.135,0.00), vec3(0.0,0.135,0.11), 0.026)); // long glass
@@ -1455,7 +1456,7 @@ vec2 map(vec3 p){
         if(d<res.x) res=vec2(d,20.0);
       }
     }else if(uHasTool>0.5){
-      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:-0.215), uAim);   // ADS y raised -0.215→-0.115: iron post (uSights) AND red-dot(1)/holo(2) ride the high line so the dot lands on the center ray; magnified 3×/4× stay low
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.215:-0.05)), uAim);   // ADS y: iron/red-dot(1)/holo(2) ride -0.115; magnified 3×/4× (>=3) stay low -0.215; a BARE tool (no reticle) rides near eye level -0.05
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, 0.46-uBob.z);
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
@@ -6559,7 +6560,7 @@ function terminalFrame(){
       const fov=playerPos.currentFov||1;                     // shader normalizes uv by iResolution.y → CSS px, DPR cancels
       const ndcx=(wx*b.right.x+wy*b.right.y+wz*b.right.z)/fwd/fov;
       const ndcy=(wx*b.up.x   +wy*b.up.y   +wz*b.up.z   )/fwd/fov;
-      const k=Math.max(0.42,Math.min(1.25,0.72/fwd));        // rough in-world size read, clamped legible
+      const k=Math.max(0.55,Math.min(1.7,1.05/fwd));        // rough in-world size read, clamped legible — bigger ValleyOS screen
       ui.style.left=(innerWidth/2 +ndcx*innerHeight)+'px';
       ui.style.top =(innerHeight/2-ndcy*innerHeight)+'px';
       ui.style.transform='translate(-50%,-50%) scale('+k.toFixed(3)+')';
@@ -6567,10 +6568,13 @@ function terminalFrame(){
     }
   }
   if(!placed){ ui.style.left='50%'; ui.style.top='50%'; ui.style.transform='translate(-50%,-50%)'; }
-  // the fixed center crosshair picks a row — hit-test screen-center against each row's on-screen box
-  const rows=document.getElementById('termRows').children, cx=innerWidth/2, cy=innerHeight/2;
-  for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect();
-    if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ if(i!==termSel){ termSel=i; renderTerminal(); } break; } }
+  // the fixed center crosshair picks a row — but ONLY while the MOUSE is moving, so the stick/dpad
+  // (termNav) can nav without the hit-test snapping the selection back to the centered row each frame
+  if(INPUT.mdx||INPUT.mdy){
+    const rows=document.getElementById('termRows').children, cx=innerWidth/2, cy=innerHeight/2;
+    for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect();
+      if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ if(i!==termSel){ termSel=i; renderTerminal(); } break; } }
+  }
 }
 function renderTerminal(){
   const sc=TERM_SCREENS[termScreen]();
@@ -7646,8 +7650,9 @@ const _c1=new Vec3(), _c2=new Vec3();
 function updatePlayer(dt){
   const menus=uiMenusOpen();
   // look
-  const lx=INPUT.mdx*0.0022*INPUT.sensMouse + INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1);
-  let ly=INPUT.mdy*0.0022*INPUT.sensMouse + INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1);
+  const _pl=isTerminalOpen?0:1;   // terminal: freeze PAD look so stick drift can't drag the crosshair down; mouse still aims, stick navs rows (termNav)
+  const lx=INPUT.mdx*0.0022*INPUT.sensMouse + _pl*INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1);
+  let ly=INPUT.mdy*0.0022*INPUT.sensMouse + _pl*INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1);
   if(INPUT.invertY) ly=-ly;
   if(!menus && (pointerLocked()||Math.abs(INPUT.padAxes[2])>0||Math.abs(INPUT.padAxes[3])>0)){
     cameraYaw+=lx;
@@ -8195,7 +8200,7 @@ function frame(){
   // ---- camera & menu presentation ----
   menuAnim+=((uiMenusOpen()?1:0)-menuAnim)*Math.min(1,9*dt);
   if(isInventoryOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2; else menuMode=0;
-  const tYawOff=0, tPitchOff=uiMenusOpen()?-0.10:0;    // the camera dips to the raised prop
+  const tYawOff=0, tPitchOff=(isToolMenuOpen&&activeTool)?-0.10:0;    // the camera dips to the raised prop — ONLY when opening the tool rack WITH a tool (no dip for the bag/crate or empty hands)
   playerPos.camYawOffset+=(tYawOff-playerPos.camYawOffset)*10*dt;
   playerPos.camPitchOffset+=(tPitchOff-playerPos.camPitchOffset)*8*dt;
   const finalYaw=cameraYaw+playerPos.camYawOffset;
