@@ -2797,10 +2797,16 @@ class Ammunition extends Item{
   desc(){ return 'Rounds ×'+this.count+' · right-click feeds the wielded magazine'; }
 }
 class Magazine extends Item{
-  constructor(name,color,acceptedType,maxCapacity){ super(name,1,2,color); this.acceptedType=acceptedType; this.maxCapacity=maxCapacity; this.loaded=0; }
+  constructor(name,color,acceptedTypes,maxCapacity,opts){ super(name,1,2,color);
+    this.acceptedTypes=Array.isArray(acceptedTypes)?acceptedTypes.slice():[acceptedTypes];   // one or more calibers this mag will hold
+    this.maxCapacity=maxCapacity; this.loaded=0; this.loadedType=null;                        // loadedType = the caliber currently chambered (multi-cal mags); null falls back to acceptedTypes[0]
+    opts=opts||{}; this.adsTier=opts.adsTier||1; this.reloadMode=opts.reloadMode||'single'; } // adsTier 1/2/3 = ADS+/++/+++ ; reloadMode 'single' (auto-refill) | 'mag' (whole-mag swap)
+  get acceptedType(){ return this.acceptedTypes[0]; }   // back-compat: single-caliber reads (~12 call sites unchanged)
   get renderType(){ return 2; }
   desc(){ return 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
 }
+function magType(m){ return m&&m.loaded>0 ? (m.loadedType||m.acceptedTypes[0]) : null; }   // the caliber chambered right now — fire-time damage (C12) reads this
+function magAccepts(m,t){ return !!m && m.acceptedTypes.indexOf(t)>=0; }                    // multi-caliber acceptance (C13 barrel/shotgun mags)
 const BARREL_TIERS={
   common:   {len:3,  spr:0.04, color:'#6e6a5e', w:1,h:2},
   uncommon: {len:5,  spr:0.03, color:'#4f7a5c', w:1,h:2},
