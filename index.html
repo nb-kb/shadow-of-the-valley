@@ -1440,7 +1440,7 @@ vec2 map(vec3 p){
         if(d<res.x) res=vec2(d,20.0);
       }
     }else if(uHasTool>0.5){
-      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0,-0.115), uAim);   // ADS y raised -0.215→-0.115 so the iron post (local y 0.115) lands on the center ray
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, uSights>0.5?-0.115:-0.215), uAim);   // ADS y raised -0.215→-0.115 so the iron post (local y 0.115) lands on the center ray
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, 0.46-uBob.z);
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
@@ -3054,7 +3054,7 @@ const ITEM_DEFS={
   // --- basic rack mods (order-independent stats) ---
   reflex:     ()=>new ToolMod('Red Dot','#c62828','stat',{fov:0.60,spread:0.92,unique:'fov',reticle:1},'A red point of agreement · spread ×0.92'),
   scope:      ()=>new ToolMod('Holo Sight','#00897b','stat',{fov:0.56,spread:0.86,unique:'fov',reticle:2},'A ring of light that does not lie · spread ×0.86'),
-  ironSights: ()=>new ToolMod('Iron Sights','#8a8f96','stat',{fovAim:0.62, sights:true, reticle:5},'Bare steel post and notch · lines up the honest way'),
+  ironSights: ()=>new ToolMod('Iron Sights','#8a8f96','stat',{sights:true, reticle:5, unique:'fov'},'Bare steel post and notch · lines up the honest way'),
   scope2x:    ()=>new ToolMod('2× Optic','#283593','stat',{fov:0.31,spread:0.74,unique:'fov',reticle:3},'Twice as close, steadier hands · spread ×0.74'),
   scope3x:    ()=>new ToolMod('3× Optic','#1a237e','stat',{fov:0.21,spread:0.60,unique:'fov',reticle:4},'The far made near · spread ×0.60'),
   suppressor: ()=>new ToolMod('Suppressor','#37474f','muzzle',{silenced:true},'Muzzle slot · this column whispers'),
@@ -3675,6 +3675,7 @@ function renderInspect(){
   // menus open — or the carried item's own pockets, drawn over the world (△ tap)
   const carriedOpen=heldWorld&&heldWorld.w.item===inspectItem;
   const rnBtn=document.getElementById('inspectRename'), rnInp=document.getElementById('inspectNameInput');
+  if(window.__renameStale) window.__renameStale();          // if inspectItem changed while an editor was open, close it
   if(!inspectItem || !(uiMenusOpen()||carriedOpen)){ ui.classList.add('hidden'); rnBtn.classList.add('hidden'); rnInp.classList.add('hidden'); return; }
   ui.classList.remove('hidden');
   document.getElementById('inspectTitle').textContent=dispName(inspectItem).toUpperCase()+' — POCKETS';
@@ -6418,7 +6419,7 @@ function saveMeta(slot){
   try{
     const raw=ls.getItem(SAVE_KEY(slot)); if(!raw) return null;
     const b=JSON.parse(raw);
-    if(!(b.version>=2&&b.version<=SAVE_VER)||typeof b.equip!=='object') return null;   // accept v2..SAVE_VER: bumping the ver must not orphan older saves
+    if(!(Number.isInteger(b.version)&&b.version>=2&&b.version<=SAVE_VER)||typeof b.equip!=='object') return null;   // accept v2..SAVE_VER: bumping the ver must not orphan older saves
     let n=0; const walk=j=>{ if(!j) return; n++; (j.inv||[]).forEach(walk); (j.slots||[]).forEach(walk); walk(j.muzzle); };
     for(const k in b.equip) walk(b.equip[k]);
     walk(b.wield);
@@ -7010,7 +7011,7 @@ function updateRackDock(){
     if(it instanceof Magazine) extra=' · '+it.loaded+'/'+it.maxCapacity;
     if(it instanceof Ammunition) extra=' · ×'+it.count;
     if(it instanceof Barrel) extra=' · +'+it.addedSpread.toFixed(2)+' spread';
-    body.innerHTML='<div class="tt-name">'+it.name+'</div><div class="tt-cat">'+cat+extra
+    body.innerHTML='<div class="tt-name">'+dispName(it)+'</div><div class="tt-cat">'+cat+extra
       +'</div><div class="tt-body">'+it.desc()+'</div>';
     body.style.opacity=1;
   }else if(c&&c.muzzle){
@@ -7124,8 +7125,10 @@ document.getElementById('invertY').addEventListener('change',e=>INPUT.invertY=e.
 // ---- rename control: per-instance customName, entered on the inspect panel ----
 (function(){
   const btn=document.getElementById('inspectRename'), inp=document.getElementById('inspectNameInput');
+  let renameTarget=null;                                    // the item the editor opened on — commit lands here even if inspectItem changes underneath
   function openRename(){
     if(!inspectItem) return;
+    renameTarget=inspectItem;
     inp.value=dispName(inspectItem);
     inp.classList.remove('hidden'); btn.classList.add('hidden');
     inp.focus(); inp.select();
@@ -7133,10 +7136,12 @@ document.getElementById('invertY').addEventListener('change',e=>INPUT.invertY=e.
   function commitRename(){
     if(inp.classList.contains('hidden')) return;             // already closed — a post-Enter blur, ignore
     inp.classList.add('hidden');
-    if(inspectItem) inspectItem.customName=sanitizeName(inp.value)||null;
+    if(renameTarget) renameTarget.customName=sanitizeName(inp.value)||null;
+    renameTarget=null;
     playSound('click'); refreshInvUI();
   }
-  function cancelRename(){ inp.classList.add('hidden'); refreshInvUI(); }   // no commit; refresh re-shows the button
+  function cancelRename(){ inp.classList.add('hidden'); renameTarget=null; refreshInvUI(); }   // no commit; refresh re-shows the button
+  window.__renameStale=()=>{ if(!inp.classList.contains('hidden') && inspectItem!==renameTarget){ inp.classList.add('hidden'); btn.classList.remove('hidden'); renameTarget=null; } };   // inspectItem changed under an open editor — close it so a rename can't land on the wrong panel
   btn.addEventListener('mousedown',e=>{ e.preventDefault(); openRename(); });
   inp.addEventListener('keydown',e=>{
     if(e.key==='Enter'){ e.preventDefault(); commitRename(); }
