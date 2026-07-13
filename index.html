@@ -6796,7 +6796,9 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } else interactInventory(); });   // primary = any non-aux button (trackpad taps send button -1/undefined); cursor set here so a tap without a prior hover still targets this cell
+        div.addEventListener('click',()=>{ currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; interactInventory(); });                                   // LMB = E (pick·place); 'click' is primary-only, fires on any trackpad tap regardless of e.button
+        div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
+        div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; quickUse(); });               // MMB = F (wield·feed) — desktop-mouse bonus
         g.appendChild(div);
       });
     }else{
@@ -6819,7 +6821,9 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } else interactInventory(); });   // primary = any non-aux button (trackpad taps send button -1/undefined); cursor set here so a tap without a prior hover still targets this cell
+        div.addEventListener('click',()=>{ currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; interactInventory(); });                                   // LMB = E (pick·place)
+        div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
+        div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; quickUse(); });               // MMB = F (wield·feed)
         g.appendChild(div);
       }
     }
@@ -6887,12 +6891,20 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       refreshInvUI();
     });
-    div.addEventListener('mousedown',e=>{
+    div.addEventListener('click',()=>{
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
-      if(e.button===2) quickUse();
-      else if(e.button===1){ e.preventDefault(); activateAtCursor(); }
-      else interactInventory();     // primary = any non-aux button (a trackpad tap sends button -1/undefined, not 0)
+      interactInventory();          // LMB = E — 'click' is primary-only, robust to trackpad e.button
+    });
+    div.addEventListener('contextmenu',e=>{ e.preventDefault();
+      if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+      currentFocus=focusIdx; cursorX=c; cursorY=r;
+      activateAtCursor();           // RMB / two-finger tap = X
+    });
+    div.addEventListener('auxclick',e=>{ if(e.button!==1) return;
+      if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+      currentFocus=focusIdx; cursorX=c; cursorY=r;
+      quickUse();                   // MMB = F
     });
     container.appendChild(div);
   }
@@ -7045,12 +7057,20 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
     refreshInvUI();
   });
-  d.addEventListener('mousedown',e=>{
+  d.addEventListener('click',()=>{
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
-    if(e.button===2) quickUse();
-    else if(e.button===1){ e.preventDefault(); activateAtCursor(); }
-    else interactInventory();     // primary = any non-aux button (a trackpad tap sends button -1/undefined, not 0)
+    interactInventory();          // LMB = E
+  });
+  d.addEventListener('contextmenu',e=>{ e.preventDefault();
+    if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+    currentFocus=focusIdx; cursorX=ci; cursorY=ri;
+    activateAtCursor();           // RMB / two-finger tap = X
+  });
+  d.addEventListener('auxclick',e=>{ if(e.button!==1) return;
+    if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+    currentFocus=focusIdx; cursorX=ci; cursorY=ri;
+    quickUse();                   // MMB = F
   });
   return d;
 }
