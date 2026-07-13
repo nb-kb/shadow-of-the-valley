@@ -380,7 +380,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.2-wip3';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.2-wip4';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -6310,7 +6310,7 @@ function renderTerminal(){
     if(r.locked) d.style.opacity='0.45';                     // BOOTING… destination — dimmed until its shader links
     d.innerHTML='<span>'+r.label+'</span>'+(r.meta?'<span class="trMeta">'+r.meta+'</span>':'');
     d.addEventListener('mouseenter',()=>{ termSel=i; renderTerminal(); });
-    d.addEventListener('mousedown',e=>{ if(e.button===1||e.button===2) return; termSel=i; termActivate(); });   // primary = any non-aux button (a trackpad tap sends button -1/undefined, not 0)
+    d.addEventListener('mousedown',e=>{ if(e.button>0) return; termSel=i; termActivate(); });   // primary = any non-aux button (a trackpad tap sends button -1/undefined, not 0)
     box.appendChild(d);
   });
 }
@@ -6797,7 +6797,7 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===1||e.button===2) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-aux button, fires at press so a DOM rebuild can't eat it (trackpad tap sends button -1/undefined)
+        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-aux button, fires at press so a DOM rebuild can't eat it (trackpad tap sends button -1/undefined)
         div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
         div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; quickUse(); });               // MMB = F (wield·feed) — desktop-mouse bonus
         g.appendChild(div);
@@ -6822,7 +6822,7 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===1||e.button===2) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-aux button, fires at press (trackpad-robust)
+        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-aux button, fires at press (trackpad-robust)
         div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
         div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; quickUse(); });               // MMB = F (wield·feed)
         g.appendChild(div);
@@ -6892,7 +6892,7 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       refreshInvUI();
     });
-    div.addEventListener('mousedown',e=>{ if(e.button===1||e.button===2) return;
+    div.addEventListener('mousedown',e=>{ if(e.button>0) return;
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
       interactInventory();          // LMB = E — primary = any non-aux button, fires at press (trackpad-robust)
@@ -7058,7 +7058,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
     refreshInvUI();
   });
-  d.addEventListener('mousedown',e=>{ if(e.button===1||e.button===2) return;
+  d.addEventListener('mousedown',e=>{ if(e.button>0) return;
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
     currentFocus=focusIdx; cursorX=ci; cursorY=ri;
     interactInventory();          // LMB = E — primary = any non-aux button, fires at press (trackpad-robust)
