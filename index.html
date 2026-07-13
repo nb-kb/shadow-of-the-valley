@@ -39,7 +39,6 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 /* ---------- HUD ---------- */
 #hud{position:absolute;top:14px;left:14px;z-index:10;pointer-events:none;padding:10px 12px;min-width:210px;}
-#inputDiag{position:fixed;top:6px;left:6px;z-index:99999;pointer-events:none;font:12px/1.35 monospace;color:#fff;background:rgba(0,0,0,.62);padding:5px 7px;max-width:46ch;white-space:pre-wrap;border-radius:3px;}   /* TEMP wip5 trackpad-tap diagnostic — remove after LMB debug */
 #hud .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0;font-size:14px;letter-spacing:.14em;}
 .meter{width:110px;height:7px;background:#000;border:1px solid var(--line);overflow:hidden;}
 .meter>div{height:100%;width:100%;transition:width .15s linear;}
@@ -213,8 +212,6 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="vignette"></div>
 <div id="alertFlash"></div>
 
-<!-- TEMP wip5 trackpad-tap input diagnostic — remove after LMB debug -->
-<div id="inputDiag"></div>
 <!-- HUD -->
 <div id="hud" class="panel">
   <div class="row stencil"><span>Vitality</span><span id="bleedTick" class="hidden">BLEED</span><div class="meter" id="healthMeter"><div id="healthFill"></div><div id="burnMask" style="width:0%"></div></div></div>
@@ -383,7 +380,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.2-wip6-diag';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.1.0';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -557,21 +554,6 @@ document.addEventListener('mousemove',e=>{
   if(pointerLocked()){ INPUT.mdx+=e.movementX; INPUT.mdy+=e.movementY; }
 });
 window.addEventListener('blur',()=>{ INPUT.keys={}; INPUT.mouse={}; });
-
-// ── TEMP wip5 INPUT DIAGNOSTIC — read-only tap logger for the laptop-trackpad LMB bug. Capture-phase, never prevents/stops. Remove after debug. ──
-(function(){
-  const DIAG_SEL='.cell,.rcell,.gridWrap,.termRow,#inspectRename';
-  function diagLog(e){
-    const dg=document.getElementById('inputDiag'); if(!dg) return;
-    const t=e.target; const h=(t&&t.closest)?t.closest(DIAG_SEL):null; if(!h) return;   // only log taps on inventory/terminal/rename targets
-    const tag=h.id?('#'+h.id):('.'+String(h.className||'').trim().split(/\s+/)[0]);
-    const line=e.type+' b='+e.button+' B='+e.buttons+' pt='+(e.pointerType||'-')+' pr='+e.isPrimary+' '+tag;
-    const lines=dg.textContent?dg.textContent.split('\n'):[];
-    lines.unshift(line);
-    dg.textContent=lines.slice(0,10).join('\n');
-  }
-  ['pointerdown','mousedown','mouseup','click','contextmenu','auxclick','pointerup'].forEach(t=>document.addEventListener(t,diagLog,true));
-})();
 
 const canvas=document.getElementById('gameCanvas');
 function pointerLocked(){ return document.pointerLockElement===canvas; }
