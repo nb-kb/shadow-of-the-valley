@@ -258,6 +258,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <!-- Detached pockets — magazines & spare tools opened with X -->
 <div id="inspectUI" class="panel hidden">
   <div class="stencil" id="inspectTitle">—</div>
+  <div class="stencil hidden" id="inspectRename" style="cursor:pointer;margin-top:5px;font-size:11px;letter-spacing:.16em;color:var(--dust);">✎ RENAME</div>
+  <input id="inspectNameInput" class="hidden" type="text" maxlength="18" spellcheck="false" autocomplete="off" style="margin-top:5px;width:100%;box-sizing:border-box;background:#0d0f0c;border:1px solid var(--gate);color:var(--bone);font:inherit;font-size:12px;letter-spacing:.14em;text-transform:uppercase;padding:4px 6px;outline:none;">
   <div id="inspectBody"></div>
 </div>
 
@@ -2780,10 +2782,14 @@ let itemIdCounter=0;
 const generateId=()=>'it'+(itemIdCounter++);
 
 class Item{
-  constructor(name,w,h,color){ this.id=generateId(); this.name=name; this.w=w; this.h=h; this.color=color; this.x=0; this.y=0; }
+  constructor(name,w,h,color){ this.id=generateId(); this.name=name; this.customName=null; this.w=w; this.h=h; this.color=color; this.x=0; this.y=0; }
   get renderType(){ return 0; }
   desc(){ return ''; }
 }
+// per-instance rename: show the custom name when set, else the type name
+function dispName(it){ return (it&&it.customName)||it.name; }
+// owner charset: UPPER letters/digits/space/dash only — also blocks HTML injection at innerHTML sites
+function sanitizeName(s){ return String(s==null?'':s).toUpperCase().replace(/[^A-Z0-9 -]+/g,'').replace(/ +/g,' ').trim().slice(0,18); }
 class ToolMod extends Item{
   // all rack mods are 1x1 — callers pass (name,color,cat,effect,blurb)
   constructor(name,color,cat,effect,blurb){ super(name,1,1,color); this.cat=cat; this.effect=effect||{}; this.blurb=blurb||''; }
@@ -3264,7 +3270,7 @@ function playerZones(all){
   z.push({id:'pockets',label:'POCKETS',grid:pocketsGrid,cols:POCKET_COLS,rows:POCKET_ROWS,storage:true});   // ALWAYS present — before every equipped container; storage:true wires it into storageZones/autoPlaceAny/ammo-count for free
   const push=slot=>{ const it=equip[slot];
     if(it&&it.inv&&it.invCols>0&&(all||!zoneShut(it)))
-      z.push({id:slot,label:it.name.toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
+      z.push({id:slot,label:dispName(it).toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
               locked:!!it.settingsDevice,storage:!it.settingsDevice,slotMode:!!it.slotMode}); };
   ['rucksack','harness','holster','belt','goggles','headphones'].forEach(push);
   return z;
@@ -3497,7 +3503,7 @@ function interactInventory(){
       equip[slot]=it;
       if(old) heldWorld.w.item=old; else consumeHeld();
       syncBagAlias(); clampZone();
-      toast(it.name.toUpperCase()+' EQUIPPED'); playSound('place'); refreshInvUI(); return;
+      toast(dispName(it).toUpperCase()+' EQUIPPED'); playSound('place'); refreshInvUI(); return;
     }
     if(cell){                                              // hand empty: strip it off, contents ride
       equip[slot]=null;
@@ -3514,7 +3520,7 @@ function interactInventory(){
     if(cell){                                              // lift loot into your hands; you stow it yourself
       removeFromGrid(cell,f.grid);
       handHold(cell);                                      // spawns it in-hand + plays 'grab'
-      toast(cell.name.toUpperCase()+' TAKEN'); refreshInvUI(); return;
+      toast(dispName(cell).toUpperCase()+' TAKEN'); refreshInvUI(); return;
     }
     playSound('click'); return;
   }
@@ -3613,7 +3619,7 @@ function interactInventory(){
 function toggleZoneFold(it){
   it.zoneOpen=!it.zoneOpen;
   clampZone();                                      // the stack changed shape — never strand the cursor
-  toast(it.name.toUpperCase()+(it.zoneOpen?' · OPEN':' · CLOSED')); playSound('click');
+  toast(dispName(it).toUpperCase()+(it.zoneOpen?' · OPEN':' · CLOSED')); playSound('click');
   refreshInvUI();
 }
 // [X] — inspect · activate. Magazines & spare tools open their own pockets.
@@ -3660,9 +3666,14 @@ function renderInspect(){
   const ui=document.getElementById('inspectUI');
   // menus open — or the carried item's own pockets, drawn over the world (△ tap)
   const carriedOpen=heldWorld&&heldWorld.w.item===inspectItem;
-  if(!inspectItem || !(uiMenusOpen()||carriedOpen)){ ui.classList.add('hidden'); return; }
+  const rnBtn=document.getElementById('inspectRename'), rnInp=document.getElementById('inspectNameInput');
+  if(!inspectItem || !(uiMenusOpen()||carriedOpen)){ ui.classList.add('hidden'); rnBtn.classList.add('hidden'); rnInp.classList.add('hidden'); return; }
   ui.classList.remove('hidden');
-  document.getElementById('inspectTitle').textContent=inspectItem.name.toUpperCase()+' — POCKETS';
+  document.getElementById('inspectTitle').textContent=dispName(inspectItem).toUpperCase()+' — POCKETS';
+  // rename control shows for Tools and any real container (not settings devices); input stays put — never rebuilt, or focus is lost
+  const renamable=inspectItem instanceof Tool || (inspectItem.inv && !inspectItem.settingsDevice);
+  if(renamable){ if(rnInp.classList.contains('hidden')) rnBtn.classList.remove('hidden'); }
+  else { rnBtn.classList.add('hidden'); rnInp.classList.add('hidden'); }
   const body=document.getElementById('inspectBody');
   if(inspectItem instanceof Magazine){
     body.innerHTML='<div style="margin-top:8px;font-size:14px;letter-spacing:.12em;">'
@@ -3963,7 +3974,7 @@ function updateInteract(dt){
     setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance'+stowing,true);
   }else if(hover.idx>=0 && worldItems[hover.idx]){
     const it=worldItems[hover.idx].item;
-    setPrompt(prompt,'<b>E</b> '+(!activeTool&&it instanceof Tool?'take up ':'grab ')+it.name+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
+    setPrompt(prompt,'<b>E</b> '+(!activeTool&&it instanceof Tool?'take up ':'grab ')+dispName(it)+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
   }else setPrompt(prompt,'',false);
 
   if(pressed('interact')){
@@ -6312,12 +6323,13 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=3, SAVE_KEY=i=>'sotv_save_'+i;             // v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
+const SAVE_VER=4, SAVE_KEY=i=>'sotv_save_'+i;             // v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
   if(!it) return null;
   const j={k:it.defKey, x:it.x, y:it.y};
+  if(it.customName) j.cn=it.customName;
   if(it instanceof Magazine) j.loaded=it.loaded;
   if(it instanceof Ammunition) j.count=it.count;
   if(it instanceof Battery){ j.cap=it.cap; j.charge=it.charge; }
@@ -6340,6 +6352,7 @@ function itemToJSON(it){
 function itemFromJSON(j){
   if(!j||!ITEM_DEFS[j.k]) return null;
   const it=ITEM_DEFS[j.k]();
+  if(typeof j.cn==='string') it.customName=sanitizeName(j.cn)||null;
   if(j.loaded!==undefined) it.loaded=j.loaded;
   if(j.count!==undefined) it.count=j.count;
   if(j.cap!==undefined){ it.cap=j.cap; it.charge=Math.min(j.charge,j.cap); }
@@ -6396,7 +6409,7 @@ function saveMeta(slot){
   try{
     const raw=ls.getItem(SAVE_KEY(slot)); if(!raw) return null;
     const b=JSON.parse(raw);
-    if((b.version!==2&&b.version!==SAVE_VER)||typeof b.equip!=='object') return null;   // v2 accepted: pre-stash
+    if(!(b.version>=2&&b.version<=SAVE_VER)||typeof b.equip!=='object') return null;   // accept v2..SAVE_VER: bumping the ver must not orphan older saves
     let n=0; const walk=j=>{ if(!j) return; n++; (j.inv||[]).forEach(walk); (j.slots||[]).forEach(walk); walk(j.muzzle); };
     for(const k in b.equip) walk(b.equip[k]);
     walk(b.wield);
@@ -6579,7 +6592,7 @@ function syncTip(){
   cursorX=sx; cursorY=sy;
   if(!it){ tooltipEl.style.display='none'; tooltipEl.innerHTML=''; return; }
   const b=tipBrief(it);
-  tooltipEl.innerHTML='<div class="tt-name">'+it.name+'</div>'
+  tooltipEl.innerHTML='<div class="tt-name">'+dispName(it)+'</div>'
     +'<div class="tt-cat">'+b.kind+'</div>'
     +b.rows.map(r=>'<div>'+r+'</div>').join('')
     +'<div class="tt-cat" style="margin-top:4px;">'+(it.desc?it.desc():'')+'</div>';
@@ -6606,7 +6619,7 @@ function paintToolStats(){
     ['CHARGE', t.charge.toFixed(0)+' / '+toolChargeMax(t)],
   ];
   if(res.silenced) rows.push(['MUZZLE','silenced']);
-  tipMainEl.innerHTML='<span class="tt-name">'+t.name.toUpperCase()+'</span>'
+  tipMainEl.innerHTML='<span class="tt-name">'+dispName(t).toUpperCase()+'</span>'
     +rows.map(r=>'<span class="tt-row"><span class="tt-dim">'+r[0]+'</span> '+r[1]+'</span>').join('');
   tipDetailEl.innerHTML=describeSequence(res);
 }
@@ -6817,11 +6830,11 @@ function renderZones(){
         span.style.width =(sw*CELL_PITCH-3)+'px';
         span.style.height=(sh*CELL_PITCH-3)+'px';
         const img=document.createElement('img');
-        img.src=makeIcon(item); img.alt=item.name; img.draggable=false;
+        img.src=makeIcon(item); img.alt=dispName(item); img.draggable=false;
         span.appendChild(img);
         const extra=item instanceof Ammunition?'×'+item.count:(item instanceof Magazine?item.loaded+'/'+item.maxCapacity:'');
         const lbl=document.createElement('div'); lbl.className='lbl2';
-        lbl.textContent=item.name+(extra?' '+extra:'');
+        lbl.textContent=dispName(item)+(extra?' '+extra:'');
         span.appendChild(lbl);
         g.appendChild(span);
       }
@@ -6884,11 +6897,11 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
     span.style.width =(item.w*CELL_PITCH-3)+'px';
     span.style.height=(item.h*CELL_PITCH-3)+'px';
     const img=document.createElement('img');
-    img.src=makeIcon(item); img.alt=item.name; img.draggable=false;
+    img.src=makeIcon(item); img.alt=dispName(item); img.draggable=false;
     span.appendChild(img);
     const extra=item instanceof Ammunition?'×'+item.count:(item instanceof Magazine?item.loaded+'/'+item.maxCapacity:'');
     const lbl=document.createElement('div'); lbl.className='lbl2';
-    lbl.textContent=item.name+(extra?' '+extra:'');
+    lbl.textContent=dispName(item)+(extra?' '+extra:'');
     span.appendChild(lbl);
     container.appendChild(span);
   }
@@ -7009,7 +7022,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   if(item){
     const img=document.createElement('img'); img.src=makeIcon(item); img.draggable=false; d.appendChild(img);
     const extra=item instanceof Ammunition?'×'+item.count:(item instanceof Magazine?item.loaded+'/'+item.maxCapacity:'');
-    const lbl=document.createElement('div'); lbl.className='rlbl'; lbl.textContent=item.name+(extra?' '+extra:'');
+    const lbl=document.createElement('div'); lbl.className='rlbl'; lbl.textContent=dispName(item)+(extra?' '+extra:'');
     d.appendChild(lbl);
     if(item===inspectItem) d.style.borderColor='var(--gate)';
   }else if(opts.muz){
@@ -7036,7 +7049,7 @@ function updateToolReadout(){
   if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; document.getElementById('chargeFill').style.width='0%'; return; }
   activeTool._res=activeTool._res||resolveTool(activeTool);
   const res=activeTool._res;
-  nm.textContent=activeTool.name.toUpperCase();
+  nm.textContent=dispName(activeTool).toUpperCase();
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
     if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS');
@@ -7098,6 +7111,31 @@ document.getElementById('sensPad').value=INPUT.sensPad;
 document.getElementById('sensMouse').addEventListener('input',e=>INPUT.sensMouse=parseFloat(e.target.value));
 document.getElementById('sensPad').addEventListener('input',e=>INPUT.sensPad=parseFloat(e.target.value));
 document.getElementById('invertY').addEventListener('change',e=>INPUT.invertY=e.target.checked);
+
+// ---- rename control: per-instance customName, entered on the inspect panel ----
+(function(){
+  const btn=document.getElementById('inspectRename'), inp=document.getElementById('inspectNameInput');
+  function openRename(){
+    if(!inspectItem) return;
+    inp.value=dispName(inspectItem);
+    inp.classList.remove('hidden'); btn.classList.add('hidden');
+    inp.focus(); inp.select();
+  }
+  function commitRename(){
+    if(inp.classList.contains('hidden')) return;             // already closed — a post-Enter blur, ignore
+    inp.classList.add('hidden');
+    if(inspectItem) inspectItem.customName=sanitizeName(inp.value)||null;
+    playSound('click'); refreshInvUI();
+  }
+  function cancelRename(){ inp.classList.add('hidden'); refreshInvUI(); }   // no commit; refresh re-shows the button
+  btn.addEventListener('mousedown',e=>{ e.preventDefault(); openRename(); });
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){ e.preventDefault(); commitRename(); }
+    else if(e.key==='Escape'){ e.preventDefault(); cancelRename(); }
+    e.stopPropagation();                                     // consumed locally — never bubbles to menu-close
+  });
+  inp.addEventListener('blur',commitRename);
+})();
 
 // ---- debug console ----
 function toggleDebug(){
