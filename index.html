@@ -119,7 +119,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   backdrop-filter:blur(1.5px);}
 .cell{width:44px;height:44px;border:1px solid rgba(215,220,230,.15);border-radius:3px;
   background:rgba(12,14,18,.28);position:relative;font-size:11px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
-#rackWrap{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:8px 4px;}
+#rackWrap{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:8px 4px;pointer-events:auto;}   /* re-enable clicks: parent #toolUI is pointer-events:none, so the rack-cell handlers were dead (mirrors .gridWrap) */
 .rackCol{display:flex;flex-direction:column-reverse;gap:3px;align-items:center;}
 .rackHead{font-size:11px;letter-spacing:.08em;color:var(--dust);text-align:center;white-space:nowrap;align-self:end;pointer-events:none;}
 .rcell{width:var(--rc,40px);height:var(--rc,40px);border:1px solid rgba(215,220,230,.15);border-radius:3px;
@@ -6288,7 +6288,7 @@ function renderTerminal(){
     if(r.locked) d.style.opacity='0.45';                     // BOOTING… destination — dimmed until its shader links
     d.innerHTML='<span>'+r.label+'</span>'+(r.meta?'<span class="trMeta">'+r.meta+'</span>':'');
     d.addEventListener('mouseenter',()=>{ termSel=i; renderTerminal(); });
-    d.addEventListener('mousedown',()=>{ termSel=i; termActivate(); });
+    d.addEventListener('mousedown',e=>{ if(e.button!==0) return; termSel=i; termActivate(); });
     box.appendChild(d);
   });
 }
@@ -6773,7 +6773,7 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); });
+        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); else if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } });   // MMB opens a container's sub-inventory; RMB quick-uses (matches renderGrid)
         g.appendChild(div);
       });
     }else{
@@ -6796,7 +6796,7 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); });
+        div.addEventListener('mousedown',e=>{ if(e.button===0) interactInventory(); else if(e.button===2) quickUse(); else if(e.button===1){ e.preventDefault(); activateAtCursor(); } });   // MMB opens a container's sub-inventory; RMB quick-uses (matches renderGrid)
         g.appendChild(div);
       }
     }
