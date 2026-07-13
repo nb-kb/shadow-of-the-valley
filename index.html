@@ -214,14 +214,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 <!-- HUD -->
 <div id="hud" class="panel">
-  <div class="row stencil"><span>Vitality</span><span id="bleedTick" class="hidden">BLEED</span><div class="meter" id="healthMeter"><div id="healthFill"></div><div id="burnMask" style="width:0%"></div></div></div>
-  <div class="row stencil"><span>Suspicion</span><div class="meter"><div id="suspicionFill"></div></div></div>
+  <div class="row stencil"><span>HP</span><span id="bleedTick" class="hidden">BLEED</span><div class="meter" id="healthMeter"><div id="healthFill"></div><div id="burnMask" style="width:0%"></div></div></div>
   <div class="row stencil"><span id="hudDepthLabel">Ring</span><span id="hudDepth">I</span></div>
-  <div class="row stencil" id="clockRow"><span>Watch</span><span id="hudClock">--:--</span></div>
+  <div class="row stencil" id="clockRow"><span>TIME</span><span id="hudClock">--:--</span></div>
   <div class="row stencil" id="fpsRow"><span>FPS</span><span id="hudFps">--</span></div>
   <div class="row stencil hidden" id="gpStatus"><span>Pad</span><span id="gpName">linked</span></div>
 </div>
-<div id="eyeWrap" class="hidden"><div id="eye"></div><div id="eyeLbl">EXPOSURE</div></div>
+<div id="eyeWrap" class="hidden"><div id="eye"></div><div id="eyeLbl">VISIBILITY</div></div>
 <div id="compassStrip" class="hidden">▲ BEACON</div>
 <div id="photoStrip" class="hidden">SEEN --m</div>
 <div id="toolReadout" class="panel">
@@ -276,34 +275,23 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
     <label>Stick feel <input type="range" id="sensPad" min="0.4" max="3" step="0.1"></label>
     <label><input type="checkbox" id="invertY"> Invert look</label>
   </div>
-  <div class="manualNote">
-    Pads: pair via system Bluetooth, then press any button here.<br>
-    Settings are objects: the <b>Pocket Watch</b> keeps HUD time · the <b>Compass</b> marks the beacon ·
-    the <b>Optics Dial</b> cycles render fidelity · the <b>Volume Knob</b> cycles sound. Lose the object, lose the setting.<br>
-    <b>△</b> in the pockets: a rig piece folds its zone · a container opens · a usable is used where it lies
-    (a LIT core blows from whoever carries it) · an empty cell beds the wielded tool.
-    In hand: <b>tap</b> opens pockets, <b>hold</b> stows a tool.<br>
-    Bindings hold for this session only. Close with the key that opened this.<br>
-    <b>GRIP fed by a BEAM</b> trades triggers: <b>LT/LMB</b> casts the thread and carries ·
-    <b>RT/RMB</b> pins the load mid-air until gripped again. Other Tools keep the standard layout.
-  </div>
 </div></div>
 
 <!-- Debug console -->
 <div id="debugUI" class="panel hidden">
-  <div class="stencil" style="color:var(--alert);">⚠ <b>DEBUG CONSOLE</b> — not part of the world</div>
+  <div class="stencil" style="color:var(--alert);">⚠ <b>DEBUG CONSOLE</b></div>
   <h3>Spawn</h3>
   <div class="drow" style="display:block;"><div id="dbgItems" style="display:grid;grid-template-columns:repeat(8,36px);gap:3px;max-height:190px;overflow:auto;"></div></div>
-  <div class="drow"><button id="dbgSpawnEnemy">spawn zealot</button><button id="dbgKillAll">drop all zealots</button></div>
-  <div class="drow"><button id="dbgDeployA1">deploy: area 1</button><button id="dbgDeployHide">deploy: hideout</button></div>
-  <div class="drow"><button id="dbgDeployValley">deploy: valley</button><button id="dbgResetSaves">RESET SAVE DATA</button></div>
-  <div class="drow"><button id="dbgTpGate">teleport to beacon</button><button id="dbgNextRing">force next ring</button></div>
+  <div class="drow"><button id="dbgSpawnEnemy">Spawn Zealot</button><button id="dbgKillAll">Kill All Zealots</button></div>
+  <div class="drow"><button id="dbgDeployA1">Deploy: Area 1</button><button id="dbgDeployHide">Deploy: Hidey-Hole</button></div>
+  <div class="drow"><button id="dbgDeployValley">Deploy: Valley</button><button id="dbgResetSaves">RESET SAVE DATA</button></div>
+  <div class="drow"><button id="dbgTpGate">Teleport to Beacon</button><button id="dbgNextRing">Force Next Ring</button></div>
   <h3>Watch</h3>
   <div id="dbgWatch"></div>
   <h3>Parameters</h3>
   <div id="dbgParams"></div>
   <h3>Flags</h3>
-  <div class="drow"><label><input type="checkbox" id="dbgGod"> god</label><label><input type="checkbox" id="dbgNoclip"> noclip</label><label><input type="checkbox" id="dbgSeeAll"> AI x-ray</label></div>
+  <div class="drow"><label><input type="checkbox" id="dbgGod"> GodMode</label><label><input type="checkbox" id="dbgNoclip"> NoClip</label><label><input type="checkbox" id="dbgSeeAll"> AI X-Ray</label></div>
 </div>
 
 <!-- Intro / death screens -->
@@ -356,12 +344,11 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </g></svg>
   <p style="font-size:14px;">WASD · <b>E</b> interact · <b>LMB</b> fire · <b>M</b> manual</p>
   <div class="go" id="bootStatus">COMPILING THE VALLEY…</div>
-  <div class="go" id="bootHint" style="font-size:11px;opacity:.6;letter-spacing:.04em;">first load compiles the shader — this can take up to a minute on some machines</div>
 </div></div>
 <div id="deathScreen" class="screen hidden"><div class="inner panel">
   <h1 style="color:var(--alert);">RECLAIMED</h1>
   <p id="deathStats"></p>
-  <div class="go">— any key: slip the door again —</div>
+  <div class="go">— any key: escape to the hidey hole —</div>
 </div></div>
 
 <div id="errBanner"></div>
@@ -370,8 +357,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <script type="text/plain" id="gameSrc">
 'use strict';
 // ============================================================
-// SHADOW OF THE VALLEY (v20) — rebuilt on the Gemini raymarch engine
-// stealth-lit roguelike · sequenced tool mods · physgun carry
+// SHADOW OF THE VALLEY (v1.1.1beta)
+// HTML Extraction Shooter · Inventory Sequencing · Stealth
 // ============================================================
 
 // -------- visible error trap (so a black screen never goes silent)
@@ -380,7 +367,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.1.0';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.1.1';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -393,19 +380,19 @@ let engineReady=false;   // flips true at BOOT — early handlers no-op if top-l
 const PARAMS = {
   dayLength:   {v:300, min:60,  max:1200, step:10,  label:'day length (s)'},
   timeOfDay:   {v:0.32,min:0,   max:1,    step:0.01,label:'time of day'},
-  playerSpeed: {v:3.4, min:1,   max:8,    step:0.1, label:'walk speed'},
-  sprintMult:  {v:1.8, min:1,   max:3,    step:0.1, label:'sprint ×'},
-  crouchMult:  {v:0.5, min:0.2, max:1,    step:0.05,label:'crouch ×'},
-  jumpVel:     {v:5.6, min:2,   max:12,   step:0.2, label:'jump velocity'},
-  gravity:     {v:14,  min:2,   max:30,   step:0.5, label:'gravity'},
-  enemyVision: {v:11,  min:2,   max:30,   step:0.5, label:'zealot vision'},
-  enemyFovDeg: {v:110, min:40,  max:180,  step:5,   label:'zealot fov°'},
+  playerSpeed: {v:4, min:1,   max:8,    step:0.1, label:'walk speed'},
+  sprintMult:  {v:2, min:1,   max:3,    step:0.1, label:'sprint ×'},
+  crouchMult:  {v:0.6, min:0.2, max:1,    step:0.05,label:'crouch ×'},
+  jumpVel:     {v:6, min:2,   max:12,   step:0.2, label:'jump velocity'},
+  gravity:     {v:16.5,  min:2,   max:30,   step:0.5, label:'gravity'},
+  enemyVision: {v:18,  min:2,   max:30,   step:0.5, label:'zealot vision'},
+  enemyFovDeg: {v:150, min:40,  max:180,  step:5,   label:'zealot fov°'},
   enemySpeed:  {v:2.6, min:0.5, max:6,    step:0.1, label:'zealot speed'},
   enemyDamage: {v:11,  min:0,   max:40,   step:1,   label:'zealot bolt dmg'},
-  maxEnemies:  {v:3,   min:0,   max:6,    step:1,   label:'zealot count'},
+  maxEnemies:  {v:6,   min:0,   max:10,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
-  fogWeather:  {v:-1,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
+  fogWeather:  {v:0.5,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
   nightFloor:  {v:0.012,min:0.002,max:0.06,step:0.002,label:'night ambient'},
 };
 const P = k => PARAMS[k].v;
@@ -3037,7 +3024,7 @@ class Gadget extends Item{
 
 // factory table — debug spawner + loot rolls read from this
 const ITEM_DEFS={
-  ammo9:      ()=>new Ammunition('9mm ×12','#a07c2c','9mm',12),
+  ammo9:      ()=>new Ammunition('9mm','#a07c2c','9mm',12),
   magStd:     ()=>new Magazine('Std Mag','#23262b','9mm',12),
   magDrum:    ()=>new Magazine('Drum','#2c3138','9mm',28),
   tool:       ()=>new Tool('Covenant Tool','#3a4048'),
@@ -3063,30 +3050,30 @@ const ITEM_DEFS={
   compensator:()=>new ToolMod('Compensator','#546e7a','muzzle',{spread:0.55},'Muzzle slot · this column, spread ×0.55'),
   autoSear:   ()=>new ToolMod('Auto Sear','#6d4c41','stat',{auto:true,fireRate:-0.22},'Hold to keep firing'),
   burstCam:   ()=>new ToolMod('Burst Cam','#5d4037','stat',{burst:3,unique:'burst'},'Three-round prayer · one cam only'),
-  hairTrigger:()=>new ToolMod('Hair Trigger','#795548','stat',{fireRate:-0.14},'Faster follow-ups'),
+  hairTrigger:()=>new ToolMod('Hair Trigger','#795548','stat',{fireRate:-0.30},'Faster follow-ups'),
   // --- sequence: projectile cores ---
   boltCore:   ()=>new ToolMod('BOLT','#7e57c2','proj',{kind:'bolt',base:0},'Core · fires a slug from the magazine'),
-  sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18,burn:15},'Core · explodes where it hits — burns (15) · 18⚡'),
-  emberCore:  ()=>new ToolMod('EMBER','#e64a19','proj',{kind:'spark',base:22,burn:28},'Core · explodes — heavy burn (28) · 22⚡'),
+  sparkCore:  ()=>new ToolMod('SPARK','#ab47bc','proj',{kind:'spark',base:18,burn:8},'Core · explodes where it hits — burns (8) · 18⚡'),
+  emberCore:  ()=>new ToolMod('EMBER','#e64a19','proj',{kind:'spark',base:22,burn:15},'Core · explodes — heavy burn (15) · 22⚡'),
   beamCore:   ()=>new ToolMod('BEAM','#8e24aa','mod',{laser:true,surcharge:8},'Feeds a core: hold to fire it as a continuous beam (less hurt) · alone at the top of a column: aiming laser · +8⚡'),
-  pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:14},'Core · eats stone, spares flesh · 14⚡'),
-  decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands, sings to the camp for 12s · 10⚡'),
-  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · big explosion where it is cast — no flight, and no friends in the blast (you included). FUSE gives it flight · 26⚡ · in hand [F/△]: light a 5s charge, then throw'),
-  waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a slow wide wall — shoves, and hits each foe once in a ~1.8m swath · 10⚡'),
-  sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · point-blank teeth — the whole tool fires at its fastest; the bite ends ~4m out · 1⚡'),
-  warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · you teleport to where it stops. Arrival is loud — HUSH quiets it · 15⚡'),
-  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · fires a round; mods feeding it cost no ⚡. Under a BEAM: hitscan, one round per pulse'),
-  slugCore:   ()=>new ToolMod('SLUG','#a1887f','proj',{kind:'slug',base:0},'Core · three rounds, one heavy shot — ×3 tool hurt, +0.45s cycle. Housed in a relay: no slowdown'),
-  orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · a slow orb, 6s aloft — weak alone; the mods feeding it decide what it becomes · 8⚡'),
+  pickCore:   ()=>new ToolMod('PICK','#4f9f8f','proj',{kind:'pick',base:7},'Core · matter eater · 7⚡'),
+  decoyCore:  ()=>new ToolMod('LURE','#8f8f3c','proj',{kind:'decoy',base:10},'Core · a chirping puck — sticks where it lands · 10⚡'),
+  boomCore:   ()=>new ToolMod('BOOM','#c73e1d','proj',{kind:'boom',base:26},'Core · big explosion where it is cast · 26⚡ · in hand [F/△]: arm, then throw'),
+  waveCore:   ()=>new ToolMod('WAVE','#5c6bc0','proj',{kind:'wave',base:10},'Core · a slow wide wall· 10⚡'),
+  sawCore:    ()=>new ToolMod('SAW','#9e9e9e','proj',{kind:'saw',base:1},'Core · point-blank teeth · 1⚡'),
+  warpCore:   ()=>new ToolMod('WARP','#26c6da','proj',{kind:'warp',base:15},'Core · where am I...? · 15⚡'),
+  powderCore: ()=>new ToolMod('POWDER','#8d6e63','proj',{kind:'bolt',base:0,powder:true},'Core · fires a round; mods feeding it cost no ⚡.'),
+  slugCore:   ()=>new ToolMod('SLUG','#a1887f','proj',{kind:'slug',base:0},'Core · three rounds, one heavy shot — +0.45s cycle'),
+  orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · a slow orb — weak alone · 8⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
-  dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡ that shot'),
-  velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:1.6,surcharge:4},'Next core ×1.6 speed · +4⚡'),
+  dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡'),
+  velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:2,surcharge:4},'Next core ×2 speed · +4⚡'),
   bounce:     ()=>new ToolMod('RICOCHET','#3c8f7c','mod',{bounce:2,surcharge:6},'Next core bounces twice · +6⚡'),
   pierce:     ()=>new ToolMod('DRILL','#8f6a3c','mod',{pierce:1,surcharge:8},'Next core drills through bodies — hits everyone in its path; walls still stop it · +8⚡'),
-  heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:6,surcharge:5},'Next core arcs and lands harder · +5⚡'),
+  heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:15,surcharge:5},'Next core arcs and lands harder · +5⚡'),
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
-  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core causes Bleed — 1 hp/s for 15s, stacks to five · +5⚡'),
+  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core causes Bleed · +5⚡'),
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
   gummies:    ()=>{ const it=new Item('Gummies',1,1,'#a04a5e'); it.gummies=true; return it; },
@@ -3108,24 +3095,24 @@ const ITEM_DEFS={
   helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
-  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it, off the stuck face · +4⚡'),
-  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core fires the one after it, where it hits — the cast leaves along the struck face. Nothing racked above: plain impact · +5⚡'),
-  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{timer:1.5,surcharge:3},'Next core goes off at 1.5s or on first touch, whichever comes first — and fires the one after it. On a FUSE: +1.5s patience instead · +3⚡'),
-  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact — the shards inherit its steer (SEEKER homes · CHAOS flies wild · RETURN boomerangs); with CONTACT they carry its payload · +7⚡'),
-  boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core flies out, banks, and returns to the thrower — both passes cut · +6⚡'),
-  homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core steers toward the nearest warm target ahead — cover still works · +7⚡'),
-  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core fires free — no base ⚡, no round spent · +1⚡, never waived'),
+  fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it · +4⚡'),
+  contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core fires the one after it · +5⚡'),
+  slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{timer:1.5,surcharge:3},'Next core goes off at 1.5s or on first touch, whichever comes first — and fires the one after it · +3⚡'),
+  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
+  boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core returns to the thrower · +6⚡'),
+  homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core steers toward the nearest warm target · +7⚡'),
+  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core fires free — no base ⚡, no round spent · +1⚡'),
   chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core flies wild and hits +45% harder — stacks twice. Beams arc like lightning · +6⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
-  gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glue glob — sticks to the world and to other globs. Behind a BEAM: a physics gun. Dies in flight: sets there · 6⚡'),
-  pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Beam shoves what it touches'),
-  lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'A light of your own. It sees you back. [F]'),
+  gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glue glob · 6⚡'),
+  pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Shoves what it touches'),
+  lantern:    ()=>new ToolMod('LANTERN','#bfae7f','util',{flashlight:true},'This little light of yours... [F]'),
   beltFeeder: ()=>new ToolMod('BELT-FEEDER','#6d4c41','util',{beltFeed:true},'Chambers a round every 0.9s from your pockets — ticks softly; a suppressor hushes it'),
   // --- analog settings, as objects ---
-  watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','While carried, the HUD keeps time.'),
-  compass:    ()=>new Gadget('Compass','#7fa78f','compass','While carried, marks the beacon — or the nearest exfil in a raid.'),
-  photometer: ()=>new Gadget('Light Meter','#a8925f','photometer','While carried, reads how far out the light gives you away.'),
-  opticsDial: ()=>new Gadget('Optics Dial','#8f9fb0','optics','Right-click: cycle render fidelity (this IS the settings menu).'),
+  watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','Basic time-keeping.'),
+  compass:    ()=>new Gadget('Compass','#7fa78f','compass','Marks the nearest passage.'),
+  photometer: ()=>new Gadget('Light Meter','#a8925f','photometer','Reads how far out the light gives you away.'),
+  opticsDial: ()=>new Gadget('Optics Dial','#8f9fb0','optics','Right-click: cycle render fidelity.'),
   volumeKnob: ()=>new Gadget('Volume Knob','#b08f7f','volume','Right-click: cycle sound level.'),
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
 };
@@ -3542,10 +3529,10 @@ function interactInventory(){
 
   if(heldWorld){
     const it=heldWorld.w.item;
-    if(it._armT!=null){ toast('IT IS LIT'); playSound('empty'); return; }   // an armed core never enters a grid
+    if(it._armT!=null){ toast('ARMED'); playSound('empty'); return; }   // an armed core never enters a grid
     // supply crates are TAKE-ONLY: they reseed on every deploy — whatever you leave, the
     // valley eats. The stash (no external flag) is the one box that accepts.
-    if(f.external){ toast('A SUPPLY CRATE — TAKE ONLY'); playSound('empty'); return; }
+    if(f.external){ toast('SUPPLY CRATE'); playSound('empty'); return; }
     // held rounds pour straight into a magazine under the cursor
     if(it instanceof Ammunition && cell instanceof Magazine
        && cell.acceptedType===it.ammoType && cell.loaded<cell.maxCapacity){
@@ -3574,12 +3561,12 @@ function interactInventory(){
       }
       if(!cell){ writeRef(ref,it);
         consumeHeld();
-        if(it instanceof Barrel) toast('BARREL SET — COLUMN EXTENDED');
-        if(it instanceof Platform) toast('PLATFORM SET — '+it.slots.length+' SIDE SLOTS');
+        if(it instanceof Barrel) toast('BARREL SET');
+        if(it instanceof Platform) toast('PLATFORM SET');
         playSound('place'); refreshInvUI(); return; }
       // swap — but never rip out a loaded container
-      if(cell instanceof Barrel && !barrelIsEmpty(cell)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
-      if(cell instanceof Platform && !platformIsEmpty(cell)){ toast('CLEAR THE PLATFORM FIRST'); playSound('empty'); return; }
+      if(cell instanceof Barrel && !barrelIsEmpty(cell)){ toast('REMOVE MODS'); playSound('empty'); return; }
+      if(cell instanceof Platform && !platformIsEmpty(cell)){ toast('REMOVE MODS'); playSound('empty'); return; }
       if(cell===inspectItem) closeInspect();
       writeRef(ref,it);
       heldWorld.w.item=cell;
@@ -4194,7 +4181,7 @@ function resolveLane(col,out){
       pend.surcharge+=e.surcharge||0;
       feeders.push(m);
     }else if(m.cat==='proj'){
-      if(pend.twin>3) pend.twin=3;                  // TWIN cap: no shotgun accidents
+      if(pend.twin>6) pend.twin=6;                  // TWIN cap
       if(m.effect.burn) pend.burn+=m.effect.burn;   // FIRE cores carry their own ember
       if(m.effect.kind==='warp'||m.effect.kind==='slug') pend.laser=false;   // these shed the thread — a feeding BEAM vents its ⚡ into the chip price
       const e=m.effect;
@@ -4262,7 +4249,7 @@ function resolveTool(tool){
   return out;
 }
 function describeSequence(res){
-  if(res.bare) return '<span class="seqChip">BARE BOLT ⚡0</span> <span style="color:var(--dust)">— nothing racked, needs a magazine</span>';
+  if(res.bare) return '<span class="seqChip">9mm</span> <span style="color:var(--dust)">— nothing racked, needs a magazine</span>';
   return res.columns.map((lane,ci)=>{
     const name=lane.mountIdx===0?'BASE':'M'+lane.mountIdx;
     if(lane.emptyMount) return '<span style="color:var(--dust)">'+name+': free mount</span>';
@@ -4272,7 +4259,7 @@ function describeSequence(res){
       if(m.cat==='proj'){
         const sh=lane.shots[shotIdx++];
         if(sh&&sh.housed) return '<span class="seqChip" style="border-color:#8e24aa;opacity:.75">'+m.name
-          +'<span class="seqCost">⌂ housed</span></span>';   // fires from the carrier's impact — its ⚡/lead already ride the carrier chip
+          +'<span class="seqCost">⌂</span></span>';   // fires at impact
         return '<span class="seqChip" style="border-color:#8e24aa">'+m.name
           +'<span class="seqCost">⚡'+(sh?sh.cost:0)+(sh&&(!sh.pend.laser||sh.powder)&&roundsFor(sh)>0?'+'+roundsFor(sh)+'rd':'')+'</span></span>';   // powder pulses pay lead even under BEAM (v22 C1)
       }
@@ -4351,8 +4338,8 @@ function useItem(it,ctx){
     if(it._armT!=null){ toast('IT IS LIT'); playSound('empty'); return; }   // no fingers un-pull a pin
     // it arms in the hand or anywhere ON the body (tickInvArm's walk) — never in
     // a box the tick can't reach: a stash/crate grenade would smoulder forever
-    if(!ctx.hand && !itemOnPlayer(it)){ toast('LIGHT IT ON YOUR BACK, NOT IN A BOX'); playSound('empty'); return; }
-    it._armT=5; toast('LIT — FIVE'); playSound('click');
+    if(!ctx.hand && !itemOnPlayer(it)){ toast('EMERGENCY FIREPOWER'); playSound('empty'); return; }
+    it._armT=5; toast('ARMED'); playSound('click');
     return;
   }
   if(it instanceof ToolMod && it.effect && it.effect.laser){
@@ -5219,7 +5206,7 @@ function crackHelm(en){
 }
 function headshotDmg(en,dmg,head){
   if(!head) return dmg;
-  if(!en.helm) return dmg*2;
+  if(!en.helm) return dmg*4;
   crackHelm(en);
   return dmg;
 }
@@ -6102,7 +6089,7 @@ function travelTo(dest){                      // THE LOOP: the valley is the lan
 }
 // THE STASH: the hideout's one box that remembers. Its grid lives at module
 // scope so it survives deploys; SAVE_VER 3 writes it into the slot blobs.
-const STASH_COLS=6, STASH_ROWS=4;
+const STASH_COLS=6, STASH_ROWS=8;
 const stashInv=Array(STASH_ROWS).fill(null).map(()=>Array(STASH_COLS).fill(null));
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
 let crateRegistry=[], lootCrate=null;
@@ -6254,7 +6241,7 @@ function nearStubDoor(){
 // ---- `transition` rows later — the terminal doesn't know what a hideout is.
 let termScreen='home', termSel=0;
 const TERM_SCREENS={
-  home:()=>({title:'THE STOLEN TERMINAL', rows:[
+  home:()=>({title:'ValleyOS', rows:[
     {label:'DEPLOY', screen:'deploy'},
     {label:'MEMORY (SAVE / LOAD)', screen:'saves'},
     {label:'NEW GAME', screen:'newgame'},
@@ -6267,7 +6254,7 @@ const TERM_SCREENS={
       // reads BOOTING… — the terminal-boot masks the one-time cold compile (cached after first).
       const ready=(L.kind==='authored')?(_valleyLinked&&_authoredLinked):_valleyLinked;
       return ready
-        ? { label:L.name, meta:L.kind==='rings'?'endless':'raid · via the valley',
+        ? { label:L.name, meta:L.kind==='rings'?'endless':'raid',
             action:()=>{ closeTerminal(); if(L.kind==='authored') travelTo(L.id); else deployTo(L.id); } }
         : { label:L.name, meta:'BOOTING…', locked:true, action:()=>playSound('click') };
     }),
@@ -6286,7 +6273,7 @@ const TERM_SCREENS={
     {label:'BACK', screen:'saves'},
   ]}),
   newgame:()=>({title:'NEW GAME', rows:[            // the confirm gate — a stray press lands here, not on the wipe
-    {label:'YES — START OVER', meta:'memory slots keep · the kit waits in the stash', action:()=>{ closeTerminal(); newGame(); }},
+    {label:'YES — START OVER', meta:'Nothing is overwritten.', action:()=>{ closeTerminal(); newGame(); }},
     {label:'BACK', screen:'home'},
   ]}),
 };
@@ -6526,45 +6513,44 @@ function tipBrief(it){                                  // the info square's row
   if(it instanceof ToolMod){
     const e=it.effect||{};
     const kind=it.cat==='proj'?('CORE · '+(e.kind||'').toUpperCase())
-      :it.cat==='mod'?'CHARGE — feeds the core above'
+      :it.cat==='mod'?'Core Modification'
       :it.cat==='muzzle'?'MUZZLE PART'
-      :it.cat==='util'?'UTILITY — whole tool':'STAT — whole tool';
+      :it.cat==='util'?'UTILITY — arbitrary position':'STAT — whole tool';
     const rows=[];
     // racked above a FUSE/CONTACT carrier? the resolved shot knows — read it honestly
     if(it.cat==='proj'&&activeTool&&activeTool._res&&activeTool._res.shots.some(sh=>sh.core===it&&sh.housed))
-      rows.push('⌂ housed — fires where the carrier lands; its ⚡/lead bill the carrier (extra casts draw a third)');
-    if(e.base) rows.push('⚡'+e.base+' base');
-    if(e.surcharge) rows.push('⚡+'+e.surcharge+' surcharge');
-    if(e.kind==='bolt') rows.push('+1 round per shot');
-    if(e.kind==='decoy') rows.push('sticks · chirps every 1.5s for 12s · lures the unalarmed');
-    if(e.kind==='boom'){ rows.push('no flight — the blast goes off ~1.2m from the muzzle (it WILL hurt you)'); rows.push('FUSE-fed: flies, sticks, timed · relay-cast: blasts AT the point · TWIN: one blast, ×1.4 radius · BEAM-fed: drums small charges at the dot'); }
-    if(e.kind==='wave'){ rows.push('a slow wide wall · ~1.8m swath · shoves · each foe pays once'); rows.push('beam-fed: a short wide pressure corridor (~10m) — everything in it pays and is pressed back · TWIN widens it'); }
-    if(e.kind==='saw') rows.push('whole tool: cycle floor 0.06s · its own teeth die at ~4m · SWIFT stretches them');
-    if(e.kind==='warp'){ rows.push('you arrive where it dies — impact, fuse, or the end of its arc'); rows.push('arrival is LOUD · HUSH-fed: quiet, both ends'); }
-    if(e.kind==='slug') rows.push('3 rounds per shot · ×3 tool hurt · whole tool +0.45s cycle unless relay-housed');
-    if(e.kind==='orb') rows.push('slow orb · 6s aloft, then its payload pops · weak alone');
-    if(e.powder) rows.push('its feeding mods cost no ⚡ · under BEAM: hitscan paid in lead — 1 round per pulse, 0⚡');
-    if(e.refund) rows.push('next core: base ⚡ waived · mag-fed: no lead spent · this +1⚡ is never waived');
-    if(e.beltFeed) rows.push('chambers 1 round / 0.9s from your pockets · ticks softly — a suppressed tool feeds silent');
-    if(e.chaos){ rows.push('wild flight · beam threads arc like lightning'); rows.push('with SEEKER: the arcs bite the nearest warm thing · with SPLINTER: the shards fly wild too'); }
+      rows.push('⌂');
+    if(e.base) rows.push('⚡'+e.base);
+    if(e.surcharge) rows.push('+'+e.surcharge);
+    if(e.kind==='bolt') rows.push('-1 bullet');
+    if(e.kind==='decoy') rows.push('sticky · chirps every 1.5s');
+    if(e.kind==='boom') rows.push('kaboom');
+    if(e.kind==='wave') rows.push('a slow wide wall');
+    if(e.kind==='saw') rows.push('whole tool: cycle floor 0.06s');
+    if(e.kind==='warp') rows.push('you arrive where it dies');
+    if(e.kind==='slug') rows.push('3 rounds per shot');
+    if(e.kind==='orb') rows.push('slow orb');
+    if(e.powder) rows.push('mods cost no ⚡');
+    if(e.refund) rows.push('next core: base ⚡/bullets waived');
+    if(e.beltFeed) rows.push('LOUDLY chambers 1 round / 0.9s from your pockets');
+    if(e.chaos) rows.push('unpredictable · beam threads arc like lightning'); 
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
     if(e.vel) rows.push('velocity ×'+e.vel);
     if(e.twin) rows.push('×'+e.twin+' projectiles');
-    if(e.twin) rows.push('beam-fed: splits the thread ×'+e.twin+' · strands wander');
-    if(e.pierce) rows.push('drills through every body in its path — each one pays · the world or the clock ends it');
+    if(e.pierce) rows.push('drills through everybody in its path');
     if(e.bounce) rows.push('bounces '+e.bounce);
-    if(e.grav){ rows.push('weight — the shot arcs and falls'); rows.push('beam-fed: the thread sags to the dirt at range · SWIFT flies it flatter · GRIP/PICK stay straight'); }
+    if(e.grav) rows.push('the shot is affected by gravity');
     if(e.spread) rows.push('spread ×'+e.spread);
     if(e.fireRate) rows.push(e.fireRate+'s cycle');
     if(e.burst) rows.push(e.burst+'-round burst · beam lanes: '+e.burst+'-pulse laser burst');
     if(e.silenced||e.silent) rows.push('silenced');
-    if(e.fuse){ rows.push('fused '+e.fuse+'s — sticks, blows, and casts the next core in the lane off the stuck face'); rows.push('that core is HOUSED — out of the fire cycle, billed to this carrier'); }
-    if(e.timer){ rows.push(e.timer+'s clock or first touch — whichever first, casts the payload'); rows.push('feeding a FUSE: +'+e.timer+'s patience instead'); }
-    if(e.contact){ rows.push('LAST touch casts the next core in the lane, off the struck face — RICOCHET banks first · nothing above: plain impact · FUSE on the same core wins'); rows.push('that core is HOUSED — billed to this carrier · on a BEAM: the thread drums half-size casts at the contact point every 0.5s (ballistic beats cost lead)'); }
-    if(e.split){ rows.push('splinters ×'+e.split+' on impact'); rows.push('the shards inherit the core’s steer — SEEKER shards home · CHAOS shards fly wild · RETURN shards boomerang home · TWIN: every copy shatters'); rows.push('beam-fed: the thread shatters at contact — up to 3 shard rays, 6m, weaker · every TWIN strand shatters'); }
-    if(e.boomerang){ rows.push('returns to the thrower · both passes cut'); rows.push('with SPLINTER: the shards boomerang too'); rows.push('beam-fed: the thread loops out and back — cuts beside cover · TWIN mirrors it'); }
-    if(e.homing){ rows.push('seeks the warm ahead of it · can still be dodged'); rows.push('with SPLINTER: the shards seek too'); rows.push('beam-fed: the thread bends onto marks within ~12° of the aim'); }
-    if(e.laser){ rows.push('laser · ⚡+'+(e.surcharge||0)); rows.push('beam hurt also burns — an equal dose per tick (pool 30, resists apply)'); }
+    if(e.fuse) rows.push('fused '+e.fuse+'s — sticks and times payload');
+    if(e.timer) rows.push(+e.timer+'s or first touch');
+    if(e.contact) rows.push('triggers payload');
+    if(e.split) rows.push('splinters ×'+e.split+' on impact');
+    if(e.boomerang) rows.push('returns to the thrower');
+    if(e.homing) rows.push('heat-seeking');
+    if(e.laser){ rows.push('laser'); rows.push('burns — an equal dose per tick'); }
     return {kind,rows};
   }
   if(it instanceof Magazine) return {kind:'MAGAZINE · '+it.acceptedType,
@@ -6575,7 +6561,7 @@ function tipBrief(it){                                  // the info square's row
   if(it instanceof Platform) return {kind:'PLATFORM · '+it.rarity.toUpperCase(),
     rows:[it.slots.length+' side slots','each fires alone']};
   if(it instanceof Armor) return {kind:'ARMOR · '+it.armorType.toUpperCase(),
-    rows:[it.desc(), equip[it.armorType]===it ? (zoneFolds(it)?'equipped · [X] opens / closes it':'equipped') : 'equip it in the rig column']};
+    rows:[it.desc(), equip[it.armorType]===it ? (zoneFolds(it)?'equipped · [X] open/close':'equipped') : 'equip to rig column']};
   if(it&&it.widget) return {kind:'SETTING',
     rows:[it.label+': '+widgetValueText(it), it.functional?'live':'not wired · turns freely'].concat(it.tip?[it.tip]:[])};
   if(it.ration) return {kind:'RATION', rows:['+14 vitality','tastes like the war']};
@@ -7292,7 +7278,7 @@ function buildDebugPanel(){
     enemies.push(new Zealot(playerPos.x+f.x*8, playerPos.z+f.z*8)); };
   document.getElementById('dbgKillAll').onclick=()=>enemies.forEach(e=>{ if(e.health>0) e.hurt(999,'debug'); });
   document.getElementById('dbgTpGate').onclick=()=>{ playerPos.x=GATE.x-3; playerPos.z=GATE.z; playerPos.y=0; };
-  document.getElementById('dbgNextRing').onclick=()=>{ if(!activeLevel) onBreach(); else toast('NO RINGS HERE'); };
+  document.getElementById('dbgNextRing').onclick=()=>{ if(!activeLevel) onBreach(); else toast('ENDLESS MODE ONLY'); };
   document.getElementById('dbgDeployA1').onclick=()=>deployTo('area1');
   document.getElementById('dbgDeployHide').onclick=()=>deployTo('hideout');
   document.getElementById('dbgDeployValley').onclick=()=>deployTo('valley');
@@ -7915,7 +7901,7 @@ function frame(){
   // ---- camera & menu presentation ----
   menuAnim+=((uiMenusOpen()?1:0)-menuAnim)*Math.min(1,9*dt);
   if(isInventoryOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2; else menuMode=0;
-  const tYawOff=0, tPitchOff=uiMenusOpen()?-0.40:0;    // the camera dips to the raised prop
+  const tYawOff=0, tPitchOff=uiMenusOpen()?-0.10:0;    // the camera dips to the raised prop
   playerPos.camYawOffset+=(tYawOff-playerPos.camYawOffset)*10*dt;
   playerPos.camPitchOffset+=(tPitchOff-playerPos.camPitchOffset)*8*dt;
   const finalYaw=cameraYaw+playerPos.camYawOffset;
