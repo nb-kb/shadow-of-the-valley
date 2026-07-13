@@ -160,6 +160,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- full-screen overlays ---------- */
 .screen{position:absolute;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;
   background:rgba(5,6,8,.88);backdrop-filter:blur(2px);}
+#introScreen{background:#050608;backdrop-filter:none;}   /* cold-boot gate must be OPAQUE: a translucent gate reveals the not-yet-painted (transparent-black) canvas = the black cold boot */
 .screen .inner{max-width:640px;padding:34px 40px;text-align:center;}
 .screen h1{font-size:36px;letter-spacing:.5em;margin:0 0 18px;color:var(--bone);font-weight:bold;}
 .screen p{font-size:15px;letter-spacing:.12em;line-height:2;color:var(--dust);margin:8px 0;}
@@ -376,7 +377,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.1-light1';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.2-wip1';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -1776,6 +1777,7 @@ canvas.addEventListener('webglcontextlost', e=>{
 });
 const gl = canvas.getContext('webgl2',{powerPreference:'high-performance'});   // Optimus laptops: ask for the real GPU, not the Intel chip
 if(!gl) fatal('WebGL2 unavailable — this engine needs it.');
+gl.clearColor(0.02,0.024,0.031,1.0); gl.clear(gl.COLOR_BUFFER_BIT);            // paint an intentional dark tone at t=0 — an uncleared backbuffer is transparent-BLACK until the first shader links (the cold-boot black screen)
 // GPU identity — the hint above is only a hint; name what we actually got.
 const glRenderer=(()=>{ try{
   const x=gl.getExtension('WEBGL_debug_renderer_info');                        // may be null (Firefox etc.)
