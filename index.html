@@ -415,7 +415,7 @@ const PARAMS = {
   enemyFovDeg: {v:150, min:40,  max:180,  step:5,   label:'zealot fov°'},
   enemySpeed:  {v:2.6, min:0.5, max:6,    step:0.1, label:'zealot speed'},
   enemyDamage: {v:11,  min:0,   max:40,   step:1,   label:'zealot bolt dmg'},
-  maxEnemies:  {v:6,   min:0,   max:10,    step:1,   label:'zealot count'},
+  maxEnemies:  {v:10,  min:0,   max:10,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
   fogWeather:  {v:0.5,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
@@ -1458,7 +1458,7 @@ vec2 map(vec3 p){
       }
     }else if(uHasTool>0.5){
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.215:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 low -0.215; BARE -0.09 (lowered a touch for see-past visibility)
-      float gz=0.46 - uAim*((uReticle==1||uReticle==2)?0.10:0.0);   // red-dot/holo: pull the gun ~0.10 CLOSER at full ADS so you sight THROUGH the housing window
+      float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:0.0);   // iron/red-dot/holo: pull the gun ~0.18 CLOSER at full ADS (closer than the bare tool) so the housing fills the view
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
@@ -3964,14 +3964,14 @@ function findGadgetOnPlayer(kind){                                    // like fi
 // the hard sight gate, and the photometer, so the drawn number never lies.
 function fogEye(){ return 1-0.65*fogW; }
 function dayEye(){ return 1+0.5*Math.max(0,-Math.cos(dayNight.t01*Math.PI*2)); } // sun eyes: 1.0 twilight/night … 1.5 noon — twin of updateDayNight's elev
-function effVision(){ return P('enemyVision')*fogEye()*dayEye(); }
+function effVision(){ return P('enemyVision')*dayEye(); }   // fog no longer blinds enemies — only day/night tunes their sight
 // PHOTOMETER MATH — inverts the zealot perception line (Zealot.update):
 //   rate = exposure * (effVision/dist) * motion, accumulating only while rate > 0.12.
 // Standing+quiet motion is 0.6 → dist = exposure*effVision*5. Floor 2m; cap at the
 // 34m sight gate (fog·dayEye-scaled, same as the AI's). Assumes the zealot is LOOKING —
 // the cone is their problem, not the light's.
 function spotDistance(){
-  return clamp(playerPos.exposure*effVision()*0.6/0.12, 2, 34*fogEye()*dayEye());
+  return clamp(playerPos.exposure*effVision()*0.6/0.12, 2, 34*dayEye());
 }
 
 // ============================================================
@@ -6014,7 +6014,7 @@ class Zealot{
     const dist=Math.hypot(dx,dz);
     const eyeY=this.position.y+1.55;
     const losRay = FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz);   // pure sightline (reused for cover)
-    const seesLOS = dist<34*fogEye()*dayEye() && losRay;
+    const seesLOS = dist<34*dayEye() && losRay;
     this.inCover = this.state===2 && this.alarmRole==='cover' && !!this.coverPoint && this.position.distanceTo(this.coverPoint)<1.2;   // only an ALARMED cover-role zealot committed to its cover point counts — not oblivious patrollers, facing-away enemies, or Believers
     if(this._coveringFire>0) this._coveringFire-=dt;
     const fwdX=Math.sin(this.yaw), fwdZ=Math.cos(this.yaw);
