@@ -380,7 +380,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.0.2-wip2';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.0.2-wip3';   // bumped each shipped build — shown in fault banners
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -542,6 +542,7 @@ window.addEventListener('keyup',e=>{ INPUT.keys[e.code]=false; });
 window.addEventListener('mousedown',e=>{
   const code='Mouse'+e.button;
   if(listeningBind){ finishBind(code); e.preventDefault(); return; }
+  if(e.button===1 && uiOpen()) e.preventDefault();       // MMB verb (quickUse) lives in auxclick; cancel the browser's middle-click autoscroll while a menu is open
   if(!INPUT.mouse[code]){ if(pointerLocked()||uiOpen()) markEdges(code,false); }
   INPUT.mouse[code]=true;
   anyKeyGate();
