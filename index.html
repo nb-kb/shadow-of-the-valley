@@ -420,6 +420,12 @@ const PARAMS = {
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
   fogWeather:  {v:0.5,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
   nightFloor:  {v:0.012,min:0.002,max:0.06,step:0.002,label:'night ambient'},
+  saturation:  {v:1.2, min:0.4, max:1.6,  step:0.1, label:'color saturation'},   // → uSaturation (post-gamma grade)
+  shadowOn:    {v:1,   min:0,   max:1,    step:1,   label:'shadows'},             // → uShadowMode (gates softShadow)
+  aoOn:        {v:1,   min:0,   max:1,    step:1,   label:'ambient occlusion'},   // → uAO (gates the AO sample)
+  viewDist:    {v:1.0, min:0.6, max:1.0,  step:0.05,label:'draw distance ×'},     // scales uFar (pull the fog in for FPS)
+  hazeMul:     {v:1.0, min:0.5, max:2.0,  step:0.1, label:'haze ×'},              // scales uFog
+  crowdCap:    {v:20,  min:4,   max:20,   step:1,   label:'crowd cap'},           // caps rendered+active enemies (uEnemyCount)
 };
 const P = k => PARAMS[k].v;
 const PARAM_DEFAULTS={}; for(const k in PARAMS) PARAM_DEFAULTS[k]=PARAMS[k].v;   // boot literals — NEW GAME and slots without a value land here
@@ -731,6 +737,9 @@ uniform vec3  uSkyLo;
 uniform float uFog;
 uniform float uFar;
 uniform int   uMaxSteps;    // main structure-march cap — the DETAIL graphics knob
+uniform float uSaturation;  // final color-grade saturation (goggles COLOR dial)
+uniform int   uShadowMode;  // 0 shadows OFF (fully lit, fastest) · 1 soft shadows
+uniform int   uAO;          // 0 ambient-occlusion OFF · 1 ON
 uniform vec2  uSeed;        // integer cell offset per run/ring
 uniform vec2  uGateCell;
 uniform vec3  uGatePos;
@@ -1727,9 +1736,9 @@ void main(){
       col = matCol*(uLightCol*dif + uAmbient*(0.55+0.45*n.y));
 #else
       float dif = clamp(dot(n,uLightDir),0.0,1.0);
-      float sh  = dif > 0.01 ? softShadow(p+n*0.05, uLightDir, 60.0) : 0.0;
+      float sh  = dif > 0.01 ? (uShadowMode>0 ? softShadow(p+n*0.05, uLightDir, 60.0) : 1.0) : 0.0;
       vec3 lit = matCol * uLightCol * dif * sh;
-      float ao = clamp(mapStatic(p+n*0.30).x/0.30, 0.0, 1.0);
+      float ao = uAO>0 ? clamp(mapStatic(p+n*0.30).x/0.30, 0.0, 1.0) : 1.0;
       lit += matCol * uAmbient * (0.55+0.45*n.y) * (0.45+0.55*ao);
 
 #ifndef AUTHORED
@@ -1746,7 +1755,7 @@ void main(){
           vec3 ld=lpos-p; float lDist=length(ld); ld/=lDist;
           float lDif=clamp(dot(n,ld),0.0,1.0);
           float lAtt=1.0/(1.0+0.22*lDist+0.08*lDist*lDist);
-          float lSh = lDif>0.01 ? softShadow(p+n*0.04, ld, lDist) : 0.0;
+          float lSh = lDif>0.01 ? (uShadowMode>0 ? softShadow(p+n*0.04, ld, lDist) : 1.0) : 0.0;
           lit += matCol * vec3(1.0,0.82,0.55) * lDif * lAtt * lSh * 4.6;
         }
       }
@@ -1797,7 +1806,7 @@ void main(){
     col = skyColor(rayDir);   // a true miss is sky; the ground march owns the land
   }
   col = pow(col, vec3(0.4545));
-  col = mix(vec3(dot(col, vec3(0.299,0.587,0.114))), col, 1.2); // modest global saturation lift — post-gamma so no pow() NaN, pre-HUD so reticle stays neutral
+  col = mix(vec3(dot(col, vec3(0.299,0.587,0.114))), col, uSaturation); // color-grade saturation (goggles COLOR dial) — post-gamma so no pow() NaN, pre-HUD so reticle stays neutral
   // ---- optic reticle: the player looks THROUGH the glass while aiming ----
   if(uReticle>0 && uAim>0.55){
     vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
@@ -1898,7 +1907,7 @@ const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
   ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
-   'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uWorldTop','uVCrateCount',
+   'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   U.edits    = locArray(prog,'uEdits', 16);
@@ -3339,7 +3348,25 @@ const SETTINGS_REGISTRY=[
    tip:'night floor — how dark the dark gets',
    get:()=>P('nightFloor'),
    set:v=>{ PARAMS.nightFloor.v=v; }},                // updateDayNight reads it per frame — applies live, no resize
-  {container:'goggles', id:'resolution', label:'RES', kind:'enum', options:['LOW','MATCH'], functional:false, init:'LOW'},
+  {container:'goggles', id:'drawDist', label:'VIEW', kind:'enum', functional:true,
+   options:['CLOSE','MED','FAR'],
+   get:()=>['CLOSE','MED','FAR'][Math.max(0,[0.65,0.82,1.0].findIndex(v=>Math.abs(v-P('viewDist'))<0.06))],
+   set:v=>{ PARAMS.viewDist.v=[0.65,0.82,1.0][['CLOSE','MED','FAR'].indexOf(v)]; }},
+  {container:'goggles', id:'haze', label:'HAZE', kind:'enum', functional:true,
+   options:['CLEAR','NORM','THICK'],
+   get:()=>['CLEAR','NORM','THICK'][Math.max(0,[0.6,1.0,1.6].findIndex(v=>Math.abs(v-P('hazeMul'))<0.18))],
+   set:v=>{ PARAMS.hazeMul.v=[0.6,1.0,1.6][['CLEAR','NORM','THICK'].indexOf(v)]; }},
+  {container:'goggles', id:'crowd', label:'CROWD', kind:'enum', functional:true,
+   options:['SPARSE','NORM','HORDE'],
+   get:()=>['SPARSE','NORM','HORDE'][Math.max(0,[8,14,20].findIndex(v=>Math.abs(v-P('crowdCap'))<3))],
+   set:v=>{ PARAMS.crowdCap.v=[8,14,20][['SPARSE','NORM','HORDE'].indexOf(v)]; }},
+  {container:'goggles', id:'sat', label:'COLOR', kind:'range', functional:true,
+   min:0.4,max:1.6,step:0.1, tip:'color saturation — how punchy the palette reads',
+   get:()=>P('saturation'), set:v=>{ PARAMS.saturation.v=v; }},
+  {container:'goggles', id:'shadows', label:'SHADOW', kind:'enum', functional:true,
+   options:['OFF','ON'], get:()=>P('shadowOn')>0.5?'ON':'OFF', set:v=>{ PARAMS.shadowOn.v=v==='ON'?1:0; }},
+  {container:'goggles', id:'ao', label:'AO', kind:'enum', functional:true,
+   options:['OFF','ON'], get:()=>P('aoOn')>0.5?'ON':'OFF', set:v=>{ PARAMS.aoOn.v=v==='ON'?1:0; }},
   // headphones — the ears (per-category buses are a later seam: route each to its own gain node)
   {container:'headphones', id:'master', label:'MASTER', kind:'enum', functional:true,
    options:['0%','35%','70%','100%'],
@@ -3806,6 +3833,7 @@ function activateAtCursor(){
   if(!f.grid&&!f.rack){ if(inspectItem) closeInspect(); return; }
   clampCursor(f);
   const cell=cellAt(f);
+  if(f.locked && cell && cell.widget){ adjustWidget(cell,-1); refreshInvUI(); return; }   // SECONDARY (RMB · ✕/pad0 · X) steps the dial DOWN; interact (LMB · □/pad2 · E) steps it UP
   if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
     if(!cell && !heldWorld){ closeInspect(); return; }
     if(f.locked){ if(cell&&cell.widget){ adjustWidget(cell,1); refreshInvUI(); } else playSound('click'); return; }
@@ -8599,7 +8627,7 @@ function frame(){
   gl.uniform1f(U.uAmbient,dayNight.ambient);
   gl.uniform3f(U.uSkyHi,dayNight.skyHi[0],dayNight.skyHi[1],dayNight.skyHi[2]);
   gl.uniform3f(U.uSkyLo,dayNight.skyLo[0],dayNight.skyLo[1],dayNight.skyLo[2]);
-  gl.uniform1f(U.uFog, dayNight.fogE);   // weather-effective density (updateDayNight)
+  gl.uniform1f(U.uFog, dayNight.fogE*P('hazeMul'));   // weather density × goggles HAZE dial
   { // world ceiling: static per world, raised by anything airborne this frame
     let _top = (activeLevel&&activeLevel.kind==='authored') ? (activeLevel.worldTop||18.0) : 81.0;
     for(const b of beamSegs) _top=Math.max(_top, b.a.y, b.b.y);
@@ -8619,8 +8647,11 @@ function frame(){
     gl.uniform1i(U.uExfilCount,n);
     for(let i=0;i<n;i++) gl.uniform4f(U.uExfils[i], exs[i].x, exs[i].y||0, exs[i].z, 1);
   }
-  gl.uniform1f(U.uFar, dayNight.farE);   // weather-effective far — the march never pays for meters the fog owns
+  gl.uniform1f(U.uFar, dayNight.farE*P('viewDist'));   // weather far × goggles VIEW dial (lower = pull the fog in for FPS)
   gl.uniform1i(U.uMaxSteps, P('rayQuality')|0);
+  gl.uniform1f(U.uSaturation, P('saturation'));
+  gl.uniform1i(U.uShadowMode, P('shadowOn')>0.5?1:0);
+  gl.uniform1i(U.uAO, P('aoOn')>0.5?1:0);
   gl.uniform2f(U.uSeed,SEED.x,SEED.y);
   gl.uniform2f(U.uGateCell,GATE.cx,GATE.cz);
   gl.uniform3f(U.uGatePos,GATE.x,0,GATE.z);
@@ -8656,7 +8687,7 @@ function frame(){
       return da-db;
     });
   for(const en of _liveEn){
-    en._dormant = ei>=RLIM.ENEMIES;            // past the uniform cap: unrendered = dormant, can't shoot or be shot
+    en._dormant = ei>=Math.min(RLIM.ENEMIES,P('crowdCap')|0);   // past the cap: unrendered = dormant. goggles CROWD dial can pull it below RLIM for FPS
     if(en._dormant) continue;
     en._slot=ei;
     const wt=(en.stagger>0)?0:Math.min(1,Math.hypot(en.velocity.x,en.velocity.z)/1.6);
