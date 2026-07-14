@@ -6352,14 +6352,26 @@ class Zealot{
     }else if(this.state>=1&&this.investigate){            // ALERTED BUT BLIND (saw them, or got SHOT from out of sense range) — shamble to the last-known spot, then give up
       moveTo=this.investigate; faceTo=this.investigate;
       if(Math.hypot(this.investigate.x-this.position.x,this.investigate.z-this.position.z)<1.5){ this.investigate=null; this.state=0; }
-    }else{                                                 // WANDER — or FOLLOW a brute the horde has found: rank undead pack up behind it and escort it
+    }else{                                                 // WANDER — brute PROWLS the whole arena; rank undead escort it
       this.state=0; this.detection=Math.max(0,this.detection-dt*0.5);
-      let brute=null, bd=45;
-      if(!this._brute) for(const o of enemies){ if(o!==this&&o._brute&&o.health>0){ const dd=o.position.distanceTo(this.position); if(dd<bd){ bd=dd; brute=o; } } }
-      if(brute&&bd>3.0){ moveTo=brute.position; faceTo=brute.position; }   // close on the brute, stop ~3m off — the swarm clusters on its leader
-      else { this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;   // no brute (or already packed): a lazy loop drift
-        const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
-        moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3); faceTo=moveTo; speed*=0.5; }
+      if(this._brute){                                     // BRUTE ROAM: commit to a DISTANT site, re-pick on arrival/timeout → long treks, whole-map coverage (kills the lazy circle)
+        this._roamT=(this._roamT||0)-dt;
+        const arrived=this._roam&&Math.hypot(this._roam.x-this.position.x,this._roam.z-this.position.z)<5;
+        if(!this._roam||arrived||this._roamT<=0){          // need a new goal → draw a far, in-play anchor
+          const sp=activeLevel&&activeLevel.spawn, anch=sp?[...(sp.pois||[]).map(p=>p.c),...(sp.zombieZones||[])]:null;
+          if(anch&&anch.length){ const a=anch[Math.floor(runRng()*anch.length)]; this._roam=new Vec3(a[0]+(runRng()*2-1)*10,0,a[1]+(runRng()*2-1)*10); }   // POI/zombie-zone ± 10m — successive picks are often opposite corners = long treks
+          else this._roam=new Vec3(this.startPos.x+(runRng()*2-1)*80,0,this.startPos.z+(runRng()*2-1)*80);   // open valley (no POIs): wide box around spawn
+          this._roamT=16+runRng()*12;                      // hold this heading 16–28s before forcing a re-pick
+        }
+        moveTo=this._roam; faceTo=this._roam;              // full brute pace (no *0.5) → it actually crosses ground
+      } else {                                             // rank undead: FOLLOW the nearest live brute, else a lazy loop drift
+        let brute=null, bd=45;
+        for(const o of enemies){ if(o!==this&&o._brute&&o.health>0){ const dd=o.position.distanceTo(this.position); if(dd<bd){ bd=dd; brute=o; } } }
+        if(brute&&bd>3.0){ moveTo=brute.position; faceTo=brute.position; }   // close on the brute, stop ~3m off — the swarm clusters on its leader
+        else { this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;   // no brute (or already packed): a lazy loop drift
+          const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
+          moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3); faceTo=moveTo; speed*=0.5; }
+      }
     }
     // move · face · settle — undead never shoot/reload, but a WAVE press still shoves them
     if(moveTo){ const mdx=moveTo.x-this.position.x, mdz=moveTo.z-this.position.z, md=Math.hypot(mdx,mdz);
@@ -6467,7 +6479,7 @@ class Zealot{
     }
     this.detection=0; this.state=0; this.investigate=null;
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;
-    this.patrolDir=runRng()*6.28; this.dwellT=0;
+    this.patrolDir=runRng()*6.28; this.dwellT=0; this._roam=null;   // fresh roam goal on respawn (brute re-picks from its new drop point)
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
     if(this._faction==='soldier'){ if(this._believer){ this.helm=this.plates=this.pack=null; } else { this.buildTool(); this.rollGear(); } }
