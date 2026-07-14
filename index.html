@@ -2226,6 +2226,7 @@ const BRUTE_RESPAWN=15*60;                    // 15 min game-time (horde spec) �
 let _poiRot=Math.floor(Math.random()*3);      // AREA-1 POI ROTATION (build 4): cursor into the opposite-quadrant hot pairs {c,c+half}; advances each CAMP raid so the NEXT raid draws a DISJOINT pair. Persisted per-slot (SAVE_VER 5) so rotation survives reload; re-randomized on a fresh run.
 let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying the radioactive haze THIS raid. Persisted so a mid-raid reload keeps the same hot/hazed split (derivable from _poiRot, but stored to stay stable). INERT this phase — haze DoT/tint is Phase 2/3; reserved slot, default [].
 let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. INERT this phase — the gate object/terminal is Phase 2; the wall build leaves the incline GAP in geometry. Reserved slot.
+let outskirtsTime=0;    // AREA-1 CONTAINMENT (P2b): lifetime seconds the player has lingered in the outskirts (past the OPEN gate) — the suicide-run PR metric. Session-scoped for now; the stats page (System I) wires save persistence + the terminal readout (reuse THIS global, don't redeclare).
 
 // ======================================================================================
 // LEVEL MODULE — authored levels as self-contained data. A level is: bounds + region
@@ -6526,6 +6527,56 @@ function reviveBrute(){                          // BRUTE mini-boss returns on t
 }
 
 // ============================================================
+// OUTSKIRTS GAUNTLET (Containment P2b) — beyond the OPEN north
+// gate, the contaminated outskirts spawn undead at ESCALATING
+// frequency the longer the player lingers: the suicide run. Pure
+// JS, no geometry/twin change — reuses the Zealot 'zombie' body.
+// SPAWN never overflows the render band: WAKE a downed shambler
+// first (zero roster growth), else MINT only while the roster is
+// under RLIM.ENEMIES (= the nearest-N upload cap). NOT the way
+// home — the interior exfil is; this is chaos with a clock.
+// ============================================================
+let _outskDwell=0, _outskSpawnT=3;               // continuous linger (drives the ramp) + spawn cadence; both re-arm when the player steps back inside
+function inOutskirts(){                           // gate OPEN and the player actually out past the north wall (z>z1). The notch is the perimeter's ONLY breach, so z>z1 ⇒ they came through it.
+  return !!activeLevel && activeLevel.id==='area1' && _gateOpen && playerPos.z>activeLevel.bounds.z1;
+}
+function outskirtsSpawnPoint(){                   // a clear ground spot 10–24m from the player, kept OUT past the wall
+  const z1=activeLevel.bounds.z1;
+  for(let t=0;t<12;t++){
+    const a=runRng()*6.2832, r=10+runRng()*14;
+    const x=playerPos.x+Math.cos(a)*r, z=playerPos.z+Math.sin(a)*r;
+    if(z<=z1+1) continue;                         // never spawn back through the gate / inside the arena
+    if(levelSdfJS(x,1.0,z)<0.4) continue;         // not inside a wall/prop
+    return [x,z];
+  }
+  return null;
+}
+function wakeUndead(en,x,z){                       // recycle a DOWNED undead body in place → a fresh 100-HP shambler at (x,z); no new object, faction already sticks
+  en.position.set(x, restOnSurface(x, levelGroundJS(x,z)+2.5, z), z);
+  en.startPos=en.position.clone();
+  en.health=100; en.respawnT=0; en.stagger=0; en._dormant=false;
+  en.detection=0; en.state=0; en.investigate=null; en.target=null;
+  en.patrolDir=runRng()*6.28; en.dwellT=0; en._roam=null;
+  en.status.burn=0; en.status.bleedT=0; en.status.bleedN=0;
+}
+function spawnOutskirtsZombie(){
+  const p=outskirtsSpawnPoint(); if(!p) return;
+  const dz=enemies.find(e=>e.health<=0&&e._faction==='zombie'&&!e._brute);   // reuse a downed shambler first — zero roster growth
+  if(dz){ wakeUndead(dz,p[0],p[1]); return; }
+  if(enemies.length<RLIM.ENEMIES) enemies.push(new Zealot(p[0],p[1],'zombie'));   // else MINT — hard roster cap = render cap, so the nearest-N band never overflows
+}
+function updateOutskirts(dt){
+  if(!inOutskirts()){ _outskDwell=0; _outskSpawnT=3; return; }   // back inside → the ramp cools, re-arming the ~3s grace
+  _outskDwell+=dt; outskirtsTime+=dt;                            // dwell drives the escalation; outskirtsTime is the persistent PR
+  const ramp=Math.min(1,_outskDwell/45);                        // 0→1 over 45s of lingering
+  _outskSpawnT-=dt;
+  if(_outskSpawnT>0) return;
+  _outskSpawnT=3.0-2.55*ramp;                                   // interval 3.0s → 0.45s: the longer you stay, the faster they come
+  const burst=_outskDwell>25?2:1;                               // late run: they crowd in two at a time (cap still holds the concurrent count)
+  for(let i=0;i<burst;i++) spawnOutskirtsZombie();
+}
+
+// ============================================================
 // LOOT · GATE · RUN FLOW
 // ============================================================
 // (ground scatter retired in v21l — the world's loot lives in crates now)
@@ -8683,6 +8734,7 @@ function frame(){
       if(_genE!==_worldGen) break;           // a dry-mag swipe killed you mid-roster — the rest belong to a dead world
       if(en.health>0) highestDetection=Math.max(highestDetection,en.detection);
     }
+    updateOutskirts(dt);                   // CONTAINMENT P2b: escalating undead gauntlet beyond the OPEN gate — wakes/pushes AFTER the roster loop, never mutating it mid-iterate
     if(bruteRespawnT>0){ bruteRespawnT-=dt; if(bruteRespawnT<=0){ bruteRespawnT=0; reviveBrute(); } }   // BRUTE mini-boss: the lone roamer returns on the 15-min session clock (game-time)
     updateAttachedGlobs();                 // worn glue rides its host — sync after the zealots move
     for(let i=noisePings.length-1;i>=0;i--){ noisePings[i].ttl-=dt; if(noisePings[i].ttl<=0) noisePings.splice(i,1); }
