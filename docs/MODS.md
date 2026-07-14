@@ -10,6 +10,63 @@ Legend: **cat** = category, drives resolver semantics. **⚡** = `surcharge`
 
 ---
 
+## ⚠ CORRECTED MODEL — Ammunition / Powder / Refund (beta 1.1.x, owner-locked 2026-07-13)
+
+Supersedes: the POWDER + SLUG **core** rows below (both retired to AMMO), the
+refund "no round spent" waiver, and the SLUG-core traps (WOODCHIPPER, DRUM-EATER
+— unbuildable now). There is NO coreless powder synth.
+
+**Ammo is fired by a BOLT CORE.** The bolt core is the ballistic emitter; the
+loaded caliber sets the base; every projectile mod applies **per-pellet** (each
+pellet is a full projectile carrying the whole `pend`). So "SLUG interactions"
+aren't dead — they generalize: any caliber × any proj mod falls out for free
+(SEEKER buckshot = 5 homing pellets, SPLINTER flechette = 4×3 frags, DRILL slug
+pierces…). Calibers: 9mm 24 · 7.62 AP 35 +50% pen · flechette 4×5 +20% bleed ·
+slug ×3 +0.45s · buckshot 5×24.
+
+**Two pools → the only desync.**
+- **Energy cores** drain the BATTERY; ride the core cycle; carry mods
+  (battery-paid); relays house payloads (deferred cost battery-paid).
+- **Bolt-core ammo** rides IN the core cycle → always synced, traceable, never
+  desyncs.
+- **Boltless munitions** (mag, no bolt core) throw plain lead, NO mods, drawing
+  the AMMO pool not energy → they fire PARALLEL to the energy cores. The ONLY
+  place desync lives (pools + counts drift; fine by design).
+
+**Three ways a bullet fires:** (1) boltless → plain, no mods, parallel/desync;
+(2) regular mag + a POWERED bolt core + mods → mods **battery-paid**; (3) powder
+mag + bolt core + mods → mods **FREE**.
+
+**Powder mag = two benefits:** (1) **any ammo type** (`anyCaliber`) — always,
+even boltless (a universal feed; a boltless powder mag is plain lead of any
+caliber); (2) **free relay mods** — ONLY when powered (a bolt core): it zeroes
+the mod surcharges on its OWN relay, and NEVER touches core bases, a housed
+payload's deferred cost, or lead.
+
+**Refund (corrected):** frees the base ⚡ of the ONE core on its relay. Full stop
+— no rounds back, no housed-chain waiver.
+
+**Ladder:** a **bolt core** puts ammo in the cycle · a **battery** makes it
+modifiable · a **powder mag** makes those mods free. Deferred payload cost always
+counts. Effects per-pellet.
+
+**Per-pellet edges (design-watch, not bugs):** flat-dmg mods amplify ×pellets
+(HURT+ flechette = +40) · split/count × pellets hits the 24-shard / 12-tracer cap
+(overflow silently doesn't draw or damage) · a relay behind a multi-pellet round
+delivers per pellet (CONTACT+BOOM behind buckshot ≈ 5 blasts — price per
+delivery).
+
+**CODE LAGS THIS SPEC — fix on the next combat pass (NOT now):**
+1. Refund waives rounds — remove `roundsFor()`'s `sh.pend.refund?0` branch + the
+   mod text "no round spent". Refund = ⚡-base only.
+2. Remove my powder-lane `sh.lane.isPowder → return own` line in `roundsFor`
+   (built for the retired coreless C3).
+3. Retire the coreless powder synth (`resolveLane`'s `powderShot`, C1
+   self-detonate / C4 twin): a coreless powder round is plain lead now. Powder's
+   payoff is free relay mods WITH a bolt core.
+
+---
+
 ## How resolution works (the "rack is a tree")
 
 - A tool is **columns** (lanes); each lane resolves **bottom → top**.
@@ -58,6 +115,8 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 
 ## Projectile cores (`cat: proj`) — emit a shot, consume the charge
 
+> **POWDER + SLUG rows below are RETIRED to AMMO** (see the Corrected Model at top) — they no longer exist as cores; the code removed `powderCore`/`slugCore`.
+
 | key | name | effect | base ⚡ | behavior | GPU |
 |---|---|---|---|---|---|
 | `boltCore` | BOLT | `{kind:'bolt', base:0}` | 0 (+1 round) | Kinetic slug from the magazine. | cheap |
@@ -93,7 +152,7 @@ round; spark `10`; pick `14`; grip `6`-ish glue. (`index.html:3735`.)
 | `boomerangMod` | RETURN | `{boomerang:true}` | 6 | shot stalls ~0.55s, banks, flies home to the thrower's current position; despawns at ~0.6m ("caught"). Both passes damage; walls still kill it; bounce is overridden on the return. Enemy-fired → returns to its zealot (`pr.src`). BEAM-fed (v22 P-beamB B1, implicit-inert→C): a damage thread (bolt/spark/boom/saw) bends into a flat D-loop — out along the (seek/chaos-bent) aim, bulging ±2.5m to one side, home to the muzzle; ONE bite per enemy per tick (damage BESIDE and part-way behind cover, never more single-target dps); a world hit truncates the loop there; spark/boom pulse at the APEX; TWIN mirrors it (right+left, flash-budget cap 2 loops); saw R=4 hand-width halo; grip/pick/wave/orb threads stay inert (6⚡ priced). | cheap |
 | `homingMod` | SEEKER | `{homing:1}` | 7 | per-frame steer toward nearest live, non-dormant enemy in a ~40° forward cone, ≤45m, turn clamp 3.2 rad/s (stacks: ×N). Zealot-fired seeks the player. Acid-green tracer telegraphs it. RETURN's return phase overrides it. BEAM-fed (v22i): the damage thread BENDS fully onto the nearest mark within a ~12° cone of the aim (`seekBias`, 45m, no LOS — the cone is the clamp); twin strands share the one mark; grip/pick never bend; its 7⚡ prices through the thread's per-second rate. | cheap |
 | `beamCore` | BEAM | `{laser:true}` | 8 | shot → continuous thread; alone → tac laser. THREAD HEAT LAW (v22 P-beamA A5): every per-tick LINE hurt (bolt/saw threads, wave corridor) doses EQUAL burn via `applyStatus` (pool cap 30, resists apply) — threads COOK; spark/boom tip pulses stay discrete blasts dosing `pend.burn` via `explode`, unchanged | cheap |
-| `refundMod` | REFUND | `{refund:true, surcharge:1}` | 1 (never waived) | `pend.refund` → resolveLane cost formula (waives next core's base ⚡) + `roundsFor()` (waives lead). Its own 1⚡ rides `pend.surchargeHard` — the one no core forgives, POWDER included. Idempotent flag: REFUND+REFUND = 2⚡ of nothing. v22 P-balance: 10→1 by owner decree — the real price is the rack cell + loot rarity; watch knob 2–3⚡, never a mechanic change. | cheap |
+| `refundMod` | REFUND | `{refund:true, surcharge:1}` | 1 (never waived) | `pend.refund` → resolveLane cost formula (waives next core's base ⚡ ONLY). **CORRECTED beta 1.1.x: refund does NOT waive lead — the old `roundsFor()` waiver is a bug to remove (see Corrected Model).** Its own 1⚡ rides `pend.surchargeHard` — the one no core forgives, POWDER included. Idempotent flag: REFUND+REFUND = 2⚡ of nothing. v22 P-balance: 10→1 by owner decree — the real price is the rack cell + loot rarity; watch knob 2–3⚡, never a mechanic change. | cheap |
 | `chaoticMod` | CHAOS | `{chaos:1, surcharge:6}` | 6 | `pend.chaos` → `pr.chaos` steer wobble (2.4·chaos rad/s, return leg immune); threads arc like lightning (endpoint wander ×(1+0.6·chaos) + 3-joint strand render); pulses jitter. With SEEKER on threads: arcs bite the nearest warm thing (chain lightning). Stacks: wider wander. v22 P-balance: hits **+45% per stack, cap ×1.9** (`chaosMul` at all five damage assemblies — instant boom, projectile literal, hitscan, beam thread, both beam drums); frags inherit the boosted parent dmg and never re-multiply. GRIP/PICK threads stay straight BY RULE. Zealots CAN roll it — white-blue tracer telegraphs the wobble AND the heavier hand (WATCHED). | 3 one-frame flash segs per strand, gated on `flashHeadroom()>=3` (degrades to 1 straight) |
 
 ## Stat mods (`cat: stat`) — order-free, whole-tool
@@ -442,7 +501,9 @@ dps needs a corner pocket) — the crowd verb costs the wall to use.
   new pend fields — `housed`/`housedRoot` live on the resolved shot, consumed
   by the walk, `roundsFor`, and the readout. ZERO GLSL touched.
 
-## The named traps (deliberate, all kept)
+## The named traps (deliberate)
+
+> WOODCHIPPER (SAW+SLUG) and DRUM-EATER (burstCam+SLUG) are **RETIRED** — SLUG is ammo now, not a core, so neither is buildable. LASSO + YO-YO stand.
 
 | trap | build | what it looks like | what it is |
 |---|---|---|---|
