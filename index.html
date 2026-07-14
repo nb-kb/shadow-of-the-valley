@@ -415,7 +415,7 @@ const PARAMS = {
   enemyFovDeg: {v:150, min:40,  max:180,  step:5,   label:'zealot fov°'},
   enemySpeed:  {v:2.6, min:0.5, max:6,    step:0.1, label:'zealot speed'},
   enemyDamage: {v:11,  min:0,   max:40,   step:1,   label:'zealot bolt dmg'},
-  maxEnemies:  {v:10,  min:0,   max:16,    step:1,   label:'zealot count'},
+  maxEnemies:  {v:10,  min:0,   max:20,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
   fogWeather:  {v:0.5,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
@@ -684,7 +684,7 @@ function beamAudio(on){
 // ============================================================
 // SHADERS
 // ============================================================
-const RLIM = { ITEMS:16, ENEMIES:16, TRACERS:12, DECALS:20, DYN:4 };   // ENEMIES 10->16: zombies reuse the body model (no new geometry, just more per-fragment loop cost) — PERF-FLAG Chrome+Optimus/iGPU; keep dialable
+const RLIM = { ITEMS:16, ENEMIES:20, TRACERS:12, DECALS:20, DYN:4 };   // ENEMIES 10->16->20: zombies reuse the body model (no new geometry, just more per-fragment loop cost) — PERF-FLAG Chrome+Optimus/iGPU; the entity arrays + material band derive from this, so it's a one-line dial
 const EXFIL_SMOKE_H=38.0;   // exfil smoke column height — folded into uWorldTop so the sky slab clears it
 
 const vertexShaderSource = `#version 300 es
@@ -1265,7 +1265,7 @@ vec2 mapStatic(vec3 p){
     float k=0.22;
     float h=clamp(0.5+0.5*(res.x-gd)/k,0.0,1.0);
     float blended=mix(res.x,gd,h)-k*h*(1.0-h);
-    if(gd<res.x) res.y=66.0;   // glue-glob shares the tracer band (56+i); 66→tracer[10] preserves its prior look after the band shift
+    if(gd<res.x) res.y=${50+RLIM.ENEMIES}.0;   // glue-glob rides the tracer band at 40+RLIM+10 → always tracer[10], stable across cap changes
     res.x=blended;
   }
   return res;
@@ -1388,7 +1388,7 @@ vec2 map(vec3 p){
     // 0.004 is safe — past ~5m the march eps (0.0007t) exceeds it and rules the
     // visible width exactly as it did at 0.011, so thinner buys no new shimmer
     float d = sdCapsule(p, tracerA[i], tracerB[i], mix(mix(0.035, 0.011, hot), 0.004, las));
-    if(d < res.x) res = vec2(d, 56.0 + float(i));   // tracer band pushed to [56,68) — enemy band widened to [40,56) for RLIM.ENEMIES=16
+    if(d < res.x) res = vec2(d, ${40+RLIM.ENEMIES}.0 + float(i));   // tracer band starts at 40+RLIM.ENEMIES; enemy band is [40, 40+RLIM), so raising the cap never overflows into tracers
   }
 
   // exfil smoke signals — VISUAL ONLY (like tracers): you walk THROUGH smoke, so no JS twin
@@ -1653,7 +1653,7 @@ void main(){
       matCol += vec3(0.22,0.35,0.42)*fr;
       emiss=max(emiss,0.16*fr);                                                    // loot shimmer
     }
-    else if(m<56.0){
+    else if(m<${40+RLIM.ENEMIES}.0){
       int ei=int(m-40.0+0.5);
       vec4 D=enemyData[ei];
       float st=floor(D.y+0.01), part=fract(m);
@@ -1682,7 +1682,7 @@ void main(){
       }
     }
     else{
-      int ti=int(m-56.0+0.5);
+      int ti=int(m-${40+RLIM.ENEMIES}.0+0.5);
       matCol=tracerCol[ti]; emiss=1.0;
     }
 
@@ -6271,7 +6271,7 @@ class Zealot{
       moveTo=this.investigate; faceTo=this.investigate;
       if(dist<1.6){                                        // LUNGE: in reach — stop shambling, swipe. Routes cross-faction: soldiers get hurt(), the player gets damagePlayer().
         moveTo=null;
-        if(this.shootCooldown<=0){ const md=this._brute?14:8; if(tgt.isPlayer) damagePlayer(md); else tgt.ent.hurt(md,this); this.shootCooldown=1.0; }
+        if(this.shootCooldown<=0){ const md=this._brute?24:12; if(tgt.isPlayer) damagePlayer(md); else tgt.ent.hurt(md,this); this.shootCooldown=1.0; }
       }
     }else if(this.state>=1&&this.investigate){            // ALERTED BUT BLIND (saw them, or got SHOT from out of sense range) — shamble to the last-known spot, then give up
       moveTo=this.investigate; faceTo=this.investigate;
@@ -6447,7 +6447,7 @@ function resetLevel(){
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
   placeValleyExfil();                         // after the edit wipe AND the spawn reset — the ground snap reads the fresh ring (mapWorldJS culls cell props by player cell)
   cameraYaw=Math.atan2(GATE.x,GATE.z);
-  PARAMS.maxEnemies.v=Math.min(16, 6+2*legDepth());   // denser early legs (leg1 6->8, leg2 8->10); render hard-caps at RLIM.ENEMIES=16 nearest (raised from 10), so deep legs can now field the full 16
+  PARAMS.maxEnemies.v=Math.min(20, 6+2*legDepth());   // denser early legs; render hard-caps at RLIM.ENEMIES=20 nearest, so deep valley legs can field the full 20
   enemies.length=0;
   bruteRespawnT=0;                                       // fresh leg: the mini-boss clock starts only when THIS leg's brute falls
   const _lo=Math.min(-34, GATE.x*1.1), _hi=Math.max(34, GATE.x*1.1);
@@ -6695,7 +6695,7 @@ function seedLevelSpawns(L){
     // NEXT raid draws a DISJOINT pair (persisted per-slot in the save blob, SAVE_VER 5).
     const half=Math.floor(POI.length/2)||1, c=_poiRot%half, hot=[c, c+half];
     _poiRot=(_poiRot+1)%half;
-    const N_SOLD=8, N_ZOMB=7;                            // + 1 brute = 16 (RLIM.ENEMIES) — single-site dials
+    const N_SOLD=10, N_ZOMB=9;                           // + 1 brute = 20 (RLIM.ENEMIES) — single-site dials
     PARAMS.maxEnemies.v=N_SOLD+N_ZOMB+1;                 // the horde REVIVES to its full 16 (reinforce gate reads maxEnemies) instead of thinning to the leftover valley cap
     // SOLDIERS — tight knot around ONE cover anchor per hot POI (~7m, minSpace 2: overrides the loose level minSpace)
     const perHot=Math.ceil(N_SOLD/hot.length);
