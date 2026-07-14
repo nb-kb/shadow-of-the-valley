@@ -1125,7 +1125,7 @@ vec2 lvRegion(int ri, vec3 p, inout float cut){
           if(ld<d){ d=ld; m=16.0; }
         }
       }else{
-        float th=C.w+ (B.y-C.w)*hh;                               // hMin..hMax
+        float th=C.w+ (B.y-C.w)*hh*2.0;                          // hMin..hMax — ×2 because the hash tops out at 0.5, so this now spans the FULL authored range (tall + widely varied)
         float trunk=max(rr-0.28, p.y-th*0.42);
         float cone=max(rr-(th-p.y)*0.34, max(p.y-th, th*0.28-p.y));
         float td=min(trunk,cone);
@@ -2259,7 +2259,7 @@ LEVELS.area1={
   ground:{rim:8, rimW:26, noise:0.35},      // a treed embankment; the hills carry the horizon
   contain:{h:14, t:4, gateX:150, gateHW:12},// CONTAINMENT: perimeter wall h tall / t thick (inner face |x|,|z|=196), N incline gap at gateX +/- gateHW. TWIN: levelSDF + levelSdfJS
   atmos:{far:470, fog:0.0040},               // the haze is back — it was always the mood
-  worldTop:18.0,                             // rim trees on rim ground; nothing lives higher
+  worldTop:22.0,                             // taller trees now (up to ~20m) — sky slab lifted to clear their crowns
   ambient:1.0,
   regions:[
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
@@ -2299,7 +2299,7 @@ LEVELS.area1={
     // North-center: Armory north of the forest
     {id:'armory', kind:LVL.KIND.BUILDING, box:[2,102,20,116], h:3.4, door:['S',0,2.8]},
     // Center: ONE forest — standing trees west, logged stumps east of the cut line
-    {id:'forest', shrubs:true, kind:LVL.KIND.TREES, box:[-44,34,88,96], cell:7.0, hMin:5.0,hMax:8.5, cutX:26},
+    {id:'forest', shrubs:true, kind:LVL.KIND.TREES, box:[-44,34,88,96], cell:7.0, hMin:6,hMax:15, cutX:26},
     // East: the brainwashing facility — SHELL ONLY. Footprint 64x68; the interior it
     // will one day contain is larger than this box. Doors are recesses, nothing more.
     {id:'facility', kind:LVL.KIND.FACADE, box:[120,58,184,126], h:9.0,
@@ -2312,10 +2312,10 @@ LEVELS.area1={
     {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
     {id:'tentsB', kind:LVL.KIND.TENT, box:[-22,-132,34,-64],  tents:[[-8,-92,0.2],[14,-108,2.9],[26,-84,1.6],[-2,-120,5.1]]},
     // Rim treeline strips (the cliff itself is in the ground formula)
-    {id:'rimNw', shrubs:true, kind:LVL.KIND.TREES, box:[-186,168,138,196], cell:8.0, hMin:6.0,hMax:9.5},   // north treeline SPLIT at the horde gate (x 138–162) so the gate/wall shows through a treeless corridor
-    {id:'rimNe', shrubs:true, kind:LVL.KIND.TREES, box:[162,168,186,196], cell:8.0, hMin:6.0,hMax:9.5},
-    {id:'rimS', shrubs:true, kind:LVL.KIND.TREES, box:[-186,-196,186,-168], cell:8.0, hMin:6.0,hMax:9.5},
-    {id:'rimW', kind:LVL.KIND.TREES, box:[-196,-160,-176,160], cell:8.0, hMin:6.0,hMax:9.5},
+    {id:'rimNw', shrubs:true, kind:LVL.KIND.TREES, box:[-186,168,138,196], cell:8.0, hMin:7,hMax:20},   // north treeline SPLIT at the horde gate (x 138–162) so the gate/wall shows through a treeless corridor
+    {id:'rimNe', shrubs:true, kind:LVL.KIND.TREES, box:[162,168,186,196], cell:8.0, hMin:7,hMax:20},
+    {id:'rimS', shrubs:true, kind:LVL.KIND.TREES, box:[-186,-196,186,-168], cell:8.0, hMin:7,hMax:20},
+    {id:'rimW', kind:LVL.KIND.TREES, box:[-196,-160,-176,160], cell:8.0, hMin:7,hMax:20},
   ],
   exfils:[
     {id:'exHousing', x:-96, z:-122, r:4.5, label:'HOUSING DITCH'},
@@ -2619,7 +2619,7 @@ function regionSdfJS(r,px,py,pz){
           if(ld<d){ d=ld; m=16.0; }
         }
       }else{
-        const th=r.hMin+(r.hMax-r.hMin)*h;
+        const th=r.hMin+(r.hMax-r.hMin)*h*2;                     // TWIN of GLSL: ×2 uses the full authored height range (hash caps at 0.5)
         const trunk=Math.max(rr-0.28, py-th*0.42);
         const cone=Math.max(rr-(th-py)*0.34, Math.max(py-th, th*0.28-py));
         const td=Math.min(trunk,cone);
