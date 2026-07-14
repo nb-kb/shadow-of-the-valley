@@ -4,7 +4,7 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-11 (build beta 1.0.1).
+Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal + zombie-horde arc).
 
 ## Open
 
@@ -29,14 +29,48 @@ Last reviewed: 2026-07-11 (build beta 1.0.1).
   inspection. Kept open until a Chrome load confirms the banner stays quiet;
   the *why-does-init-abort* question is still unpinned.
 
+### 2. Enemy render cap 20 — Chrome/ANGLE compile budget UNVERIFIED  ⚠ potential showstopper
+- **The one to watch.** `RLIM.ENEMIES` went 10 → 16 → **20** for the horde. Both
+  per-fragment enemy loops (body SDF + shading) now unroll to 20 — on the
+  *chrome-shader-fix* branch, which exists precisely because the fragment shader
+  was already near Chromium's ANGLE→D3D compile ceiling (black screen).
+- **Tested clean at 16 on the owner's machine; 20 is UNCONFIRMED,** and the
+  low-end/Optimus tester hasn't loaded any of it.
+- **Dial:** `RLIM.ENEMIES` (one line ~L687) — the material band + every enemy
+  array now DERIVE from it, so lowering it is safe + self-consistent. Drop to
+  12–14 if Chrome/Edge black-screens.
+
+### 3. Powder synth round — three known gaps (all minor)
+- **HUD-invisible:** `describeSequence`/`updateToolReadout` walk `res.shots`,
+  which never holds the synth `powderShot`, so the readout gives no sign a powder
+  round will fire / self-detonate / twin. Mechanic works; the display lags it.
+- **Beam-fed powder + trigger HITSCANS** instead of self-detonating — `synthDet`
+  only rides the `emitProjectile` path; a laser-mod powder round takes the
+  hitscan pulse branch. Document as pulse-only or add an endpoint explode.
+- **Blast ≠ literal parity:** C1 self-detonation routes through `explode()`
+  (R2.4, `dmg×1.6`+falloff), so a point-blank contact round deals its direct hit
+  PLUS splash — reads as "the round's damage" but isn't exact.
+
+### 4. Brute head hitbox is coarse
+- The shader inflates the brute body (`d−=0.12`) but the JS hit radii are fixed,
+  so the outer shell of the brute's enlarged head registers as a body shot, not a
+  headshot. Twin-safe by design (the head *center* stays put) — just means the
+  visible head is bigger than the hittable one. Optional: bump `hd` for `_brute`.
+
+### 5. POI soldier-rotation needs ≥4 POIs
+- The disjoint opposite-quadrant pair `[c, c+half]` only rotates with **≥4 (even)**
+  POIs. A 2–3 POI level would field the same `[0,1]` pair every raid (no crash,
+  no rotation). Fine for area-1's 6 POIs; a landmine only if a future level ships
+  fewer.
+
 ## Backlog (future — low priority)
 
-- **ENEMY AI REWORK** (owner-requested, v22i): the zealot brain is still
-  direct-steer patrol/suspicious/alarm. Wants a real pass — behaviors worthy
-  of the new body/telegraphs (flanking, cover use, coordination) now that
-  perception, gear, and the vision-cone contract are in place. Design with
-  the owner before building; no pathfinding/navmesh (waypoint discipline
-  stands).
+- **ENEMY AI REWORK** (owner-requested, v22i) — **LARGELY DONE (beta 1.1.x).**
+  Soldiers now line-patrol, seek cover, lay covering fire, hold squad fire
+  discipline, and walk their POI together (cohesion). A whole second faction
+  (zombies + brute) with swarm AI + 3-way targeting landed on top. Still
+  direct-steer (no navmesh — waypoint discipline stands, by design). Remaining
+  polish if wanted: flanking, smarter cover rotation.
 - **Loot tables** should offer the full suite of available items — audit
   `lootTable` / `lootRegions` for coverage.
 - **Enemy-sourced burn WATCHED** (mod wave v1, deferred knob): the zealot spark
@@ -75,6 +109,22 @@ Last reviewed: 2026-07-11 (build beta 1.0.1).
   in behind it. Perceived first-load stall is gone.
 
 ## Recently fixed
+
+- **beta 1.1.x (the horde arc)** — a run of fixes landed with the ballistics +
+  zombie work: (1) **material-ID band overflow** — raising the enemy cap made
+  render-slots past 10 shade as tracer blobs; the band is now templated on
+  `RLIM.ENEMIES`, so a cap change can't overflow again. (2) **Enemy-optic leak** —
+  sights/reticles were drawn on EVERY gun from the *player's* uniforms, so dropped
+  + enemy guns wore your optic; gated behind `cfgd`. (3) **Powder bare-fallback
+  discard** — a core-less Powder-Mag tool fired a fallback 9mm and threw away its
+  own round; the fallback now honors a loaded powder mag. (4) **DRILL+HOPE
+  infinite self-heal** — a piercing heal mote re-healed you every substep; it now
+  spends itself on the body it mends. (5) **Forest understory desync** — JS
+  collided with bushes the GLSL never drew (a clobbered TREES shrub flag); the
+  bushes render now, so the cover is honest. (6) **Enemy night-vision over-nerf**
+  — fog was blinding enemies after dark; fog no longer factors into enemy sight.
+  (7) Powder **C3 refund waiver** was vacuous (never reached a real carrier) —
+  rewired onto the powder lane.
 
 - **v22r** — Fog translucency fixed at the blend target (diagnosed v22p). The
   one fog blend composited `skyColor(rayDir)` — the FULL directional sky, sun

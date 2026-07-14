@@ -24,10 +24,18 @@ Consumables (`useItem`):
 - `index.html:4312` — clears bleed — Band-Aid.
 - `index.html:4317` — clears burn + `burnedMax` — Aloe Vera.
 
-### Enemy (Zealot)
-- `index.html:5630` — **34** — spawn HP (`Zealot` ctor `this.health=34`).
-- `index.html:5896` — **34** — HP reset on `reinforce()`.
-- `index.html:5741` — **45 s** — dead zealot reinforces after `respawnT=45`.
+### Enemies (Zealot ctor — faction/type ternary; grep `this.health=this._brute`)
+Current roster (beta 1.1.x, owner-tuned "tougher"):
+- **Zealot** (soldier) — **200 HP**.
+- **Believer** (soldier, kamikaze bomber) — **100 HP**.
+- **Zombie** (undead — no armor, no loot) — **100 HP**.
+- **Brute** (undead mini-boss) — **800 HP**.
+- Set in the ctor + BOTH `reinforce()` paths + the HOPE heal cap — keep in
+  lockstep (grep `_brute?800` / `_believer?100:200`).
+- Respawn: soldiers `respawnT=45 s`; rank undead **300–600 s (5–10 min)**; the
+  lone brute on a **15-min** game-time clock (`bruteRespawnT`).
+- Render cap `RLIM.ENEMIES=20` (was 10); horde spawn 10 soldiers / 9 zombies /
+  1 brute at two rotating POIs. See KNOWN_BUGS #2 (compile-budget load-test).
 
 No other entity has HP (crates/props aren't damageable).
 
@@ -36,8 +44,14 @@ No other entity has HP (crates/props aren't damageable).
 ## DAMAGE
 
 ### Enemy → player
-- `index.html:391` — **11** — `enemyDamage` **PARAM** (zealot bolt dmg, min 0 / max 40); used at `index.html:5882`.
-- `index.html:5875` — **8** — point-blank swipe when dry on ammo and `dist<1.4`.
+- `index.html:391` — **11** — `enemyDamage` **PARAM** (zealot bolt dmg, min 0 / max 40).
+- **8** — soldier point-blank swipe when dry on ammo (`dist<1.4`).
+- **Undead lunge** (grep `this._brute?24:12`): zombie **12**, brute **24** per
+  hit on a 1 s cadence — melee only; the undead never shoot.
+
+> Note (beta 1.1.x): the enemy HP/damage + undead numbers above are current; the
+> ballistic AMMO system (calibers, magazines, powder detonation) is not yet
+> ledgered here — those live in the code + docs/MODS.md.
 
 ### Player projectile "core" damage
 Note: in the core defs, `base:` is the **⚡ energy cost, not damage**. Actual
