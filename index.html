@@ -415,7 +415,7 @@ const PARAMS = {
   enemyFovDeg: {v:150, min:40,  max:180,  step:5,   label:'zealot fov°'},
   enemySpeed:  {v:2.6, min:0.5, max:6,    step:0.1, label:'zealot speed'},
   enemyDamage: {v:11,  min:0,   max:40,   step:1,   label:'zealot bolt dmg'},
-  maxEnemies:  {v:10,  min:0,   max:10,    step:1,   label:'zealot count'},
+  maxEnemies:  {v:10,  min:0,   max:16,    step:1,   label:'zealot count'},
   renderScale: {v:0.5, min:0.3, max:1.5,  step:0.05,label:'render scale'},
   rayQuality:  {v:150, min:40,  max:200,  step:10,  label:'ray steps'},
   fogWeather:  {v:0.5,  min:-1,  max:1,    step:0.05,label:'fog force (-1 auto)'},
@@ -684,7 +684,7 @@ function beamAudio(on){
 // ============================================================
 // SHADERS
 // ============================================================
-const RLIM = { ITEMS:16, ENEMIES:10, TRACERS:12, DECALS:20, DYN:4 };
+const RLIM = { ITEMS:16, ENEMIES:16, TRACERS:12, DECALS:20, DYN:4 };   // ENEMIES 10->16: zombies reuse the body model (no new geometry, just more per-fragment loop cost) — PERF-FLAG Chrome+Optimus/iGPU; keep dialable
 const EXFIL_SMOKE_H=38.0;   // exfil smoke column height — folded into uWorldTop so the sky slab clears it
 
 const vertexShaderSource = `#version 300 es
@@ -740,7 +740,7 @@ uniform int   uExfilCount;                  // exfil smoke columns — authored 
 uniform vec4  uExfils[3];                   // xyz column base · w live — VISUAL ONLY, no JS twin
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
-uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates)
+uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates · +8 zombie · +16 brute)
 uniform vec2  uEnemyEye;                     // x:cos(fov/2) y:vision-cone range
 
 uniform int   tracerCount;
@@ -1265,7 +1265,7 @@ vec2 mapStatic(vec3 p){
     float k=0.22;
     float h=clamp(0.5+0.5*(res.x-gd)/k,0.0,1.0);
     float blended=mix(res.x,gd,h)-k*h*(1.0-h);
-    if(gd<res.x) res.y=60.0;
+    if(gd<res.x) res.y=66.0;   // glue-glob shares the tracer band (56+i); 66→tracer[10] preserves its prior look after the band shift
     res.x=blended;
   }
   return res;
@@ -1361,7 +1361,11 @@ vec2 map(vec3 p){
     vec3 hc=vec3(sin(ha)*0.07, 1.63+br-(st>1.5?0.04:0.0), cos(ha)*0.07);
     d=min(d,  sdSphere(lp-hc, 0.165));
     float tag=0.0;
-    float w=D.w; float hasP=step(4.0,w); w-=hasP*4.0;
+    float w=D.w;
+    float isBr=step(16.0,w); w-=isBr*16.0;      // +16 brute (mini-boss) bit
+    float isZ =step(8.0,w);  w-=isZ*8.0;        // +8 zombie-faction bit  (both stripped so armor bits below don't misfire on undead)
+    d-=isBr*0.12;                               // brute heft: inflate the body; head CENTER unchanged (still 1.63) -> headshot/aim JS twin stays valid, no non-uniform scale artifacts
+    float hasP=step(4.0,w); w-=hasP*4.0;
     if(w>=2.0){
       float helm=max(sdSphere(lp-hc-vec3(0.0,0.045,0.0), 0.195), (hc.y-0.03)-lp.y);
       if(helm<d){ d=helm; tag=0.375; }
@@ -1384,7 +1388,7 @@ vec2 map(vec3 p){
     // 0.004 is safe — past ~5m the march eps (0.0007t) exceeds it and rules the
     // visible width exactly as it did at 0.011, so thinner buys no new shimmer
     float d = sdCapsule(p, tracerA[i], tracerB[i], mix(mix(0.035, 0.011, hot), 0.004, las));
-    if(d < res.x) res = vec2(d, 50.0 + float(i));
+    if(d < res.x) res = vec2(d, 56.0 + float(i));   // tracer band pushed to [56,68) — enemy band widened to [40,56) for RLIM.ENEMIES=16
   }
 
   // exfil smoke signals — VISUAL ONLY (like tracers): you walk THROUGH smoke, so no JS twin
@@ -1649,7 +1653,7 @@ void main(){
       matCol += vec3(0.22,0.35,0.42)*fr;
       emiss=max(emiss,0.16*fr);                                                    // loot shimmer
     }
-    else if(m<50.0){
+    else if(m<56.0){
       int ei=int(m-40.0+0.5);
       vec4 D=enemyData[ei];
       float st=floor(D.y+0.01), part=fract(m);
@@ -1657,8 +1661,13 @@ void main(){
       matCol=mix(matCol, vec3(0.45,0.22,0.12), clamp(st-1.0,0.0,1.0)*0.4);
       if(part>0.19&&part<0.31) matCol=vec3(0.13,0.14,0.16);
       if(part>0.31)            matCol=vec3(0.30,0.31,0.33);
-      float w=D.w; w-=step(4.0,w)*4.0; w-=step(2.0,w)*2.0;
-      matCol+=vec3(0.9,0.1,0.05)*w;
+      float w=D.w;
+      float isBr=step(16.0,w); w-=isBr*16.0;                        // +16 brute bit
+      float isZ =step(8.0,w);  w-=isZ*8.0;                          // +8 zombie-faction bit
+      w-=step(4.0,w)*4.0; w-=step(2.0,w)*2.0;                       // strip plate/helm -> w == hurtFlash [0,1)
+      if(isZ>0.5)  matCol=mix(matCol, vec3(0.16,0.55,0.18), 0.7);   // zombie: green undead
+      if(isBr>0.5) matCol=mix(matCol, vec3(0.09,0.32,0.11), 0.85);  // brute: darker, ranker green (distinct mini-boss)
+      matCol+=vec3(0.9,0.1,0.05)*w;                                 // hurt flash (still applies -> undead recoil)
       emiss=D.z*0.7;
       float phi=float(ei)*2.13;
       float ha=enHeadYaw(D, enemyPos[ei], phi), hy=D.x+ha;
@@ -1673,7 +1682,7 @@ void main(){
       }
     }
     else{
-      int ti=int(m-50.0+0.5);
+      int ti=int(m-56.0+0.5);
       matCol=tracerCol[ti]; emiss=1.0;
     }
 
@@ -2160,6 +2169,9 @@ let cameraYaw=0.6, cameraPitch=0;
 let gameTime=0, timeScale=1, runClock=0, kills=0, depth=1;
 let worldClock=0;                             // the sun's clock — ticks with gameTime but survives every deploy; only boot · NEW GAME · the debug time-of-day slider rewind it (gameTime stays the anim/iTime phase source)
 let highestDetection=0;
+let bruteRespawnT=0;                          // BRUTE mini-boss: game-time countdown to the lone roamer's return (0 = a brute is live or none owed). Teardown-safe: reset in teardownWorld + resetLevel so a boss never leaks across worlds.
+const BRUTE_RESPAWN=15*60;                    // 15 min game-time (horde spec) — ticked by the same dt as worldClock
+let _poiRot=Math.floor(Math.random()*3);      // AREA-1 POI ROTATION (build 4): cursor into the opposite-quadrant hot pairs {c,c+half}; advances each CAMP raid so the NEXT raid draws a DISJOINT pair. Persisted per-slot (SAVE_VER 5) so rotation survives reload; re-randomized on a fresh run.
 
 // ======================================================================================
 // LEVEL MODULE — authored levels as self-contained data. A level is: bounds + region
@@ -2257,9 +2269,18 @@ LEVELS.area1={
     {id:'facN', x:150,  z:127.4,face:'N', target:null, returnAt:null},
   ],
   spawn:{
-    zealots:[ {region:'pits',n:3},{region:'armory',n:2},{region:'forest',n:3},
-              {region:'testing',n:3},{region:'tentsA',n:3},{region:'tentsB',n:3},
-              {region:'lab',n:2},{region:'facility',n:3,outside:true} ],
+    // HORDE (build 4): 6 POIs ordered so index i and i+3 sit in OPPOSITE quadrants — the
+    // rotation draws a hot pair {c,c+3}, so soldiers always hold two far-apart structures.
+    // `anchors` = per-POI cover points for the TIGHT soldier knot; `c` = the loose-loop center
+    // used when a POI is a zombie zone this raid. (Replaces the flat all-soldier zealots table.)
+    pois:[
+      {id:'lab',      c:[-147,15], anchors:[[-147,-4],[-132,14],[-147,32]]},                     // W  · walled lab yard
+      {id:'pits',     c:[-73,122], anchors:[[-84,112],[-60,138],[-56,104]]},                     // NW · sandbag rings (best cover)
+      {id:'armory',   c:[11,109],  anchors:[[11,98],[4,100],[18,100]]},                          // N  · armory door apron
+      {id:'facility', c:[116,92],  anchors:[[116,70],[116,92],[116,114]]},                       // E  · facility W apron
+      {id:'testing',  c:[140,-54], anchors:[[135,-40],[147,-62],[133,-78],[145,-30],[158,-44]]}, // SE · target-block field
+      {id:'housing',  c:[6,-98],   anchors:[[-8,-88],[14,-104],[22,-84],[-2,-116]]} ],           // S  · tentsB
+    zombieZones:[ [22,65],[-82,-64],[-150,-118],[92,-128],[150,118] ],   // forest · tentsA · NW/S/NE outskirts belts
     lootN:48, minSpace:6,
     // LOOT BALANCE: every tier carries an EQUAL 4-slot share of each item CATEGORY —
     // BALLISTICS(ammo+mag) · ENERGY(cores+mods) · UTILITIES · ARMOR · CONSUMABLES — so
@@ -2290,7 +2311,7 @@ LEVELS.area1={
               'bandAid','aloe','gummies','ration',
               'platM','scope2x','compensator','hairTrigger','suppressor','battH'],
       rare:  ['barrelMagIII','smgMagIII','sniperMagII','shotMagII',
-              'warpCore','orbCore','gripField','fuseMod',
+              'warpCore','orbCore','gripField','fuseMod','hopeCore',
               'beltFeeder','pulse','lantern','beltFeeder',
               'rucksack','helmetRig','platesH','harnessH',
               'cyanide','aloe','ration','gummies',
@@ -3179,6 +3200,8 @@ const ITEM_DEFS={
   // POWDER & SLUG cores retired (C13): slug is now the 'slug' round (×3 mult); powder is the
   // Powder Mag (anyCaliber + powder:true) — takes any round and rides the powder trait (hitscan/no-⚡).
   orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · a slow orb — weak alone · 8⚡'),
+  // HOPE: a mercy mote — HEALS you & soldiers (the faithful), BURNS the dead. Faction-read at impact. Player-only (kept out of MOD_KEYS + enemy CORES) so no foe ever fires it.
+  hopeCore:   ()=>new ToolMod('HOPE','#f3e6c0','proj',{kind:'hope',base:20,heal:25},'Core · a warm mote — mends you & the faithful (25), burns the dead (45) · 20⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡'),
   velPlus:    ()=>new ToolMod('SWIFT','#c77f3c','mod',{vel:2,surcharge:4},'Next core ×2 speed · +4⚡'),
@@ -4572,13 +4595,14 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
     const spr=base.spread*(count>1?1.8:1.0)*(_am&&_am.spread?_am.spread:1)*(playerPos.isAiming&&owner==='player'?0.45:1);
     const d=new Vec3(dir.x+(runRng()-0.5)*spr*2, dir.y+(runRng()-0.5)*spr*2, dir.z+(runRng()-0.5)*spr*2).normalize();
     const kind=shot.kind;
-    const speed=(kind==='spark'?34:kind==='pick'?60:kind==='decoy'?22:kind==='boom'?26:kind==='saw'?26:kind==='warp'?40:kind==='slug'?48:kind==='wave'?10:kind==='orb'?6:82)*p.vel;
+    const speed=(kind==='spark'?34:kind==='pick'?60:kind==='decoy'?22:kind==='boom'?26:kind==='saw'?26:kind==='warp'?40:kind==='slug'?48:kind==='wave'?10:kind==='orb'?6:kind==='hope'?40:82)*p.vel;
     const rel=(i===0&&shot.relayNext)||null;          // only the first TWIN copy carries the chain — no 3^n fireworks
     projectiles.push({
       pos:origin.clone(), vel:new Vec3(d.x*speed,d.y*speed,d.z*speed),
       life:kind==='orb'?6.0:kind==='saw'?0.16:2.2, owner, kind,   // saw reach ≈ 4m — SWIFT is its reach knob; orb: 6s aloft, then the payload pops
       // stat dmg feeds mag-fed cores only; chamber dmg feeds everything (slug: ×3 TOOL hurt, pend added after)
-      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='spark'||kind==='pick'||kind==='decoy'?12:_ballBase)+p.dmg)*chaosMul(p.chaos)*(shot.small||1),   // wave flat 16 — enemy-fired included, declared; CHAOS: wild path, heavy hand; small: drummed half-beat (v22 C2)
+      dmg:((kind==='boom'?34:kind==='saw'?8:kind==='slug'?base.dmg*3:kind==='wave'?16:kind==='warp'?6:kind==='orb'?6:kind==='hope'?45:kind==='spark'||kind==='pick'||kind==='decoy'?12:_ballBase)+p.dmg)*chaosMul(p.chaos)*(shot.small||1),   // wave flat 16 — enemy-fired included, declared; hope 45 = undead recoil (HURT+/MASS ride on top); CHAOS: wild path, heavy hand; small: drummed half-beat (v22 C2)
+      heal:kind==='hope'?((shot.core&&shot.core.effect&&shot.core.effect.heal)||25):0,   // HOPE mends you/soldiers by this on contact; undead take dmg (above) instead. freshPend has no heal — read off the core
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       timerT:p.timer||0,                                 // TIMER: the bell rides the flight
@@ -4586,7 +4610,7 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null, tool:_tl,
       burn:Math.round(((p.burn||0)+(_am&&_am.burn||0))*(shot.small||1)), bleed:(!!p.bleed)||(!!(_am&&_am.bleedChance)&&runRng()<_am.bleedChance), armorPen:(_am&&_am.armorPen)||0, chaos:p.chaos||0,
-      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[0.75,0.75,0.55]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[0.78,0.55,0.15]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:[1.0,0.75,0.25],   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; width tiers: sum<1.5 fat, <2.8 gossamer, ≥2.8 hairline — slug brass stays under 1.5 (fat shell), saw steel rides the gossamer tier
+      col:kind==='boom'?[0.95,0.3,0.1]:p.homing?[0.55,1.0,0.25]:p.chaos?[0.7,0.8,1.0]:p.burn?[1.0,0.5,0.15]:kind==='spark'?[1.0,0.45,0.9]:kind==='pick'?[0.45,0.95,0.85]:kind==='decoy'?[0.56,0.56,0.24]:kind==='saw'?[0.75,0.75,0.55]:kind==='warp'?[0.4,0.95,1.0]:kind==='slug'?[0.78,0.55,0.15]:kind==='wave'?[0.55,0.5,1.0]:kind==='orb'?[1.0,1.0,1.1]:kind==='hope'?[1.0,0.95,0.7]:[1.0,0.75,0.25],   // hope warm-white, sum 2.65 → gossamer mote (the holy tier reads delicate)   // decoy olive and boom red sum under the shader's hot gate — slow ordnance draws fat, not gossamer; seeker acid-green reads as "incoming"; width tiers: sum<1.5 fat, <2.8 gossamer, ≥2.8 hairline — slug brass stays under 1.5 (fat shell), saw steel rides the gossamer tier
       silent:p.silent||base.silenced,
     });
   }
@@ -5489,12 +5513,48 @@ function updateProjectiles(dt){
               en.velocity.addScaledVector(pr.vel,7/vl); en.stagger=Math.max(en.stagger,0.25);   // the shove rides the wall's travel
             }
           }
-        }else if(!pr.hitPl){
-          const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-          if(d<1.9){ pr.hitPl=true; damagePlayer(pr.dmg); if(gen!==_worldGen) return; applyStatus(playerPos,pr); }   // a killing wall: the dose dies with the world
+        }else{
+          // CROSS-FACTION (build 3): an enemy WAVE also washes the OTHER faction — each foe billed once (pr.hit Set), firer & own faction spared
+          const _sf=pr.src&&pr.src._faction;
+          if(_sf){
+            if(!pr.hit) pr.hit=new Set();
+            for(const en of enemies){
+              if(en.health<=0||en._dormant||en===pr.src||en._faction===_sf||pr.hit.has(en)) continue;
+              const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
+              if(d<1.8){ pr.hit.add(en); en.hurt(pr.dmg,pr.src); applyStatus(en,pr); playSound('hit');
+                const vl=pr.vel.length()||1; en.velocity.addScaledVector(pr.vel,7/vl); en.stagger=Math.max(en.stagger,0.25); }
+            }
+          }
+          if(!pr.hitPl){
+            const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
+            if(d<1.9){ pr.hitPl=true; damagePlayer(pr.dmg); if(gen!==_worldGen) return; applyStatus(playerPos,pr); }   // a killing wall: the dose dies with the world
+          }
         }
       }else{
       if(pr.owner!=='player'){
+        // ---- CROSS-FACTION (build 3): an enemy round bites the OTHER faction too (soldier↔zombie). Firer & own faction spared. Mirrors the player→enemy body loop, faction-filtered. ----
+        const _sf=pr.src&&pr.src._faction;
+        if(_sf&&pr.kind!=='pick'){                         // PICK eats stone, spares flesh — same rule the player→enemy loop keeps
+          for(const en of enemies){
+            if(en.health<=0||en._dormant||en===pr.src||en._faction===_sf) continue;
+            const ed=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
+            if(ed<(pr.kind==='slug'?0.9:0.55)){
+              if(pr.pierce>0){                             // DRILL: flesh is a tunnel — one bill per body per 0.1s
+                if(!pr._dHit) pr._dHit=new Map();
+                const last=pr._dHit.get(en);
+                if(last===undefined||last-pr.life>=0.1){
+                  pr._dHit.set(en,pr.life);
+                  en.hurt(pr.dmg,pr.src); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');
+                  if(pr.contact&&!(pr.fuse>0)) castRelay(pr,false,en.position.x,en.position.y+0.95,en.position.z);
+                }
+                break;                                     // pierces flesh — keep flying (world check still runs this step)
+              }
+              en.hurt(pr.dmg,pr.src); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');
+              dead=impactOrPierce(pr,en.position.x,en.position.y+0.95,en.position.z); break;
+            }
+          }
+          if(dead) continue;
+        }
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
         if(d<(pr.kind==='slug'?0.7:0.42)){
           if(pr.pierce>0){                               // DRILL: the body is a tunnel — one bill per body per 0.1s
@@ -5512,13 +5572,21 @@ function updateProjectiles(dt){
           if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr,playerPos.x,playerPos.y+0.9,playerPos.z); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
-        for(const en of enemies){
+        if(pr.kind==='hope'&&pr.life<2.0){               // HOPE self-mend — armed ONLY after it clears the muzzle (life 2.2→): a plain lob flies away & never returns; reachable via a RICOCHET / wall bank back onto you
+          const dp=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
+          if(dp<0.6){ playerPos.health=Math.min(effMaxHP(),playerPos.health+(pr.heal||25)); addDyn(playerPos.x,playerPos.y+0.9,playerPos.z,[1,0.95,0.7],1.0,0.05); impactOrPierce(pr,playerPos.x,playerPos.y+0.9,playerPos.z); dead=true; }   // HOPE spends itself on the mend — force dead so a DRILL/pierce mote can't re-heal you every substep
+        }
+        if(!dead) for(const en of enemies){
           if(en.health<=0||en._dormant) continue;        // dormant: bullets pass through
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
           const hp=enemyHeadPos(en,_hpV);
           const hd=Math.hypot(pr.pos.x-hp.x,pr.pos.y-hp.y,pr.pos.z-hp.z);
           if(d<(pr.kind==='slug'?0.9:0.55)||hd<0.24){
             if(pr.kind==='grip'){ addGlobOnEnemy(en); dead=true; break; }   // glue takes flesh: it sticks, it does not cut
+            if(pr.kind==='hope'&&en._faction==='soldier'){                  // HOPE — mercy for the faithful: mend (cap at their spawn max), the mote spends itself. The undead (zombie/brute) FALL THROUGH to the wound path below → recoil dmg, pierce/headshot/status for free.
+              en.health=Math.min(en._believer?60:100,en.health+(pr.heal||25));   // no en.maxHealth exists — soldier max is believer 60 / line 100 (mirrors the constructor)
+              addDyn(en.position.x,en.position.y+0.95,en.position.z,[1,0.95,0.7],1.0,0.05);
+              impactOrPierce(pr,en.position.x,en.position.y+0.95,en.position.z); dead=true; break; }   // HOPE spends itself on the ally it mends — no same-soldier re-heal under DRILL
             if(pr.pierce>0){                             // DRILL: the body is a tunnel — one bill per body per 0.1s
               if(!pr._dHit) pr._dHit=new Map();
               const last=pr._dHit.get(en);
@@ -5686,8 +5754,10 @@ function explode(pr){
   addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.5,0.2],big?9:5,big?0.45:0.25);
   addNoise(pr.pos.x,pr.pos.y,pr.pos.z,big?36:26);
   const R=(big?4.5:2.4)*(pr.rMul||1);                    // rMul: TWIN'd instant boom pools ×1.4 · boom-thread pulse shrinks ×0.75 (R 1.8)
+  const _bf=(pr.owner!=='player'&&pr.src)?pr.src._faction:null;   // BUILD 3: an enemy blast spares its OWN faction (no friendly fire); a player blast hits all — both factions are hostile to the player
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
+    if(_bf&&en._faction===_bf) continue;                 // own faction — spared by a friendly blast (the firing believer still dies: tryBoom force-kills it after)
     const d=en.position.distanceTo(pr.pos);
     if(d<R){ const fall=1-d/R; en.hurt(pr.dmg*fall*1.6, pr.owner); applyStatus(en,{burn:(pr.burn||0)+Math.round(pr.dmg*fall*0.35), bleed:pr.bleed}); }   // the blast SEARS — dose scales with the hurt at range
   }
@@ -5856,18 +5926,22 @@ function finishReload(){          // single-load only (mag-mode never starts the
 // built from the same mod pool, and drop them when they fall
 // ============================================================
 class Zealot{
-  constructor(x,z){
+  constructor(x,z,kind){                // kind: undefined/'soldier' · 'zombie' · 'brute' (build 2 faction spawn)
     const gy=activeLevel ? levelGroundJS(x,z) : terrainHJS(x,z);
     this.position=new Vec3(x, restOnSurface(x, gy+2.5, z), z);
     this.startPos=this.position.clone();
     this.velocity=new Vec3();
-    this._believer=runRng()<0.10;         // feature 15: 1 in 10 walks in as a tool-less bomber
-    this.health=this._believer?60:100;
+    // ---- FACTION (build 2): soldier = Zealot/Believer · zombie = undead/brute. Render reads _faction/_brute (build-1 enemyData bits). ----
+    this._faction=(kind==='zombie'||kind==='brute')?'zombie':'soldier';
+    this._brute=(kind==='brute');
+    this._believer=this._faction==='soldier'&&runRng()<0.10;   // feature 15: 1 in 10 SOLDIERS walks in a tool-less bomber (the undead never do)
+    this.health=this._brute?300:this._faction==='zombie'?50:this._believer?60:100;   // brute mini-boss 300 · undead 50 · bomber 60 · line zealot 100
     this.yaw=runRng()*6.28;
     this.patrolDir=runRng()*6.28; this.dwellT=0;   // LINE PATROL: straight-line heading + short mill-in-place timer at obstacles
     this.state=0;                       // 0 patrol · 1 suspicious · 2 alarm
     this.detection=0;
     this.investigate=null;
+    this.target=null;                   // BUILD 3: resolved nearest-hostile {ent,isPlayer,x,y,z} — set each frame by acquireTarget() in update/updateZombie
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;   // COVER/SUPPRESS squad state (set on alarm)
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
@@ -5875,7 +5949,8 @@ class Zealot{
     this.status={burn:0,bleedT:0,bleedN:0};
     this.muzzle=0; this.hurtFlash=0;
     this.targetPoint=this.newPatrolTarget();
-    if(this._believer){ this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // no tool, no gear roll — it carries only what die() hands out
+    if(this._faction==='zombie'){ this.tool=null; this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // undead reuse the Zealot body but carry NO tool/armor/loot — die() drops nothing
+    else if(this._believer){ this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // no tool, no gear roll — it carries only what die() hands out
     else { this.buildTool(); this.rollGear(); }
   }
   newPatrolTarget(){
@@ -5975,6 +6050,8 @@ class Zealot{
     this.health-=dmg;
     this.hurtFlash=1;
     if(by==='player'&&this.state<2){ this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(playerPos.x,0,playerPos.z); this.state=1; }
+    else if(by&&by!=='player'&&by.position&&by._faction!==this._faction&&this.state<2){   // BUILD 3: shot by the OTHER faction — turn and fight back toward the shooter (else cross-faction fire is ignored)
+      this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(by.position.x,0,by.position.z); this.state=1; }
     if(this.health<=0) this.die();
   }
   die(){
@@ -5982,6 +6059,11 @@ class Zealot{
     playSound('hit');
     worldNormalJS(this.position.x,this.position.y+0.1,this.position.z,_n);
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
+    if(this._faction==='zombie'){                          // BUILD 2: undead drop NOTHING (no rucksack / gear / tool roll)
+      if(this._brute){ bruteRespawnT=BRUTE_RESPAWN; this.respawnT=Infinity; }   // the lone mini-boss returns on the 15-min session clock — NOT the 45s reinforce (dead-branch never auto-wakes it)
+      else this.respawnT=45;                                // rank-and-file undead shamble back with the horde
+      return;
+    }
     if(this._believer){                                    // feature 15: bomber loot rides on the kill cause
       if(!this._selfBoom){                                 // shot down before it blew → its unspent core survives, plus a little it carried
         spawnWorldItem(ITEM_DEFS.boomCore(),this.position.x,this.position.y+0.7,this.position.z,new Vec3((runRng()-0.5)*2.5,3,(runRng()-0.5)*2.5));
@@ -6002,6 +6084,18 @@ class Zealot{
       spawnWorldItem(a,this.position.x,this.position.y+0.6,this.position.z,new Vec3((runRng()-0.5)*3,3.5,(runRng()-0.5)*3)); }
     this.respawnT=45;
   }
+  acquireTarget(){
+    // NEAREST HOSTILE (build 3): player + every live, non-dormant enemy of the OTHER faction are candidates → pick the nearest. Own faction is never a candidate. The player is ALWAYS in the pool, so a wiped faction can't strand this enemy (no empty-faction crash). O(roster) — the small-roster O(n^2) the design allows.
+    let bestEnt=null, bestD=1156;                          // 34^2 — an enemy past sight isn't acquired; the player still is, at any range
+    for(const o of enemies){
+      if(o===this||o.health<=0||o._dormant||o._faction===this._faction) continue;
+      const d=(o.position.x-this.position.x)**2+(o.position.z-this.position.z)**2;
+      if(d<bestD){ bestD=d; bestEnt=o; }
+    }
+    const pdx=playerPos.x-this.position.x, pdz=playerPos.z-this.position.z, pd=pdx*pdx+pdz*pdz;
+    if(bestEnt&&bestD<pd) return {ent:bestEnt,isPlayer:false,x:bestEnt.position.x,y:bestEnt.position.y,z:bestEnt.position.z};
+    return {ent:null,isPlayer:true,x:playerPos.x,y:playerPos.y,z:playerPos.z};
+  }
   update(dt){
     this.muzzle=Math.max(0,this.muzzle-dt*8);
     this.hurtFlash=Math.max(0,this.hurtFlash-dt*4);
@@ -6020,11 +6114,18 @@ class Zealot{
     if(this.health<=0){ this.die(); return; }
     if(this.stagger>0){ this.stagger-=dt; this.position.addScaledVector(this.velocity,dt*0.4); this.settle(dt); return; }
 
-    const px=playerPos.x, pz=playerPos.z;
-    const dx=px-this.position.x, dz=pz-this.position.z;
+    // ---- ZOMBIE (build 2): simple swarm AI — no FOV cone, no cover, no line-patrol; sees fine at night (skips dayEye/fog/effVision). Soldiers fall through to the full state machine below. ----
+    if(this._faction==='zombie'){ this.updateZombie(dt); return; }
+
+    // ---- NEAREST HOSTILE (build 3): the player OR the other faction, whichever is nearer. Player is always a candidate → a wiped faction just falls back to the player (no empty-faction crash). ----
+    const tgt=this.target=this.acquireTarget();
+    const px=playerPos.x, pz=playerPos.z;                 // player refs kept: noise/pings below stay player-specific (stealth honesty)
+    const tx=tgt.x, tz=tgt.z;
+    const dx=tx-this.position.x, dz=tz-this.position.z;
     const dist=Math.hypot(dx,dz);
     const eyeY=this.position.y+1.55;
-    const losRay = FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, px,playerPos.y+0.9,pz);   // pure sightline (reused for cover)
+    const tEyeY=tgt.isPlayer?playerPos.y+0.9:tgt.y+0.95;
+    const losRay = FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz);   // pure sightline to the TARGET (reused for cover)
     const seesLOS = dist<34*dayEye() && losRay;
     this.inCover = this.state===2 && this.alarmRole==='cover' && !!this.coverPoint && this.position.distanceTo(this.coverPoint)<1.2;   // only an ALARMED cover-role zealot committed to its cover point counts — not oblivious patrollers, facing-away enemies, or Believers
     if(this._coveringFire>0) this._coveringFire-=dt;
@@ -6033,14 +6134,18 @@ class Zealot{
     const fovCos=Math.cos((P('enemyFovDeg')*Math.PI/180)/2);
     const inCone=cone>fovCos || dist<1.6;
 
-    // --- perception ---
+    // --- perception --- (player: the full stealth model · other-faction hostile: unstealthed → seen fast)
     let rate=0;
     if(seesLOS&&inCone){
-      const motion=playerPos.isSprinting?1.35:(playerPos.noiseLevel>1.5?1.0:(playerPos.isCrouching?0.35:0.6));
-      rate=playerPos.exposure*(effVision()/Math.max(1,dist))*motion;   // PHOTOMETER twin: spotDistance() inverts this line + the 0.12 gate below
+      if(tgt.isPlayer){
+        const motion=playerPos.isSprinting?1.35:(playerPos.noiseLevel>1.5?1.0:(playerPos.isCrouching?0.35:0.6));
+        rate=playerPos.exposure*(effVision()/Math.max(1,dist))*motion;   // PHOTOMETER twin: spotDistance() inverts this line + the 0.12 gate below
+      }else rate=1.2*(effVision()/Math.max(1,dist));                      // an enemy fighter in the open — no exposure/crouch to read, just seen
     }
-    if(dist<12){
-      const heard=playerPos.noiseLevel/Math.max(1,dist)* (seesLOS?1:0.4);
+    // player-made noise carries regardless of the current target — keeps stealth honest when a soldier is busy with a zombie
+    const pdx=px-this.position.x, pdz=pz-this.position.z, pdist=tgt.isPlayer?dist:Math.hypot(pdx,pdz);
+    if(pdist<12){
+      const heard=playerPos.noiseLevel/Math.max(1,pdist)* ((tgt.isPlayer&&seesLOS)?1:0.4);
       rate+=heard*0.25;
     }
     for(let i=noisePings.length-1;i>=0;i--){
@@ -6057,27 +6162,27 @@ class Zealot{
     // --- state machine ---
     if(this.detection>=1&&this.state<2){
       this.state=2; playSound('alert');
-      const _hasSup=enemies.some(o=>o!==this&&o.health>0&&o.state===2&&o.alarmRole==='suppress');   // guarantee >=1 suppressor per alarmed squad so a small all-cover squad never freezes (the fire-gate always has covering fire)
+      const _hasSup=enemies.some(o=>o!==this&&o.health>0&&o._faction===this._faction&&o.state===2&&o.alarmRole==='suppress');   // guarantee >=1 suppressor per alarmed squad so a small all-cover squad never freezes (the fire-gate always has covering fire)
       this.alarmRole = _hasSup ? (runRng()<0.5?'cover':'suppress') : 'suppress';   // COVER/SUPPRESS role as it wakes — the first waker always suppresses
       this.coverPoint=null; this._coverT=0;
-      document.getElementById('alertFlash').style.opacity=1;
-      setTimeout(()=>document.getElementById('alertFlash').style.opacity=0,400);
-      for(const o of enemies){ if(o!==this&&o.health>0&&o.position.distanceTo(this.position)<18){
-        o.detection=Math.max(o.detection,0.65); o.investigate=new Vec3(px,0,pz); if(o.state===0)o.state=1; } }
+      if(tgt.isPlayer){ document.getElementById('alertFlash').style.opacity=1;   // the red ALERT flash is PLAYER feedback only — spotting a zombie must not fake it
+        setTimeout(()=>document.getElementById('alertFlash').style.opacity=0,400); }
+      for(const o of enemies){ if(o!==this&&o.health>0&&o._faction===this._faction&&o.position.distanceTo(this.position)<18){   // rouse the SQUAD (same faction only) toward the threat — the other faction has its own rouse
+        o.detection=Math.max(o.detection,0.65); o.investigate=new Vec3(tx,0,tz); if(o.state===0)o.state=1; } }
     }
     if(this.state===2&&this.detection<0.35){ this.state=1; this.alarmRole=null; this.coverPoint=null; }
     if(this.state===1&&this.detection<=0.02){ this.state=0; this.investigate=null; this.alarmRole=null; this.coverPoint=null; }
 
     let speed=P('enemySpeed')*globSlow(this.position,this), moveTo=null, faceTo=null;   // glue is glue
     if(this.state===2){
-      this.investigate=new Vec3(px,0,pz);
+      this.investigate=new Vec3(tx,0,tz);
       faceTo=this.investigate;
       if(seesLOS){
         this.lostSightT=0;
         if(this._believer){ moveTo=this.investigate; this.tryBoom(dt,dist); }   // a bomber only closes in — no retreat, no bullets
         else if(this.alarmRole==='cover'){
           // SEEK COVER: sit on a spot that breaks the sightline; peek-fire only if the squad allows it
-          if(!this.coverPoint||this._coverT<=0){ this.coverPoint=this.findCover(px,pz); this._coverT=2.5; }
+          if(!this.coverPoint||this._coverT<=0){ this.coverPoint=this.findCover(tx,tz); this._coverT=2.5; }
           this._coverT-=dt;
           if(this.coverPoint){
             moveTo=this.coverPoint;
@@ -6140,6 +6245,48 @@ class Zealot{
       if(m){ const take=Math.min(this.reserve,m.maxCapacity); m.loaded=take; this.reserve-=take; } } }
     if(this.shootCooldown>0) this.shootCooldown-=dt;
   }
+  updateZombie(dt){
+    // NEAREST HOSTILE (build 3): the undead hunt the player OR soldiers, whichever is nearer. Player is always a candidate → a wiped soldier faction just leaves the player (no crash).
+    const tgt=this.target=this.acquireTarget();
+    const tx=tgt.x, tz=tgt.z;
+    const dx=tx-this.position.x, dz=tz-this.position.z;
+    const dist=Math.hypot(dx,dz);
+    const eyeY=this.position.y+1.55;
+    const tEyeY=tgt.isPlayer?playerPos.y+0.9:tgt.y+0.95;
+    // SEES FINE AT NIGHT: plain range + sightline. No dayEye/fog/effVision, no FOV cone — that's the whole design distinction from a soldier.
+    const sees = dist<22 && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz));
+    let speed=P('enemySpeed')*globSlow(this.position,this)*(this._brute?0.55:0.9), moveTo=null, faceTo=null;
+    if(sees){
+      if(this.state!==2){                                  // fresh acquisition — rouse nearby undead (~18m) so the swarm converges
+        for(const o of enemies){ if(o!==this&&o.health>0&&o._faction==='zombie'&&o.state!==2&&o.position.distanceTo(this.position)<18){
+          o.state=2; o.investigate=new Vec3(tx,0,tz); } }
+      }
+      this.state=2; this.detection=1; this.investigate=new Vec3(tx,0,tz);
+      moveTo=this.investigate; faceTo=this.investigate;
+      if(dist<1.6){                                        // LUNGE: in reach — stop shambling, swipe. Routes cross-faction: soldiers get hurt(), the player gets damagePlayer().
+        moveTo=null;
+        if(this.shootCooldown<=0){ const md=this._brute?14:8; if(tgt.isPlayer) damagePlayer(md); else tgt.ent.hurt(md,this); this.shootCooldown=1.0; }
+      }
+    }else if(this.state>=1&&this.investigate){            // ALERTED BUT BLIND (saw them, or got SHOT from out of sense range) — shamble to the last-known spot, then give up
+      moveTo=this.investigate; faceTo=this.investigate;
+      if(Math.hypot(this.investigate.x-this.position.x,this.investigate.z-this.position.z)<1.5){ this.investigate=null; this.state=0; }
+    }else{                                                 // WANDER: a lazy loop drift — no line-patrol discipline, no cover
+      this.state=0; this.detection=Math.max(0,this.detection-dt*0.5);
+      this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;
+      const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
+      moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3); faceTo=moveTo; speed*=0.5;
+    }
+    // move · face · settle — undead never shoot/reload, but a WAVE press still shoves them
+    if(moveTo){ const mdx=moveTo.x-this.position.x, mdz=moveTo.z-this.position.z, md=Math.hypot(mdx,mdz);
+      if(md>0.2){ this.velocity.x=mdx/md*speed; this.velocity.z=mdz/md*speed; } else { this.velocity.x=0; this.velocity.z=0; } }
+    else { this.velocity.x*=0.8; this.velocity.z*=0.8; }
+    if(faceTo){ const want=Math.atan2(faceTo.x-this.position.x, faceTo.z-this.position.z);
+      let a=want-this.yaw; while(a>Math.PI)a-=6.283; while(a<-Math.PI)a+=6.283; this.yaw+=clamp(a,-3*dt,3*dt); }
+    this.position.addScaledVector(this.velocity,dt);
+    if(this._prX||this._prZ){ this.position.x+=this._prX*2.2*dt; this.position.z+=this._prZ*2.2*dt; this._prX=0; this._prZ=0; }
+    this.settle(dt);
+    if(this.shootCooldown>0) this.shootCooldown-=dt;
+  }
   settle(dt){
     const c=new Vec3(this.position.x,this.position.y+0.9,this.position.z);
     resolveCollision(c,0.42);
@@ -6151,8 +6298,8 @@ class Zealot{
       if(sy>this.position.y-0.7) this.position.y+=(sy-this.position.y)*Math.min(1,12*dt);
     }
   }
-  findCover(px,pz){                                  // ring-sample a nearby standable spot that breaks LOS to the player (~8 rays, throttled to a re-pick)
-    const y=this.position.y+0.9, py=playerPos.y+0.9;
+  findCover(px,pz){                                  // ring-sample a nearby standable spot that breaks LOS to the THREAT (~8 rays, throttled to a re-pick)
+    const y=this.position.y+0.9, py=(this.target&&!this.target.isPlayer)?this.target.y+0.95:playerPos.y+0.9;   // break LOS to the resolved hostile (player or the other faction)
     let best=null,bestD=1e9;
     for(let i=0;i<8;i++){
       const a=i/8*6.283, r=3.0;
@@ -6169,7 +6316,7 @@ class Zealot{
     if(this.alarmRole==='suppress') return true;      // the suppressor IS the covering fire — exempt
     let allies=0,coverCnt=0,suppressing=false;
     for(const o of enemies){
-      if(o===this||o.health<=0) continue;
+      if(o===this||o.health<=0||o._faction!==this._faction) continue;   // only real squadmates (same faction) coordinate fire — a nearby zombie is not an ally
       if(o.position.distanceTo(this.position)>=18) continue;
       allies++;
       if(o._coveringFire>0) suppressing=true;         // (a) an ally is actively laying down fire
@@ -6187,14 +6334,16 @@ class Zealot{
     if(shot.kind==='bolt'){
       if(!mag||mag.loaded<=0){
         if(this.reserve>0){ this.reloadT=2.2; playSound('reload'); return; }
-        // dry — close to swipe
-        if(dist<1.4){ damagePlayer(8); this.shootCooldown=1.0; }
+        // dry — close to swipe (routes cross-faction: a soldier's melee hits a zombie via hurt(), the player via damagePlayer())
+        if(dist<1.4){ if(this.target&&!this.target.isPlayer) this.target.ent.hurt(8,this); else damagePlayer(8); this.shootCooldown=1.0; }
         return;
       }
       mag.loaded--;
     }
     const origin=new Vec3(this.position.x+Math.sin(this.yaw)*0.35, this.position.y+1.35, this.position.z+Math.cos(this.yaw)*0.35);
-    const aim=new Vec3(playerPos.x-origin.x,(playerPos.y+0.85)-origin.y,playerPos.z-origin.z).normalize();
+    const _t=this.target;                                 // aim at the resolved hostile (player OR the other faction) — center-mass
+    const _ax=_t?_t.x:playerPos.x, _ay=(_t&&!_t.isPlayer)?_t.y+0.95:playerPos.y+0.85, _az=_t?_t.z:playerPos.z;
+    const aim=new Vec3(_ax-origin.x,_ay-origin.y,_az-origin.z).normalize();
     const base={spread:0.075,dmg:P('enemyDamage'),silenced:this.res.silenced};
     emitProjectile('enemy',origin,aim,shot,base,this);   // src: a boomerang flies home to ITS zealot
     this._coveringFire=1.5;                               // squad-visible: it is actively laying down fire (decays in update)
@@ -6222,17 +6371,28 @@ class Zealot{
     const a=runRng()*Math.PI*2, r=45+runRng()*15;
     this.position.set(playerPos.x+Math.cos(a)*r,0,playerPos.z+Math.sin(a)*r);
     this.startPos=this.position.clone();
-    this._believer=runRng()<0.10; this._selfBoom=false;   // re-roll the bomber odds on every respawn
-    this.health=this._believer?60:100; this.detection=0; this.state=0; this.investigate=null;
+    if(this._faction==='zombie'){                         // faction persists across respawn — undead come back undead (brute keeps its 300), no gear, no bomber roll
+      this._believer=false; this._selfBoom=false;
+      this.health=this._brute?300:50;
+      this.tool=null; this.helm=this.plates=this.pack=null;
+    }else{
+      this._believer=runRng()<0.10; this._selfBoom=false;   // re-roll the bomber odds on every respawn
+      this.health=this._believer?60:100;
+    }
+    this.detection=0; this.state=0; this.investigate=null;
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;
     this.patrolDir=runRng()*6.28; this.dwellT=0;
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
-    if(this._believer){ this.helm=this.plates=this.pack=null; }
-    else { this.buildTool(); this.rollGear(); }
+    if(this._faction==='soldier'){ if(this._believer){ this.helm=this.plates=this.pack=null; } else { this.buildTool(); this.rollGear(); } }
   }
 }
 const enemies=[];
+function reviveBrute(){                          // BRUTE mini-boss returns on the session clock — re-inits the SAME dead object in place (no roster growth, respects the render cap)
+  if(gameState!=='play') return;
+  const b=enemies.find(e=>e._brute);
+  if(b) b.reinforce();                          // faction-aware reinforce keeps it a 300-HP brute; if the horde is at cap it self-retries via the dead-branch
+}
 
 // ============================================================
 // LOOT · GATE · RUN FLOW
@@ -6278,14 +6438,17 @@ function resetLevel(){
   playerPos.x=2.5; playerPos.y=0; playerPos.z=2.5; playerPos.velY=0;
   placeValleyExfil();                         // after the edit wipe AND the spawn reset — the ground snap reads the fresh ring (mapWorldJS culls cell props by player cell)
   cameraYaw=Math.atan2(GATE.x,GATE.z);
-  PARAMS.maxEnemies.v=Math.min(14, 6+2*legDepth());   // denser early legs (leg1 6->8, leg2 8->10); render still hard-caps at RLIM.ENEMIES=10 nearest, so the perf ceiling is untouched
+  PARAMS.maxEnemies.v=Math.min(16, 6+2*legDepth());   // denser early legs (leg1 6->8, leg2 8->10); render hard-caps at RLIM.ENEMIES=16 nearest (raised from 10), so deep legs can now field the full 16
   enemies.length=0;
+  bruteRespawnT=0;                                       // fresh leg: the mini-boss clock starts only when THIS leg's brute falls
   const _lo=Math.min(-34, GATE.x*1.1), _hi=Math.max(34, GATE.x*1.1);
-  for(let i=0;i<P('maxEnemies');i++){
+  const _nE=P('maxEnemies'), _nZ=Math.round(_nE*0.4);    // BUILD-2 MINIMAL FACTION SPLIT: slot 0 the lone brute · ~40% undead · rest soldiers — build 4 (POI concentration) replaces this with clustered placement
+  for(let i=0;i<_nE;i++){
     let ex=_lo+runRng()*(_hi-_lo);
     if(Math.abs(ex)<14) ex=14*Math.sign(ex||1);          // not on top of the insertion
     const ez=runRng()*76-38;                              // valley strip only
-    enemies.push(new Zealot(ex,ez));
+    const kind = i===0 ? 'brute' : (i<=_nZ ? 'zombie' : 'soldier');
+    enemies.push(new Zealot(ex,ez,kind));
   }
   playerPos.health=Math.min(effMaxHP(), playerPos.health+25);
   buildCrateRegistry(LEVELS.valley);
@@ -6307,6 +6470,7 @@ function seedStashKit(){                       // the kit waits in the STASH now
 }
 function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
+  _poiRot=Math.floor(Math.random()*3);             // fresh run: fresh POI rotation (loadGame overrides from the slot)
   depth=1; kills=0; runClock=0; _lastReloadT=-9;   // reset the double-tap clock so the first reload of a run isn't read as a double-tap
   playerPos.health=playerPos.maxHealth;
   playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
@@ -6367,6 +6531,7 @@ const legDepth=()=>TRAVEL?1:depth;            // travel legs walk Ring I weather
 let isTerminalOpen=false;
 function teardownWorld(){
   _worldGen++;                                // any loop still walking the old arrays must see the world die
+  bruteRespawnT=0;                            // BRUTE mini-boss clock never survives a world swap (teardown-safe)
   worldItems.length=0; enemies.length=0; projectiles.length=0;
   beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
   _swing=null; playerPos.swinging=false; playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; meleeT=0;
@@ -6497,15 +6662,57 @@ function seedLevelSpawns(L){
   const inBox=(r)=>{ const b=r.box; return [b[0]+2+rng()*(b[2]-b[0]-4), b[1]+2+rng()*(b[3]-b[1]-4)]; };
   const placed=[];
   const clear=(x,z,sp)=>placed.every(p=>Math.hypot(p[0]-x,p[1]-z)>=sp);
-  for(const spec of (L.spawn.zealots||[])){
-    const r=regionById(spec.region); if(!r) continue;
-    for(let n=0;n<spec.n;n++){
-      for(let tries=0;tries<12;tries++){
-        let [x,z]=inBox(r);
-        if(spec.outside){ x=r.box[0]-4-rng()*6; }          // patrol the facility apron
-        if(!clear(x,z,L.spawn.minSpace)) continue;
-        if(levelSdfJS(x,1.0,z)<0.4) continue;               // not inside a wall
-        enemies.push(new Zealot(x,z)); placed.push([x,z]); break;
+  // ---- HORDE SPAWN (build 4) ----
+  // AREA-1 raid: 2 rotating hot POIs get TIGHT soldier knots; the OTHER POIs + dedicated
+  // zombie zones + outskirts get LOOSE undead loops; ONE brute roams. Everything stays in
+  // bounds and off THIS deploy's insertion (deployTo set playerPos before us). Budget sits at
+  // RLIM.ENEMIES=16 so nothing is born dormant → the brute always renders/roams. Other levels
+  // fall through to the old per-region table (valley/hideout carry no `pois` → generic path).
+  if(L.spawn.pois){
+    const POI=L.spawn.pois, ZZ=L.spawn.zombieZones||[], bnd=L.bounds;
+    const inB=(x,z)=>x>bnd.x0+6&&x<bnd.x1-6&&z>bnd.z0+6&&z<bnd.z1-6;
+    const offDrop=(x,z)=>Math.hypot(x-playerPos.x,z-playerPos.z)>=24;   // never spawn on the player's insertion
+    const drop=(cx,cz,rad,sp,kind)=>{                    // one enemy in a disc around an anchor; give up quietly after N tries
+      for(let t=0;t<16;t++){
+        const a=rng()*6.2832, rr=rad*Math.sqrt(rng());   // uniform-in-disc
+        const x=cx+Math.cos(a)*rr, z=cz+Math.sin(a)*rr;
+        if(!inB(x,z)||!offDrop(x,z)||!clear(x,z,sp)) continue;
+        if(levelSdfJS(x,1.0,z)<0.4) continue;            // not inside a wall/prop
+        enemies.push(new Zealot(x,z,kind)); placed.push([x,z]); return true;
+      }
+      return false;
+    };
+    // ROTATION: opposite-quadrant hot pair {c, c+half}; the cursor advances every raid so the
+    // NEXT raid draws a DISJOINT pair (persisted per-slot in the save blob, SAVE_VER 5).
+    const half=Math.floor(POI.length/2)||1, c=_poiRot%half, hot=[c, c+half];
+    _poiRot=(_poiRot+1)%half;
+    const N_SOLD=8, N_ZOMB=7;                            // + 1 brute = 16 (RLIM.ENEMIES) — single-site dials
+    PARAMS.maxEnemies.v=N_SOLD+N_ZOMB+1;                 // the horde REVIVES to its full 16 (reinforce gate reads maxEnemies) instead of thinning to the leftover valley cap
+    // SOLDIERS — tight knot around ONE cover anchor per hot POI (~7m, minSpace 2: overrides the loose level minSpace)
+    const perHot=Math.ceil(N_SOLD/hot.length);
+    for(const hi of hot){
+      const poi=POI[hi]; if(!poi) continue;
+      const an=poi.anchors[Math.floor(rng()*poi.anchors.length)];   // one cover anchor = the knot's core
+      for(let n=0;n<perHot;n++) drop(an[0],an[1],5,2.2,'soldier');   // ~5m disc → a tight knot (brief: cluster ~within 8m)
+    }
+    // BRUTE — exactly one roamer (zombie faction), central forest cover; a big-disc fallback guarantees it lands
+    if(!drop(22,65,12,4,'brute') && !drop(0,10,22,6,'brute') && POI.length) enemies.push(new Zealot(POI[0].c[0],POI[0].c[1],'brute'));   // guaranteed: exactly one brute always lands (POI centers are valid by construction)
+    // ZOMBIES — loose loops at the NON-hot POIs + the dedicated zombie zones/outskirts (wide radius, kept apart)
+    const loops=[];
+    for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) loops.push(POI[i].c);
+    for(const zz of ZZ) loops.push(zz);
+    for(let n=0;n<N_ZOMB&&loops.length;n++){ const lc=loops[n%loops.length]; drop(lc[0],lc[1],14,5,'zombie'); }
+  }else{
+    for(const spec of (L.spawn.zealots||[])){
+      const r=regionById(spec.region); if(!r) continue;
+      for(let n=0;n<spec.n;n++){
+        for(let tries=0;tries<12;tries++){
+          let [x,z]=inBox(r);
+          if(spec.outside){ x=r.box[0]-4-rng()*6; }          // patrol the facility apron
+          if(!clear(x,z,L.spawn.minSpace)) continue;
+          if(levelSdfJS(x,1.0,z)<0.4) continue;               // not inside a wall
+          enemies.push(new Zealot(x,z)); placed.push([x,z]); break;
+        }
       }
     }
   }
@@ -6703,7 +6910,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=4, SAVE_KEY=i=>'sotv_save_'+i;             // v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
+const SAVE_VER=5, SAVE_KEY=i=>'sotv_save_'+i;             // v5: + area-1 POI rotation cursor (j.poiRot). v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
@@ -6786,7 +6993,7 @@ function saveGame(slot){
   const params={}; for(const k in PARAMS) params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
               equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
-              params, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll}};
+              params, poiRot:_poiRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll}};
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
   const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
@@ -6842,6 +7049,7 @@ function loadGame(slot){
       else autoPlace(ch,pocketsGrid,POCKET_COLS,POCKET_ROWS);
     }
     applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
+    _poiRot=(Number.isInteger(b.poiRot)&&b.poiRot>=0&&b.poiRot<6)?b.poiRot:0;   // POI rotation rides the slot (v5); missing/corrupt → 0
   }catch(e){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
@@ -6921,6 +7129,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.kind==='warp') rows.push('you arrive where it dies');
     if(e.kind==='slug') rows.push('3 rounds per shot');
     if(e.kind==='orb') rows.push('slow orb');
+    if(e.kind==='hope') rows.push('mends you & the faithful · burns the dead');
     if(e.powder) rows.push('mods cost no ⚡');
     if(e.refund) rows.push('next core: base ⚡/bullets waived');
     if(e.beltFeed) rows.push('LOUDLY chambers 1 round / 0.9s from your pockets');
@@ -8286,6 +8495,7 @@ function frame(){
       if(_genE!==_worldGen) break;           // a dry-mag swipe killed you mid-roster — the rest belong to a dead world
       if(en.health>0) highestDetection=Math.max(highestDetection,en.detection);
     }
+    if(bruteRespawnT>0){ bruteRespawnT-=dt; if(bruteRespawnT<=0){ bruteRespawnT=0; reviveBrute(); } }   // BRUTE mini-boss: the lone roamer returns on the 15-min session clock (game-time)
     updateAttachedGlobs();                 // worn glue rides its host — sync after the zealots move
     for(let i=noisePings.length-1;i>=0;i--){ noisePings[i].ttl-=dt; if(noisePings[i].ttl<=0) noisePings.splice(i,1); }
     for(let i=dynLights.length-1;i>=0;i--){ dynLights[i].ttl-=dt; if(dynLights[i].ttl<=0) dynLights.splice(i,1); }
@@ -8409,7 +8619,7 @@ function frame(){
     en._walk=(en._walk||0)+(wt-(en._walk||0))*Math.min(1,dt*10);
     gl.uniform3f(U.enemyPos[ei],en.position.x,en.position.y,en.position.z);
     gl.uniform4f(U.enemyData[ei],en.yaw,en.state+en._walk*0.5,en.muzzle,
-                 en.hurtFlash+(en.helm?2:0)+(en.plates?4:0));
+                 en.hurtFlash+(en.helm?2:0)+(en.plates?4:0)+(en._faction==='zombie'?8:0)+(en._brute?16:0));
     ei++;
   }
   gl.uniform1i(U.uEnemyCount,ei);
