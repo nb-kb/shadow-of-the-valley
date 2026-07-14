@@ -2312,7 +2312,8 @@ LEVELS.area1={
     {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
     {id:'tentsB', kind:LVL.KIND.TENT, box:[-22,-132,34,-64],  tents:[[-8,-92,0.2],[14,-108,2.9],[26,-84,1.6],[-2,-120,5.1]]},
     // Rim treeline strips (the cliff itself is in the ground formula)
-    {id:'rimN', shrubs:true, kind:LVL.KIND.TREES, box:[-186,168,186,196], cell:8.0, hMin:6.0,hMax:9.5},
+    {id:'rimNw', shrubs:true, kind:LVL.KIND.TREES, box:[-186,168,138,196], cell:8.0, hMin:6.0,hMax:9.5},   // north treeline SPLIT at the horde gate (x 138–162) so the gate/wall shows through a treeless corridor
+    {id:'rimNe', shrubs:true, kind:LVL.KIND.TREES, box:[162,168,186,196], cell:8.0, hMin:6.0,hMax:9.5},
     {id:'rimS', shrubs:true, kind:LVL.KIND.TREES, box:[-186,-196,186,-168], cell:8.0, hMin:6.0,hMax:9.5},
     {id:'rimW', kind:LVL.KIND.TREES, box:[-196,-160,-176,160], cell:8.0, hMin:6.0,hMax:9.5},
   ],
@@ -4191,7 +4192,7 @@ function updateInteract(dt){
     const _cw=activeLevel.contain;
     if(_cw && isPlayable() && !uiOpen()){
       const _gx=_cw.gateX, _gz=activeLevel.bounds.z1-_cw.t, _gdx=playerPos.x-_gx, _gdz=playerPos.z-_gz;
-      if(_gdx*_gdx+_gdz*_gdz<9){                          // ~3m reach of the gate controls
+      if(_gdx*_gdx+_gdz*_gdz<36){                         // ~6m reach of the gate controls — easy to reach/trigger at the wall
         if(_gateOpen){ setPrompt(_pr,'HORDE GATE — <span style="color:var(--gate)">OPEN</span>',true); return; }
         const _card=findGadgetOnPlayer('keycard');
         if(pressed('interact')){
