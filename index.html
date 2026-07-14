@@ -1209,7 +1209,7 @@ vec2 levelSDF(vec3 p){
     vec3 wh=vec3((hi.x-lo.x)*0.5+uContain.y, uContain.x*0.5, (hi.y-lo.y)*0.5+uContain.y);
     float wall=max( sdBoxL(p, wc, wh),                  // hollow: outer shell minus inner void
                    -sdBoxL(p, wc, vec3(wh.x-2.0*uContain.y, wh.y+1.0, wh.z-2.0*uContain.y)) );
-    wall=max(wall, -sdBoxL(p, vec3(uContain.z,0.0,hi.y),// NORTH incline gap (future horde gate) — left open
+    wall=max(wall, -sdBoxL(p, vec3(uContain.z,0.0,hi.y),// NORTH incline: horde-gate notch — uContain.w(gateHW)=0 when LOCKED (no carve => wall solid), =gateHW when OPEN (TWIN: levelSdfJS/_gateOpen via upload)
                           vec3(uContain.w, uContain.x+2.0, 3.0*uContain.y)));
     if(wall<res.x) res=vec2(wall, 3.0);                 // mat 3 = stucco/concrete wall
   }
@@ -2377,6 +2377,7 @@ LEVELS.area1={
                  tentsB:['common','gear','common'], lab:['gear','rare','cores'],
                  armory:['mods','cores','rare'] },
     lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
+    guaranteed:['gateCard'],   // CONTAINMENT: one horde-gate keycard always seeds a crate — the gate can never soft-lock a raid
   },
 };
 LEVELS.hideout={
@@ -2757,7 +2758,7 @@ function levelSdfJS(px,py,pz){
     const hx=(b.x1-b.x0)*0.5+cw.t, hz=(b.z1-b.z0)*0.5+cw.t, hh=cw.h*0.5;
     let wall=Math.max( _sdBox3(px,py,pz, cx,hh,cz, hx,hh,hz),                 // hollow: outer shell minus inner void
                       -_sdBox3(px,py,pz, cx,hh,cz, hx-2*cw.t, hh+1, hz-2*cw.t) );
-    wall=Math.max(wall, -_sdBox3(px,py,pz, cw.gateX,0,b.z1, cw.gateHW, cw.h+2, 3*cw.t));  // N incline gap (future gate) — left open
+    wall=Math.max(wall, -_sdBox3(px,py,pz, cw.gateX,0,b.z1, (_gateOpen?cw.gateHW:0), cw.h+2, 3*cw.t));  // N horde-gate notch — carved ONLY when _gateOpen (TWIN: levelSDF uContain.w via upload; half-width 0 when LOCKED => solid wall)
     if(wall<res){ res=wall; mat=3.0; }
   }
   return res;
@@ -3316,6 +3317,8 @@ const ITEM_DEFS={
   opticsDial: ()=>new Gadget('Optics Dial','#8f9fb0','optics','Right-click: cycle render fidelity.'),
   volumeKnob: ()=>new Gadget('Volume Knob','#b08f7f','volume','Right-click: cycle sound level.'),
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
+  // --- keycards: identity-only Gadgets (kind read by locks; no per-kind behavior) ---
+  gateCard:   ()=>new Gadget('Horde Keycard','#c8a12e','keycard','A scarred access card — trips the horde gate at the north incline.'),
 };
 for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
   ITEM_DEFS[k]=()=>{ const it=f(); it.defKey=k; return it; }; }
@@ -4183,6 +4186,24 @@ function updateInteract(dt){
       if(r.fd<0.9 && r.face>0.34){
         if(pressed('interact')&&!isTerminalOpen){ openTerminal(); }
         setPrompt(_pr,'THE STOLEN TERMINAL — <b>E</b>',true); return;
+      }
+    }
+    // AREA-1 HORDE GATE — card-locked control panel at the north incline (x≈gateX, inner face).
+    // Reads LOCKED without a keycard; UNLOCK with one sets _gateOpen (persisted, v6 save) so the
+    // notch carve turns ON in BOTH SDF twins (levelSDF/levelSdfJS). One-way; the card is not consumed.
+    const _cw=activeLevel.contain;
+    if(_cw && isPlayable() && !uiOpen()){
+      const _gx=_cw.gateX, _gz=activeLevel.bounds.z1-_cw.t, _gdx=playerPos.x-_gx, _gdz=playerPos.z-_gz;
+      if(_gdx*_gdx+_gdz*_gdz<9){                          // ~3m reach of the gate controls
+        if(_gateOpen){ setPrompt(_pr,'HORDE GATE — <span style="color:var(--gate)">OPEN</span>',true); return; }
+        const _card=findGadgetOnPlayer('keycard');
+        if(pressed('interact')){
+          if(_card){ _gateOpen=true; toast('HORDE GATE UNLOCKED'); playSound('pickup'); }
+          else { toast('KEYCARD REQUIRED'); playSound('empty'); }
+        }
+        setPrompt(_pr, _card?'GATE TERMINAL — <b>E</b> UNLOCK'
+                            :'GATE TERMINAL — <span style="color:var(--exposed)">LOCKED</span> · KEYCARD REQUIRED', true);
+        return;
       }
     }
   }
@@ -8838,7 +8859,7 @@ function frame(){
     const lg=activeLevel.ground;
     gl.uniform4f(U.uLevelGround,lg.rim,lg.rimW,lg.noise,0);
     const cw=activeLevel.contain;                       // AREA-1 CONTAINMENT: wall dims to shader (x<=0 => no wall, e.g. hideout)
-    gl.uniform4f(U.uContain, cw?cw.h:0, cw?cw.t:0, cw?cw.gateX:0, cw?cw.gateHW:0);
+    gl.uniform4f(U.uContain, cw?cw.h:0, cw?cw.t:0, cw?cw.gateX:0, (cw&&_gateOpen)?cw.gateHW:0);   // .w=gateHW gated on _gateOpen: 0 when LOCKED => shader notch carves nothing => wall solid (TWIN: levelSdfJS)
     const pits=activeLevel.regions.find(r=>r.trench);
     if(pits){ const t=pits.trench;
       gl.uniform4f(U.uLevelCutA,(t[0]+t[2])/2, 0.4-pits.trenchD, (t[1]+t[3])/2, (t[2]-t[0])/2);
