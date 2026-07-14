@@ -3546,7 +3546,7 @@ let sprintOn=false, menuAnim=0, menuMode=1, inspectItem=null;
 
 function isPlayable(){ return gameState==='play'||gameState==='hideout'; }
 function uiOpen(){ if(!engineReady) return true; return isInventoryOpen||isToolMenuOpen||isCrateOpen||isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }
-function pausedUI(){ return isManualOpen||isDebugOpen||isTerminalOpen||!isPlayable(); }   // bag/tool do NOT pause the world
+function pausedUI(){ return isManualOpen||isDebugOpen||!isPlayable(); }   // bag/tool/desk-terminal do NOT pause — the auto-on terminal lets you walk up to it and away while its screen stays live (hideout is safe)
 
 function gridFits(item,sx,sy,grid,cols,rows){
   if(sx<0||sy<0||sx+item.w>cols||sy+item.h>rows) return false;
@@ -4184,14 +4184,7 @@ function updateInteract(dt){
     const dr=nearStubDoor();
     if(dr){ if(pressed('interact')){ toast('SEALED. IT DOES NOT OPEN. YET.'); playSound('empty'); }
       setPrompt(_pr,'A DOOR INTO THE FACILITY — SEALED',true); return; }
-    if(activeLevel.terminal){
-      const t=activeLevel.terminal;                        // desk footprint: LEVEL-PRIM halfs 0.42x0.30
-      const r=faceReach(t.x,t.z,0.42,0.30,t.yaw);
-      if(r.fd<0.9 && r.face>0.34){
-        if(pressed('interact')&&!isTerminalOpen){ openTerminal(); }
-        setPrompt(_pr,'THE STOLEN TERMINAL — <b>E</b>',true); return;
-      }
-    }
+    // (the stolen terminal is AUTO-ON by proximity in the main loop now — no interact-to-open branch here)
     // AREA-1 HORDE GATE — card-locked control panel at the north incline (x≈gateX, inner face).
     // Reads LOCKED without a keycard; UNLOCK with one sets _gateOpen (persisted, v6 save) so the
     // notch carve turns ON in BOTH SDF twins (levelSDF/levelSdfJS). One-way; the card is not consumed.
@@ -6989,7 +6982,7 @@ function nearStubDoor(){
 // ---- THE TERMINAL: one data-driven screen system. Rows come from configs; a row is
 // ---- {label, meta?, action()} or {label, screen}. Doors will reuse this as
 // ---- `transition` rows later — the terminal doesn't know what a hideout is.
-let termScreen='home', termSel=0;
+let termScreen='home', termSel=0, _termOverRow=false;   // _termOverRow: is the center crosshair on a terminal row THIS frame — gates click-confirm so a fire-press while not aimed at the panel can't trigger a hidden option
 const TERM_SCREENS={
   home:()=>({title:'ValleyOS', rows:[
     {label:'DEPLOY', screen:'deploy'},
@@ -7034,16 +7027,16 @@ const TERM_SCREENS={
   ]}),
 };
 let _termSlot=0;
-function openTerminal(){ isTerminalOpen=true; termScreen='home'; termSel=0;
-  INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={};   // the opening press is spent
+function openTerminal(spend=true){ isTerminalOpen=true; termScreen='home'; termSel=0;
+  if(spend){ INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={}; }   // a MANUAL open spends the opening press; AUTO-open (walking up) must NOT wipe held movement keys
   const ui=document.getElementById('terminalUI');
   ui.classList.remove('hidden'); ui.classList.add('diegetic');    // an in-world mini-display on the slab, not a full-screen sheet
   document.getElementById('termCursor').classList.add('on');
   // pointer STAYS locked: the camera is live, the center crosshair IS the mouse — aim a row, □/E/LMB to pick.
   // (If the pointer was already free, the row mouseenter/mousedown handlers still give a hover+click fallback.)
   playSound('click'); renderTerminal(); terminalFrame(); }        // park it on the slab this frame — no open-flash
-function closeTerminal(){ isTerminalOpen=false;
-  INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={};   // E on CLOSE must not re-open via updateInteract the same frame
+function closeTerminal(spend=true){ isTerminalOpen=false;
+  if(spend){ INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={}; }   // a MANUAL close spends the press; AUTO-close (walking away) must NOT wipe held movement keys
   const ui=document.getElementById('terminalUI');
   ui.classList.add('hidden'); ui.classList.remove('diegetic');
   document.getElementById('termCursor').classList.remove('on');
@@ -7073,13 +7066,15 @@ function terminalFrame(){
       placed=true;
     }
   }
-  if(!placed){ ui.style.left='50%'; ui.style.top='50%'; ui.style.transform='translate(-50%,-50%)'; }
-  // the fixed center crosshair picks a row — but ONLY while the MOUSE is moving, so the stick/dpad
-  // (termNav) can nav without the hit-test snapping the selection back to the centered row each frame
-  if(INPUT.mdx||INPUT.mdy){
+  ui.classList.toggle('hidden', !placed);   // AUTO-ON: the panel lives ON the monitor — hidden when the screen is off-camera (look away → gone), shown when you face it
+  // the fixed center crosshair picks a row. _termOverRow (checked EVERY frame) gates the click-confirm;
+  // the termSel *update* still fires only while the MOUSE MOVES, so the stick/dpad (termNav) can nav
+  // without the hit-test snapping the selection back to the centered row each frame.
+  _termOverRow=false;
+  if(placed){
     const rows=document.getElementById('termRows').children, cx=innerWidth/2, cy=innerHeight/2;
     for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect();
-      if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ if(i!==termSel){ termSel=i; renderTerminal(); } break; } }
+      if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ _termOverRow=true; if((INPUT.mdx||INPUT.mdy)&&i!==termSel){ termSel=i; renderTerminal(); } break; } }
   }
 }
 function renderTerminal(){
@@ -7107,7 +7102,7 @@ function termNav(){
   const nav=navEdges();
   if(nav.up){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
   if(nav.down){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
-  if(nav.confirm||INPUT.rawPad[0]||INPUT.rawPad[2]||pressed('fire')) termActivate();   // □ (pad2) / ✕ (pad0) / E / LMB all confirm the crosshair-picked row
+  if(nav.confirm||INPUT.rawPad[0]||INPUT.rawPad[2]||(_termOverRow&&pressed('fire'))) termActivate();   // □/✕ (pad) + E confirm the nav row; LMB confirms ONLY when the crosshair is on a row — a click while looking away can't trigger a hidden option
   if(nav.back||INPUT.rawPad[1]){
     if(termScreen!=='home'){ termScreen='home'; termSel=0; playSound('click'); renderTerminal(); }
     else closeTerminal();
@@ -8706,6 +8701,12 @@ function frame(){
     if(pressed('manual')){ isManualOpen?closeManual():openManual(); }
     if(pressed('debug')) toggleDebug();
     if(isDebugOpen) dbgNav(dt);
+    // TERMINAL: AUTO-ON at the desk — the screen wakes when you step up to the computer, goes dark when you walk off (no open press). Hideout is safe, so it doesn't pause.
+    if(activeLevel&&activeLevel.terminal){
+      const _tt=activeLevel.terminal, _tR=faceReach(_tt.x,_tt.z,0.42,0.30,_tt.yaw);
+      if(!isTerminalOpen){ if(_tR.fd<0.9 && !uiMenusOpen() && !isManualOpen && !isDebugOpen) openTerminal(false); }
+      else if(_tR.fd>1.4) closeTerminal(false);   // hysteresis: wake ≤0.9m, sleep >1.4m so it can't flicker at the edge
+    }
     if(isTerminalOpen){ terminalFrame(); termNav(); }   // place the mini-display + crosshair-pick a row, then run nav/confirm
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
