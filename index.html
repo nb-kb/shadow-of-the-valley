@@ -6335,6 +6335,7 @@ class Zealot{
           if(Math.hypot(cx-this.position.x,cz-this.position.z)>4){ tx=tx*0.5+cx*0.5; tz=tz*0.5+cz*0.5; }
           if(nd<2.2){ tx+=this.position.x-nx; tz+=this.position.z-nz; }
           speed*=1.5; }                                   // moving with the group — no dawdling at patrol pace
+        if(Math.hypot(this.position.x-this.startPos.x,this.position.z-this.startPos.z)>28){ tx=this.startPos.x; tz=this.startPos.z; }   // LEASH: hold the POI — turn back before drifting far from the spawn, so the camp stays put instead of wandering the map
         moveTo=new Vec3(tx,0,tz); faceTo=moveTo;
       }
     }
@@ -6398,9 +6399,11 @@ class Zealot{
         let brute=null, bd=80;   // wide leash: the brute now treks the whole arena, so let the swarm trail it from farther out (was 45)
         for(const o of enemies){ if(o!==this&&o._brute&&o.health>0){ const dd=o.position.distanceTo(this.position); if(dd<bd){ bd=dd; brute=o; } } }
         if(brute&&bd>3.0){ moveTo=brute.position; faceTo=brute.position; }   // close on the brute, stop ~3m off — the swarm clusters on its leader
-        else { this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;   // no brute (or already packed): a lazy loop drift
+        else { this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;   // no brute (or already packed): a lazy loop drift, LEASHED near the spawn zone
           const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
-          moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3); faceTo=moveTo; speed*=0.5; }
+          let zx=this.position.x+fx*3, zz=this.position.z+fz*3;
+          if(Math.hypot(this.position.x-this.startPos.x,this.position.z-this.startPos.z)>30){ zx=this.startPos.x; zz=this.startPos.z; }   // hold the spawn zone (undead still rally to a brute within 80m, above)
+          moveTo=new Vec3(zx,0,zz); faceTo=moveTo; speed*=0.5; }
       }
     }
     // move · face · settle — undead never shoot/reload, but a WAVE press still shoves them
@@ -6497,9 +6500,11 @@ class Zealot{
   }
   reinforce(){
     if(enemies.filter(e=>e.health>0).length>=P('maxEnemies')) { this.respawnT=10; return; }
-    const a=runRng()*Math.PI*2, r=45+runRng()*15;
-    this.position.set(playerPos.x+Math.cos(a)*r,0,playerPos.z+Math.sin(a)*r);
-    this.startPos=this.position.clone();
+    const _poiLvl=activeLevel&&activeLevel.spawn&&activeLevel.spawn.pois;   // Area-1 (POI level): respawn AT the enemy's OWN spawn — no teleporting into a ring around the player. Open valley (no POIs): the endless horde still closes on you.
+    let _rx,_rz;
+    if(_poiLvl){ _rx=this.startPos.x; _rz=this.startPos.z; }
+    else { const a=runRng()*Math.PI*2, r=45+runRng()*15; _rx=playerPos.x+Math.cos(a)*r; _rz=playerPos.z+Math.sin(a)*r; this.startPos=new Vec3(_rx,0,_rz); }
+    this.position.set(_rx, restOnSurface(_rx, levelGroundJS(_rx,_rz)+2.5, _rz), _rz);
     if(this._faction==='zombie'){                         // faction persists across respawn — undead come back undead (brute keeps its 300), no gear, no bomber roll
       this._believer=false; this._selfBoom=false;
       this.health=this._brute?800:100;
@@ -8749,7 +8754,7 @@ function frame(){
     highestDetection=0;
     const _genE=_worldGen;
     for(const en of enemies){
-      if(en.health>0&&en.position.distanceTo(playerPos)>70) en.reinforce();
+      if(en.health>0 && !(activeLevel&&activeLevel.spawn&&activeLevel.spawn.pois) && en.position.distanceTo(playerPos)>70) en.reinforce();   // POI levels (Area-1) NEVER yank living enemies to the player — only the open valley's endless horde closes in
       en.update(dt);
       if(_genE!==_worldGen) break;           // a dry-mag swipe killed you mid-roster — the rest belong to a dead world
       if(en.health>0) highestDetection=Math.max(highestDetection,en.detection);
