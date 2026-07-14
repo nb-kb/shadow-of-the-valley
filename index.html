@@ -4002,8 +4002,12 @@ function spotDistance(){
 // ============================================================
 // WORLD ITEMS — spawning, physgun carry, take
 // ============================================================
+const WORLDITEM_CAP=64;   // dropped-loot pile bound: render only shows the nearest RLIM.ITEMS anyway, so evicting the oldest OFF-SCREEN drop is invisible — and it stops the all-session growth that fed 3 per-frame O(n) sweeps + a per-item alloc (the long-run lag)
 function spawnWorldItem(item,x,y,z,vel){
-  worldItems.push({item,pos:new Vec3(x,y,z),vel:vel||new Vec3(),ry:runRng()*6.28,rotVel:0,pitch:0,rotVelP:0,held:false});
+  if(worldItems.length>=WORLDITEM_CAP){                 // over cap → drop the OLDEST evictable item (never a carried or armed one)
+    for(let i=0;i<worldItems.length;i++){ const w=worldItems[i]; if(!w.held && !(w.item&&w.item._armT>0)){ worldItems.splice(i,1); break; } }
+  }
+  worldItems.push({item,pos:new Vec3(x,y,z),vel:vel||new Vec3(),ry:runRng()*6.28,rotVel:0,pitch:0,rotVelP:0,held:false,age:0});
 }
 function dropItemToWorld(item,dist,vy){
   const f=camForward();
@@ -8301,6 +8305,14 @@ function updateWorldItems(dt){
   for(let wi=worldItems.length-1;wi>=0;wi--){
     if(gen!==_worldGen) return;              // the grenade below can kill its owner → teardown cleared this list mid-walk
     const w=worldItems[wi]; if(!w) continue;
+    // LOOT DESPAWN (owner rule): reap loot the player has walked >50m from OR that
+    // has sat >2min — bounds the drop pile that used to grow all session. Never a
+    // carried / pinned / armed item.
+    if(!w.held && !w.frozen && !(w.item&&w.item._armT!=null) && !(heldWorld&&heldWorld.w===w)){
+      w.age=(w.age||0)+dt;
+      const _dx=w.pos.x-playerPos.x, _dz=w.pos.z-playerPos.z;
+      if(w.age>120 || _dx*_dx+_dz*_dz>2500){ worldItems.splice(wi,1); continue; }
+    }
     // ---- a LIT boom core counts down wherever it is — pinned, resting, or in
     // ---- hand (a POCKETED one ticks in tickInvArm, the walk above)
     const li=w.item;
@@ -8437,7 +8449,7 @@ let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
 
 const FRAME_MS=1000/60;
-let lastRender=0;
+let lastRender=0, _pendingRes=false;
 function frame(){
   const now=performance.now();
   // 60fps cap: cheaper, cooler, steadier. Phase-carried so high-refresh
@@ -8445,6 +8457,7 @@ function frame(){
   if(now-lastRender<FRAME_MS-0.5){ requestAnimationFrame(frame); return; }
   lastRender=Math.max(lastRender+FRAME_MS, now-FRAME_MS);
   ensureFullProgram();          // bind the current level's full variant once it links (else the preview keeps rendering)
+  if(_pendingRes){ _pendingRes=false; resize(); }   // apply a deferred auto-res change BEFORE drawing — never after drawArrays, or it clears the frame we just showed (the flicker)
   const dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
   fpsEma=lerp(fpsEma,1/Math.max(dt,1e-4),0.04);
   pollGamepad();
@@ -8711,11 +8724,11 @@ function frame(){
   // ---- auto resolution: if the GPU can't keep pace, shrink the ray count ----
   dynResT-=dt;
   if(dynResT<=0 && isPlayable()){
-    dynResT=0.5;
+    dynResT=1.0;                                               // slower cadence + wider dead-band below = no per-half-second sharpness pump
     const before=Math.round(dynScale*20)/20;
-    if(fpsEma<50) dynScale=Math.max(0.55,dynScale*0.92);       // losing pace: shed pixels
-    else if(fpsEma>58) dynScale=Math.min(1.0,dynScale*1.04);   // headroom: claw them back
-    if(Math.round(dynScale*20)/20!==before) resize();
+    if(fpsEma<48) dynScale=Math.max(0.55,dynScale*0.92);       // losing pace: shed pixels
+    else if(fpsEma>60) dynScale=Math.min(1.0,dynScale*1.04);   // real headroom only: claw them back
+    if(Math.round(dynScale*20)/20!==before) _pendingRes=true;  // DEFER — resize here (post-drawArrays) reallocates+clears the drawing buffer and flashes the just-drawn frame dark
   }
 
   // ---- HUD ----

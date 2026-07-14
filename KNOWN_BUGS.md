@@ -69,16 +69,36 @@ Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal +
   no rotation). Fine for area-1's 6 POIs; a landmine only if a future level ships
   fewer.
 
-### 6. Screen flicker + long-run lag buildup (OWNER-reported 2026-07-14 — UNDER INVESTIGATION)
-- **Flicker:** the screen flickers during play. Candidates being researched:
-  z-fighting on SDF surfaces, the per-frame nearest-N enemy/tracer sort cycling
-  render slots (cap 20/12), a repaint/generation race, alpha/depth in the frag
-  output, or the preview→full shader swap.
-- **Long-run lag buildup:** FPS degrades the longer a run runs → an unbounded
-  growth / leak. Auditing every push (projectiles, tracers, beamSegs, decals,
-  dynLights, noisePings, worldItems, dead-enemy roster, globs, shards, status
-  Maps like `pr._dHit`) for a missing cap/cleanup.
-- Investigation launched (two research agents). Both are optimization targets.
+### 6. Screen flicker + long-run lag buildup (researched + partly FIXED 2026-07-14)
+- **Long-run lag — ROOT-CAUSED + FIXED:** dropped loot (`worldItems`) grew with no
+  cap all session (2–4 items/kill, kills infinite), paid for by 3 per-frame O(n)
+  sweeps + a per-item alloc. Fixed: reap loot >50m from the player or >2min old +
+  a 64 backstop cap. Every other collection audited BOUNDED.
+- **Flicker #1 — ROOT-CAUSED + FIXED:** the auto-resolution scaler pumped across
+  the 50/58 fps dead-band and called `resize()` AFTER `drawArrays`, reallocating +
+  clearing the drawing buffer → a dark flash + sharpness pump (worst on iGPU).
+  Fixed: defer the resize to the next frame's TOP + widen the dead-band (48/60) +
+  cadence (1s).
+- **Flicker — SECONDARY, still open (follow-up):** (a) dynamic-light 4-slot churn
+  (RLIM.DYN=4) — muzzle flashes evict steady lamps, sorted on RAW not effective
+  intensity → in-combat lighting strobe; fix = sort by `intensity*clamp(ttl*8,0,1)`
+  + temporal bias, or raise RLIM.DYN. (b) viewmodel exposure steps at 8Hz with no
+  smoothing → the HANDS flicker; fix = lerp toward the target every frame. (c)
+  raymarch structure-edge shimmer on the FAST preset. (Enemy nearest-N sort is NOT
+  a cause now — cap 20 = maxEnemies 20.)
+
+### 7. Backing out of inventory (B / SELECT) replays the gun raise animation
+- OWNER-reported (old bug). Closing the inventory with B / SELECT re-plays the tool
+  raise/ready animation as if re-equipping — it shouldn't (the tool never left the
+  hand). Find the inventory-close handler and skip the wield/ready trigger when
+  merely returning from a menu.
+
+### 8. Audio is not spatial / directional
+- OWNER-reported: sounds play at the listener at full volume regardless of where
+  they happen — a zombie alerting a guard 40m away blasts "right on me." Needs
+  positional audio: distance attenuation + L/R pan by direction vs the player's
+  facing. `playSound()` should take an emitter position (default centered for UI);
+  gameplay sites (alerts, shots, footsteps, noise pings) pass the world position.
 
 ## Backlog (future — low priority)
 
