@@ -2163,6 +2163,17 @@ function resolveCollision(pos,radius){
     }else break;
   }
 }
+const STEP_MAX=0.45;   // STEP-OVER cap: the tallest ledge an actor rolls onto. Every real obstacle (crates 1.1m, walls 3.2m+, containment 14m) stays solid a STEP up, so none can be climbed.
+// STEP-OVER — a body sphere `pos` (radius r) is about to be shoved back by a ledge.
+// If it's a LOW ledge (air one STEP up) lift the sphere onto it and let the caller's
+// restOnSurface snap plant the feet exact next; a sheer face (still solid a STEP up)
+// is refused. headY>0 also refuses an overhang the raised body would clip.
+function stepOver(pos,r,headY){
+  if(mapWorldJS(pos.x,pos.y,pos.z)>=r) return false;                      // not blocked -> nothing to step
+  if(mapWorldJS(pos.x,pos.y+STEP_MAX,pos.z)<r) return false;              // solid a STEP up -> sheer wall/crate/containment
+  if(headY>0 && mapWorldJS(pos.x,headY+STEP_MAX,pos.z)<r) return false;   // raised head clips an overhang
+  pos.y+=STEP_MAX; return true;                                           // low ledge -> lift; ground-snap settles exact
+}
 // cheap sphere-march through static world; true if path is CLEAR
 function losClearJS(ax,ay,az,bx,by,bz){
   let dx=bx-ax, dy=by-ay, dz=bz-az;
@@ -6387,6 +6398,7 @@ class Zealot{
   settle(dt){
     this.velocity.y=0;                          // enemies are GROUND-BOUND: never carry vertical momentum. Root fix for "flying into the sky" — shoves (KINETIC/WAVE/blast) ADD to velocity.y and the move step only ever set x/z, so y accumulated every frame and launched them upward faster than settle's 6/s descent.
     const c=new Vec3(this.position.x,this.position.y+0.9,this.position.z);
+    stepOver(c,0.42,0);                          // STEP-OVER: clamber a low ledge instead of catching (single body sphere -> headroom implicit)
     resolveCollision(c,0.42);
     this.position.set(c.x,c.y-0.9,c.z);
     const g=mapWorldJS(this.position.x,this.position.y+0.05,this.position.z);
@@ -8190,7 +8202,9 @@ function updatePlayer(dt){
     for(let sI=0;sI<nSub;sI++){
       playerPos.x+=stepX/nSub; playerPos.z+=stepZ/nSub;
       if(!FLAGS.noclip&&nSub>1){
-        _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
+        _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z);
+        if(playerPos.velY<=0.001) stepOver(_c1,0.34,_c1.y+0.60);   // STEP-OVER while moving fast (sprint/slide): chest at feet+0.95 = _c1.y+0.60
+        resolveCollision(_c1,0.34);
         playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
       }
     }
@@ -8257,7 +8271,10 @@ function updatePlayer(dt){
       }
     }
     const _ix=playerPos.x, _iz=playerPos.z, _wasGrounded=playerPos.onGround;
-    _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z); resolveCollision(_c1,0.34);
+    _c1.set(playerPos.x,playerPos.y+0.35,playerPos.z);
+    // STEP-OVER: roll the feet up onto a low ledge before the push-back ejects them (velY guard: never while rising through a jump)
+    if(playerPos.velY<=0.001 && stepOver(_c1,0.34,_c1.y+0.60)) playerPos.velY=0;
+    resolveCollision(_c1,0.34);
     playerPos.x=_c1.x; playerPos.y=_c1.y-0.35; playerPos.z=_c1.z;
     _c2.set(playerPos.x,playerPos.y+0.95,playerPos.z); resolveCollision(_c2,0.34);
     playerPos.x=_c2.x; playerPos.y=_c2.y-0.95; playerPos.z=_c2.z;
