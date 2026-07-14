@@ -6322,6 +6322,7 @@ class Zealot{
     if(this.shootCooldown>0) this.shootCooldown-=dt;
   }
   settle(dt){
+    this.velocity.y=0;                          // enemies are GROUND-BOUND: never carry vertical momentum. Root fix for "flying into the sky" — shoves (KINETIC/WAVE/blast) ADD to velocity.y and the move step only ever set x/z, so y accumulated every frame and launched them upward faster than settle's 6/s descent.
     const c=new Vec3(this.position.x,this.position.y+0.9,this.position.z);
     resolveCollision(c,0.42);
     this.position.set(c.x,c.y-0.9,c.z);
@@ -8776,7 +8777,7 @@ function frame(){
     eye.style.boxShadow='0 0 '+(6+30*e)+'px '+(e*5)+'px rgba(255,217,138,'+(0.12+0.75*e).toFixed(2)+')';
     eye.style.filter='brightness('+(0.3+e*1.6).toFixed(2)+')';
     const comp=document.getElementById('compassStrip');
-    if(hasGadget('compass')&&gameState==='play'&&(!activeLevel||liveExfils().length)){
+    if(findGadgetOnPlayer('compass')&&gameState==='play'&&(!activeLevel||liveExfils().length)){   // read the compass ANYWHERE on the player (hand/pockets/packs/rucksack), like the watch — was rucksack-only, so a pocketed compass went dark
       comp.classList.remove('hidden');
       // valley (endless AND travel legs): the gate — descending is the quest, and the
       // endless exfil's own smoke is its finder. An authored raid steers to the nearest exfil.
