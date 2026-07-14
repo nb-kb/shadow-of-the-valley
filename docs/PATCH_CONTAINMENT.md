@@ -27,6 +27,13 @@ code yet. Owner-driven; leans marked, decisions flagged.
 - The **outskirts** (out of bounds) carry the gas, and **only zombies spawn near
   the player** there.
 - Telegraph: haze readable from outside so avoiding/entering is a real choice.
+- **Who it burns:** the player AND **soldiers** — both need masks. **Zombies are
+  immune** (undead). Soldiers can spawn with a mask as random starting kit —
+  masked soldiers hold the haze; **unmasked soldiers FEAR it and avoid** the gas
+  (a morale/avoid behavior, ties to System E). Emergent: the hazed POIs become
+  zombie turf (soldiers steer clear), reinforcing the faction map. (RESOLVED gap #5.)
+- **The brute carries radiation** — a mobile haze aura trails the roving brute,
+  making the mini-boss a walking hot-zone (pairs with its roving spawns).
 
 ### C. Keycards & Locked Areas  · JS · **risk: MED**
 - Keycards = loot, stashable, one distinct card per lock (color-coded).
@@ -40,7 +47,9 @@ code yet. Owner-driven; leans marked, decisions flagged.
 
 ### D. Persistent Lockboxes  · SAVE_VER bump · **risk: MED-HIGH**
 - **Epic** lockbox 2×2 · **Legendary** lockbox 3×3 — contents SURVIVE death (the
-  hideout-stash rule). Safe-storage upgrades.
+  hideout-stash rule). Safe-storage upgrades, anchored in the hideout.
+- **Acquisition: killing the BRUTE is a chance to drop one** (epic or legendary)
+  — makes the mini-boss the stash-upgrade source. (RESOLVED gap #6.)
 - Save: one SAVE_VER bump folding in lockboxes + keycards + new raid-state
   (which POIs hazed, gate open). Old saves: corruption reads as empty, never
   crashes (invariant #4).
@@ -51,12 +60,21 @@ code yet. Owner-driven; leans marked, decisions flagged.
 - Soldiers vs zombies spawn **far apart** → each coheres with its own faction
   (the cohesion already built) before finding + clashing with the other. ("Team
   up" read as own-faction grouping first.)
+- **Zealot morale** — under set conditions (low HP · their faction losing ·
+  outnumbered · no nearby cover) a zealot can **flee** or **stand its ground**
+  instead of always pressing. Believers never flee (kamikaze); zombies never
+  flee (mindless). Reads as soldiers, not drones.
+- **Brute as a spawn anchor (maybe)** — the roving brute could seed roving zombie
+  spawns around itself → a mobile pressure source. Optional; ties to the gauntlet.
 
 ### F. Hitbox / Headshot rework  · combat · **risk: MED**
-- Tighten the JS hit radii to the drawn body (fairness; folds in the open
-  brute-hitbox note).
-- Headshots: **no helmet = instakill** · **light helmet = 1 shot destroys it** ·
-  **heavy helmet = 2 shots** (then a bare-head follow-up kills).
+- Tighten the JS hit radii to the drawn body FIRST — fairness is the PREREQUISITE
+  (an instakill only feels fair on an honest box; folds in the open brute-hitbox
+  note + System H's crosshair hit-test).
+- Headshots are **SYMMETRIC — player AND enemy, a lucky shot ends either side:**
+  **no helmet = 1 (instakill)** · **light / tier-1 = 2** (1 breaks it, 1 kills) ·
+  **heavy / tier-2 = 3** (2 break it, 1 kills). The player wears the same rules —
+  lucky enemy headshots will sometimes just kill you. (RESOLVED gap #2.)
 
 ### G. Loot-crate expansion  · JS + maybe geometry · **risk: MED**
 - Every POI gets loot crates → add more crate instances.
@@ -67,6 +85,12 @@ code yet. Owner-driven; leans marked, decisions flagged.
 - ADS: gun + crosshair move smoothly, INDEPENDENT of the camera; the camera
   trails on a small delay. Hit-test must follow the **crosshair**, not the camera
   center (interacts with F).
+
+### I. Outskirts stats page (PRs)  · terminal + save · **risk: LOW**
+- A page on the hideout computer tracking **zombies killed** and **time in the
+  outskirts** as personal records — the score-chase that makes the suicide run
+  its own reward. A terminal row + a couple of persistent counters (fold into the
+  Phase-1 SAVE_VER bump). Builds with Phase 2.
 
 ---
 
@@ -85,7 +109,9 @@ code yet. Owner-driven; leans marked, decisions flagged.
 - **Light armor** occupying the head slot, with a 2-slot sub-inventory for
   **filters** (container-armor, like the Scope Adapter). Common loot.
 - Each filter **−45% radiation burn** (two ≈ −90%; near-immunity is the reward
-  for the slots).
+  for the slots). Filters **degrade slowly while in the gas** — each good for
+  ~1–2 runs of casual trekking, then spent (a consumable loot loop, like ammo).
+  (RESOLVED gap #4.)
 - **It is a mask, not a combat helmet** → wearing it gives gas protection but
   (per F) **no headshot protection**. Gas-safe vs headshot-safe is the trade.
 
@@ -144,23 +170,18 @@ sits after Phase 1.
 1. **EXTRACTION — RESOLVED.** The interior **exfil stays the exit**; the gate
    opens OUT to the outskirts gauntlet, not the way home. Walls just stop
    map-edge wandering. (Just confirm the exfil still sits inside the new walls.)
-2. **Headshot-instakill symmetry** — does an enemy headshot **instakill the
-   player** too? Player-only, or does the player's own helmet gate it? A brutal
-   call either way — make it deliberately.
-3. **Outskirts reward** — the gauntlet is opt-in content; it still needs a payoff
-   staged out there (loot cache / Legendary-lockbox source / rare cores) so the
-   suicide run is worth the risk, not just chaos.
-4. **Filter economy** — do filters **deplete** in the gas (a consumable resource
-   loop, like ammo), or are they permanent −45% each? Depletion gives the gas
-   teeth over time.
-5. **Radiation affects whom** — player: yes (needs a mask). Zombies: immune
-   (undead). Soldiers: immune, take burn, or avoid the haze? Decide — it changes
-   how the hazed POIs play.
-6. **Lockbox home + acquisition** — loot tier, and do they live in the hideout
-   (stash upgrade) or travel with you? "Survives death" implies hideout-anchored.
-7. **Gas-mask-vs-helmet slot conflict** — both want the head. Confirm masked =
-   no headshot protection (the trade in the Gas mask section), so the player
-   chooses gas-safety or head-safety per raid.
+2. **Headshots — RESOLVED (F):** symmetric player+enemy · no helmet 1 / light 2 /
+   heavy 3 · gated on honest hitboxes.
+3. **Outskirts reward — RESOLVED-ish:** the PR stats page (I) is the score-chase
+   reward + the brute drops a lockbox chance; a staged loot cache is optional gravy.
+4. **Filters — RESOLVED (Gas mask):** degrade slowly in the gas, ~1–2 casual runs.
+5. **Radiation vs whom — RESOLVED (B):** player + soldiers need masks; zombies
+   immune; unmasked soldiers fear + avoid the haze; the brute carries an aura.
+6. **Lockboxes — RESOLVED (D):** brute-kill drop chance, hideout-anchored.
+7. **Gas mask ↔ helmet slot — STILL OPEN (only one left):** the mask is light head
+   armor, so it likely IS the light/tier-1 headshot tier (2 shots) *and* gives gas
+   protection — meaning wearing it forgoes a HEAVY helmet (3 shots). Confirm it
+   sits in the head-armor tier, vs is a non-combat mask (gas only, no headshot help).
 
 ---
 
