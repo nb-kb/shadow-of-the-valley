@@ -2170,6 +2170,8 @@ const STEP_MAX=0.45;   // STEP-OVER cap: the tallest ledge an actor rolls onto. 
 // is refused. headY>0 also refuses an overhang the raised body would clip.
 function stepOver(pos,r,headY){
   if(mapWorldJS(pos.x,pos.y,pos.z)>=r) return false;                      // not blocked -> nothing to step
+  worldNormalJS(pos.x,pos.y,pos.z,_n);                                    // WHAT blocks? the terrain SDF is scaled ×0.62 so a PLANTED foot ALWAYS reads "penetrating" with n≈straight up —
+  if(_n.y>0.7) return false;                                              // ground/walkable slope, the snap owns Y here, NEVER lift. A real ledge/wall faces SIDEWAYS (n.y low): only those get stepped
   if(mapWorldJS(pos.x,pos.y+STEP_MAX,pos.z)<r) return false;              // solid a STEP up -> sheer wall/crate/containment
   if(headY>0 && mapWorldJS(pos.x,headY+STEP_MAX,pos.z)<r) return false;   // raised head clips an overhang
   pos.y+=STEP_MAX; return true;                                           // low ledge -> lift; ground-snap settles exact
@@ -6400,7 +6402,7 @@ class Zealot{
         }
         moveTo=this._roam; faceTo=this._roam;              // full brute pace (no *0.5) → it actually crosses ground
       } else {                                             // rank undead: FOLLOW the nearest live brute, else a lazy loop drift
-        let brute=null, bd=45;
+        let brute=null, bd=80;   // wide leash: the brute now treks the whole arena, so let the swarm trail it from farther out (was 45)
         for(const o of enemies){ if(o!==this&&o._brute&&o.health>0){ const dd=o.position.distanceTo(this.position); if(dd<bd){ bd=dd; brute=o; } } }
         if(brute&&bd>3.0){ moveTo=brute.position; faceTo=brute.position; }   // close on the brute, stop ~3m off — the swarm clusters on its leader
         else { this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;   // no brute (or already packed): a lazy loop drift
@@ -6539,6 +6541,7 @@ function reviveBrute(){                          // BRUTE mini-boss returns on t
 // home — the interior exfil is; this is chaos with a clock.
 // ============================================================
 let _outskDwell=0, _outskSpawnT=3;               // continuous linger (drives the ramp) + spawn cadence; both re-arm when the player steps back inside
+const OUTSK_MAX=16;                               // concurrent LIVE outskirts undead — the gauntlet pool rides ON TOP of the sealed arena roster (full & dormant behind the wall). nearest-N render+dormancy caps active work, so this never overflows the material band
 function inOutskirts(){                           // gate OPEN and the player actually out past the north wall (z>z1). The notch is the perimeter's ONLY breach, so z>z1 ⇒ they came through it.
   return !!activeLevel && activeLevel.id==='area1' && _gateOpen && playerPos.z>activeLevel.bounds.z1;
 }
@@ -6562,10 +6565,13 @@ function wakeUndead(en,x,z){                       // recycle a DOWNED undead bo
   en.status.burn=0; en.status.bleedT=0; en.status.bleedN=0;
 }
 function spawnOutskirtsZombie(){
+  const z1=activeLevel.bounds.z1;
+  let live=0; for(const e of enemies) if(e.health>0&&e._faction==='zombie'&&!e._brute&&e.position.z>z1) live++;   // concurrency = undead ALREADY out past the wall
+  if(live>=OUTSK_MAX) return;                                                 // swarm ceiling hit — the ramp still shortens the interval, but don't pile past the cap
   const p=outskirtsSpawnPoint(); if(!p) return;
   const dz=enemies.find(e=>e.health<=0&&e._faction==='zombie'&&!e._brute);   // reuse a downed shambler first — zero roster growth
   if(dz){ wakeUndead(dz,p[0],p[1]); return; }
-  if(enemies.length<RLIM.ENEMIES) enemies.push(new Zealot(p[0],p[1],'zombie'));   // else MINT — hard roster cap = render cap, so the nearest-N band never overflows
+  if(enemies.length<RLIM.ENEMIES+OUTSK_MAX) enemies.push(new Zealot(p[0],p[1],'zombie'));   // else MINT on top of the (full, dormant-behind-you) arena roster — nearest-N upload + dormancy keep render + material band safe
 }
 function updateOutskirts(dt){
   if(!inOutskirts()){ _outskDwell=0; _outskSpawnT=3; return; }   // back inside → the ramp cools, re-arming the ~3s grace
@@ -7281,7 +7287,7 @@ function loadGame(slot){
     applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
     _poiRot=(Number.isInteger(b.poiRot)&&b.poiRot>=0&&b.poiRot<6)?b.poiRot:0;   // POI rotation rides the slot (v5); missing/corrupt → 0
     _hazedPOIs=Array.isArray(b.hazed)?b.hazed.filter(Number.isInteger):[];       // v6 raid-state; missing/corrupt → no haze
-    _gateOpen=!!b.gateOpen;                                                      // v6 raid-state; missing/corrupt → gate LOCKED
+    _gateOpen=b.gateOpen===true;                                                // v6 raid-state; only a real true opens (missing/corrupt/garbage → gate LOCKED)
     zombiesKilled=Number.isFinite(b.zombiesKilled)?b.zombiesKilled:0;            // v6 PR (System I); older/absent/garbage → 0
     outskirtsTime=Number.isFinite(b.outskirtsTime)?b.outskirtsTime:0;            // v6 PR (System I); older/absent/garbage → 0
   }catch(e){
