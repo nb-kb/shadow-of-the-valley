@@ -39,6 +39,12 @@ Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal +
 - **Dial:** `RLIM.ENEMIES` (one line ~L687) — the material band + every enemy
   array now DERIVE from it, so lowering it is safe + self-consistent. Drop to
   12–14 if Chrome/Edge black-screens.
+- **OWNER OBSERVED (2026-07-14):** the build is functional but throws a BRIEF
+  black screen *sometimes* — consistent with a cap-20 shader recompile/hitch, or
+  the progressive preview→full shader hot-swap. NOT the full showstopper. Needs a
+  browser repro: is it at LOAD (likely the preview→full swap) or mid-PLAY (a
+  recompile/hitch)? Watch it; dial `RLIM.ENEMIES` back if it worsens or the
+  Optimus tester hits it hard.
 
 ### 3. Powder synth round — three known gaps (all minor)
 - **HUD-invisible:** `describeSequence`/`updateToolReadout` walk `res.shots`,
@@ -62,6 +68,17 @@ Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal +
   POIs. A 2–3 POI level would field the same `[0,1]` pair every raid (no crash,
   no rotation). Fine for area-1's 6 POIs; a landmine only if a future level ships
   fewer.
+
+### 6. Screen flicker + long-run lag buildup (OWNER-reported 2026-07-14 — UNDER INVESTIGATION)
+- **Flicker:** the screen flickers during play. Candidates being researched:
+  z-fighting on SDF surfaces, the per-frame nearest-N enemy/tracer sort cycling
+  render slots (cap 20/12), a repaint/generation race, alpha/depth in the frag
+  output, or the preview→full shader swap.
+- **Long-run lag buildup:** FPS degrades the longer a run runs → an unbounded
+  growth / leak. Auditing every push (projectiles, tracers, beamSegs, decals,
+  dynLights, noisePings, worldItems, dead-enemy roster, globs, shards, status
+  Maps like `pr._dHit`) for a missing cap/cleanup.
+- Investigation launched (two research agents). Both are optimization targets.
 
 ## Backlog (future — low priority)
 

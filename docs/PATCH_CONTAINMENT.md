@@ -92,6 +92,14 @@ code yet. Owner-driven; leans marked, decisions flagged.
   its own reward. A terminal row + a couple of persistent counters (fold into the
   Phase-1 SAVE_VER bump). Builds with Phase 2.
 
+### J. Robust starter kit (onboarding)  · JS · **risk: LOW**
+- The player's starting loot should be more robust so they can SEE what the game
+  offers — a spread that showcases the systems (a couple of cores + a mod or two,
+  a mag + ammo, a piece of armor, a heal, the key utilities) instead of a bare
+  hand. Discovery through the kit. NOT Containment-themed — a general onboarding
+  pass; strong candidate to bundle into the **1.1.x wrap-up** so testers see the
+  systems now.
+
 ---
 
 ## The Gate & the Outskirts Gauntlet (ties A + B + C)
@@ -105,15 +113,19 @@ code yet. Owner-driven; leans marked, decisions flagged.
 - Needs a staged **reward** out there (a loot cache / a Legendary-lockbox source /
   rare cores) so the run pays — otherwise it's chaos for its own sake. ← DECISION
 
-## Gas mask (spans B + D + F)
-- **Light armor** occupying the head slot, with a 2-slot sub-inventory for
-  **filters** (container-armor, like the Scope Adapter). Common loot.
-- Each filter **−45% radiation burn** (two ≈ −90%; near-immunity is the reward
-  for the slots). Filters **degrade slowly while in the gas** — each good for
-  ~1–2 runs of casual trekking, then spent (a consumable loot loop, like ammo).
-  (RESOLVED gap #4.)
-- **It is a mask, not a combat helmet** → wearing it gives gas protection but
-  (per F) **no headshot protection**. Gas-safe vs headshot-safe is the trade.
+## Gas masks — TWO varieties (spans B + D + F)
+Two ways to breathe the haze, each a different head-protection trade:
+- **Helmet mask** — a **tier-1 helmet** with a built-in respirator: light-tier
+  head armor (2-shot headshot) + gas, **2 filter slots** (≈ −90% burn). Takes the
+  helmet slot, so you forgo a heavy (tier-2) helmet for max gas safety.
+- **Goggles mask** — a **face-slot** respirator that stacks WITH a tier-2 helmet,
+  so you keep the 3-shot head protection, but only **1 filter slot** (≈ −45% burn).
+  (Build detail: confirm the face slot is new vs the existing goggles-device slot.)
+- Filters: each **−45% radiation burn**, container sub-inventory (like the Scope
+  Adapter), common loot, and they **degrade slowly in the gas** (~1–2 casual runs,
+  then spent — a consumable loop). (RESOLVED gaps #4 + #7.)
+- The trade in a line: **max gas safety (helmet mask, 2 filters) costs you heavy
+  head armor; max head armor (tier-2 + goggles mask) costs you a filter slot.**
 
 ---
 
@@ -178,10 +190,10 @@ sits after Phase 1.
 5. **Radiation vs whom — RESOLVED (B):** player + soldiers need masks; zombies
    immune; unmasked soldiers fear + avoid the haze; the brute carries an aura.
 6. **Lockboxes — RESOLVED (D):** brute-kill drop chance, hideout-anchored.
-7. **Gas mask ↔ helmet slot — STILL OPEN (only one left):** the mask is light head
-   armor, so it likely IS the light/tier-1 headshot tier (2 shots) *and* gives gas
-   protection — meaning wearing it forgoes a HEAVY helmet (3 shots). Confirm it
-   sits in the head-armor tier, vs is a non-combat mask (gas only, no headshot help).
+7. **Gas mask ↔ helmet slot — RESOLVED (two varieties):** **helmet mask** = tier-1
+   helmet (2-shot) + gas, 2 filter slots (head slot). **Goggles mask** = face-slot
+   respirator that stacks with a tier-2 helmet (keeps 3-shot), 1 filter slot. Gas
+   safety vs head armor is the build choice. *(All 7 gaps now resolved.)*
 
 ---
 
