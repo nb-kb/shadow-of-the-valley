@@ -2227,6 +2227,7 @@ let _poiRot=Math.floor(Math.random()*3);      // AREA-1 POI ROTATION (build 4): 
 let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying the radioactive haze THIS raid. Persisted so a mid-raid reload keeps the same hot/hazed split (derivable from _poiRot, but stored to stay stable). INERT this phase — haze DoT/tint is Phase 2/3; reserved slot, default [].
 let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. INERT this phase — the gate object/terminal is Phase 2; the wall build leaves the incline GAP in geometry. Reserved slot.
 let outskirtsTime=0;    // AREA-1 CONTAINMENT (P2b): lifetime seconds the player has lingered in the outskirts (past the OPEN gate) — the suicide-run PR metric. Session-scoped for now; the stats page (System I) wires save persistence + the terminal readout (reuse THIS global, don't redeclare).
+let zombiesKilled=0;    // AREA-1 CONTAINMENT (System I): lifetime undead-kill personal record — the suicide-run score-chase. Counts EVERY undead die() (shamblers + brute), NOT soldiers/believers (that stays run-scoped `kills`). Persisted in the v6 slot; survives raids/deaths, only START OVER (newGame) or a corrupt slot zeroes it.
 
 // ======================================================================================
 // LEVEL MODULE — authored levels as self-contained data. A level is: bounds + region
@@ -6169,6 +6170,7 @@ class Zealot{
     worldNormalJS(this.position.x,this.position.y+0.1,this.position.z,_n);
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
     if(this._faction==='zombie'){                          // BUILD 2: undead drop NOTHING (no rucksack / gear / tool roll)
+      zombiesKilled++;                                     // CONTAINMENT (System I): lifetime undead-kill PR — every downed shambler/brute counts; re-killing a recycled body counts again (a kill is a kill). Persisted in the v6 slot for the stats page.
       if(this._brute){ bruteRespawnT=BRUTE_RESPAWN; this.respawnT=Infinity; }   // the lone mini-boss returns on the 15-min session clock — NOT the 45s reinforce (dead-branch never auto-wakes it)
       else this.respawnT=300+runRng()*300;                  // rank-and-file undead take 5-10 min to shamble back — instant respawns felt cheesy
       return;
@@ -6670,6 +6672,7 @@ function startRun(){
 function newGame(){                            // the terminal's START OVER — a fresh run; the memory slots keep
   for(const row of stashInv) row.fill(null);   // the stash forgets, in place — the crate registry holds this array
   for(const row of lockEpicInv) row.fill(null); for(const row of lockLegInv) row.fill(null);   // v6: the death-proof lockboxes forget too — only START OVER wipes them (onDeath never does)
+  zombiesKilled=0; outskirtsTime=0;            // v6 (System I): START OVER = a fresh identity → the personal-record counters zero here ONLY. NOT in startRun (that fires every death/boot) — the score-chase must survive the suicide runs.
   worldClock=0;                                // day one, dawn again — the only clock rewind outside boot
   startRun();                                  // the boot path: empty hands, stash kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
   toast('NEW RUN — THE KIT WAITS IN THE STASH');
@@ -6985,6 +6988,7 @@ const TERM_SCREENS={
   home:()=>({title:'ValleyOS', rows:[
     {label:'DEPLOY', screen:'deploy'},
     {label:'MEMORY (SAVE / LOAD)', screen:'saves'},
+    {label:'PERSONNEL RECORD', screen:'stats'},
     {label:'NEW GAME', screen:'newgame'},
     {label:'CLOSE', action:closeTerminal},
   ]}),
@@ -7015,6 +7019,11 @@ const TERM_SCREENS={
   ]}),
   newgame:()=>({title:'NEW GAME', rows:[            // the confirm gate — a stray press lands here, not on the wipe
     {label:'YES — START OVER', meta:'Nothing is overwritten.', action:()=>{ closeTerminal(); newGame(); }},
+    {label:'BACK', screen:'home'},
+  ]}),
+  stats:()=>({title:'PERSONNEL RECORD', rows:[      // CONTAINMENT (System I): the outskirts score-chase — read-only lifetime PRs off the v6 slot. Display rows carry no screen/action → confirm is a safe no-op (termActivate guards both).
+    {label:'ZOMBIES KILLED', meta:''+zombiesKilled},
+    {label:'TIME IN OUTSKIRTS', meta:fmtTime(outskirtsTime)},
     {label:'BACK', screen:'home'},
   ]}),
 };
@@ -7197,7 +7206,8 @@ function saveGame(slot){
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
               equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
               params, poiRot:_poiRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},
-              lockEpic, lockLeg, hazed:_hazedPOIs, gateOpen:_gateOpen};   // v6 CONTAINMENT scaffold — lockboxes empty, raid-state reserved
+              lockEpic, lockLeg, hazed:_hazedPOIs, gateOpen:_gateOpen,
+              zombiesKilled, outskirtsTime};   // v6 CONTAINMENT scaffold — lockboxes empty, raid-state reserved; zombiesKilled/outskirtsTime = System-I personal-record counters (scalars, additive — old blobs just lack them)
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
   const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
@@ -7272,6 +7282,8 @@ function loadGame(slot){
     _poiRot=(Number.isInteger(b.poiRot)&&b.poiRot>=0&&b.poiRot<6)?b.poiRot:0;   // POI rotation rides the slot (v5); missing/corrupt → 0
     _hazedPOIs=Array.isArray(b.hazed)?b.hazed.filter(Number.isInteger):[];       // v6 raid-state; missing/corrupt → no haze
     _gateOpen=!!b.gateOpen;                                                      // v6 raid-state; missing/corrupt → gate LOCKED
+    zombiesKilled=Number.isFinite(b.zombiesKilled)?b.zombiesKilled:0;            // v6 PR (System I); older/absent/garbage → 0
+    outskirtsTime=Number.isFinite(b.outskirtsTime)?b.outskirtsTime:0;            // v6 PR (System I); older/absent/garbage → 0
   }catch(e){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
@@ -7280,6 +7292,7 @@ function loadGame(slot){
     for(const row of lockLegInv) row.fill(null);
     for(const row of pocketsGrid) row.fill(null);
     _hazedPOIs=[]; _gateOpen=false; _poiRot=0;             // v6: corrupt slot → no haze, gate LOCKED, rotation reset (sane defaults)
+    zombiesKilled=0; outskirtsTime=0;                      // v6: corrupt slot reads as an empty identity → PR counters zero too
     _retuneOrphans.length=0;
     syncBagAlias(); clampZone();
     applyDebugTuning(null,null);                          // a corrupt slot is an empty one — stock knobs
