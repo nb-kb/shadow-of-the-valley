@@ -5584,7 +5584,7 @@ function updateProjectiles(dt){
           if(d<(pr.kind==='slug'?0.9:0.55)||hd<0.24){
             if(pr.kind==='grip'){ addGlobOnEnemy(en); dead=true; break; }   // glue takes flesh: it sticks, it does not cut
             if(pr.kind==='hope'&&en._faction==='soldier'){                  // HOPE — mercy for the faithful: mend (cap at their spawn max), the mote spends itself. The undead (zombie/brute) FALL THROUGH to the wound path below → recoil dmg, pierce/headshot/status for free.
-              en.health=Math.min(en._believer?60:100,en.health+(pr.heal||25));   // no en.maxHealth exists — soldier max is believer 60 / line 100 (mirrors the constructor)
+              en.health=Math.min(en._believer?100:200,en.health+(pr.heal||25));   // no en.maxHealth exists — soldier max is believer 100 / line zealot 200 (mirrors the constructor)
               addDyn(en.position.x,en.position.y+0.95,en.position.z,[1,0.95,0.7],1.0,0.05);
               impactOrPierce(pr,en.position.x,en.position.y+0.95,en.position.z); dead=true; break; }   // HOPE spends itself on the ally it mends — no same-soldier re-heal under DRILL
             if(pr.pierce>0){                             // DRILL: the body is a tunnel — one bill per body per 0.1s
@@ -5935,7 +5935,7 @@ class Zealot{
     this._faction=(kind==='zombie'||kind==='brute')?'zombie':'soldier';
     this._brute=(kind==='brute');
     this._believer=this._faction==='soldier'&&runRng()<0.10;   // feature 15: 1 in 10 SOLDIERS walks in a tool-less bomber (the undead never do)
-    this.health=this._brute?300:this._faction==='zombie'?50:this._believer?60:100;   // brute mini-boss 300 · undead 50 · bomber 60 · line zealot 100
+    this.health=this._brute?800:this._faction==='zombie'?100:this._believer?100:200;   // brute mini-boss 800 · undead 100 · bomber 100 · line zealot 200
     this.yaw=runRng()*6.28;
     this.patrolDir=runRng()*6.28; this.dwellT=0;   // LINE PATROL: straight-line heading + short mill-in-place timer at obstacles
     this.state=0;                       // 0 patrol · 1 suspicious · 2 alarm
@@ -6061,7 +6061,7 @@ class Zealot{
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
     if(this._faction==='zombie'){                          // BUILD 2: undead drop NOTHING (no rucksack / gear / tool roll)
       if(this._brute){ bruteRespawnT=BRUTE_RESPAWN; this.respawnT=Infinity; }   // the lone mini-boss returns on the 15-min session clock — NOT the 45s reinforce (dead-branch never auto-wakes it)
-      else this.respawnT=45;                                // rank-and-file undead shamble back with the horde
+      else this.respawnT=300+runRng()*300;                  // rank-and-file undead take 5-10 min to shamble back — instant respawns felt cheesy
       return;
     }
     if(this._believer){                                    // feature 15: bomber loot rides on the kill cause
@@ -6221,9 +6221,15 @@ class Zealot{
         if(this.dwellT<=0) this.patrolDir=(this._reDir!=null)?this._reDir:runRng()*6.28;
       }else if(this.patrolBlocked(fx,fz)){               // wall/steep ahead — pause briefly, pick a turn away
         this.dwellT=1.5+runRng(); this._reDir=this.patrolAvoidDir(fx,fz);
-      }else{                                             // clear — walk the straight line
-        moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3);
-        faceTo=moveTo;
+      }else{                                             // clear — walk the line, but DRAW TOWARD nearby allies so a POI cluster patrols together instead of idling apart
+        let gx=0,gz=0,gn=0, nx=0,nz=0,nd=99;
+        for(const o of enemies){ if(o!==this&&o.health>0&&o._faction==='soldier'&&o.state<2){ const dd=o.position.distanceTo(this.position); if(dd<16){ gx+=o.position.x; gz+=o.position.z; gn++; if(dd<nd){ nd=dd; nx=o.position.x; nz=o.position.z; } } } }
+        let tx=this.position.x+fx*3, tz=this.position.z+fz*3;
+        if(gn){ const cx=gx/gn, cz=gz/gn;                 // COHESION toward the knot when spread + light SEPARATION when crowded — Zealots & Believers walk the POI together
+          if(Math.hypot(cx-this.position.x,cz-this.position.z)>4){ tx=tx*0.5+cx*0.5; tz=tz*0.5+cz*0.5; }
+          if(nd<2.2){ tx+=this.position.x-nx; tz+=this.position.z-nz; }
+          speed*=1.5; }                                   // moving with the group — no dawdling at patrol pace
+        moveTo=new Vec3(tx,0,tz); faceTo=moveTo;
       }
     }
 
@@ -6255,7 +6261,7 @@ class Zealot{
     const tEyeY=tgt.isPlayer?playerPos.y+0.9:tgt.y+0.95;
     // SEES FINE AT NIGHT: plain range + sightline. No dayEye/fog/effVision, no FOV cone — that's the whole design distinction from a soldier.
     const sees = dist<22 && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz));
-    let speed=P('enemySpeed')*globSlow(this.position,this)*(this._brute?0.55:0.9), moveTo=null, faceTo=null;
+    let speed=P('enemySpeed')*globSlow(this.position,this)*(this._brute?0.55:1.2), moveTo=null, faceTo=null;
     if(sees){
       if(this.state!==2){                                  // fresh acquisition — rouse nearby undead (~18m) so the swarm converges
         for(const o of enemies){ if(o!==this&&o.health>0&&o._faction==='zombie'&&o.state!==2&&o.position.distanceTo(this.position)<18){
@@ -6270,11 +6276,14 @@ class Zealot{
     }else if(this.state>=1&&this.investigate){            // ALERTED BUT BLIND (saw them, or got SHOT from out of sense range) — shamble to the last-known spot, then give up
       moveTo=this.investigate; faceTo=this.investigate;
       if(Math.hypot(this.investigate.x-this.position.x,this.investigate.z-this.position.z)<1.5){ this.investigate=null; this.state=0; }
-    }else{                                                 // WANDER: a lazy loop drift — no line-patrol discipline, no cover
+    }else{                                                 // WANDER — or FOLLOW a brute the horde has found: rank undead pack up behind it and escort it
       this.state=0; this.detection=Math.max(0,this.detection-dt*0.5);
-      this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;
-      const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
-      moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3); faceTo=moveTo; speed*=0.5;
+      let brute=null, bd=45;
+      if(!this._brute) for(const o of enemies){ if(o!==this&&o._brute&&o.health>0){ const dd=o.position.distanceTo(this.position); if(dd<bd){ bd=dd; brute=o; } } }
+      if(brute&&bd>3.0){ moveTo=brute.position; faceTo=brute.position; }   // close on the brute, stop ~3m off — the swarm clusters on its leader
+      else { this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;   // no brute (or already packed): a lazy loop drift
+        const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
+        moveTo=new Vec3(this.position.x+fx*3,0,this.position.z+fz*3); faceTo=moveTo; speed*=0.5; }
     }
     // move · face · settle — undead never shoot/reload, but a WAVE press still shoves them
     if(moveTo){ const mdx=moveTo.x-this.position.x, mdz=moveTo.z-this.position.z, md=Math.hypot(mdx,mdz);
@@ -6373,11 +6382,11 @@ class Zealot{
     this.startPos=this.position.clone();
     if(this._faction==='zombie'){                         // faction persists across respawn — undead come back undead (brute keeps its 300), no gear, no bomber roll
       this._believer=false; this._selfBoom=false;
-      this.health=this._brute?300:50;
+      this.health=this._brute?800:100;
       this.tool=null; this.helm=this.plates=this.pack=null;
     }else{
       this._believer=runRng()<0.10; this._selfBoom=false;   // re-roll the bomber odds on every respawn
-      this.health=this._believer?60:100;
+      this.health=this._believer?100:200;
     }
     this.detection=0; this.state=0; this.investigate=null;
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;
