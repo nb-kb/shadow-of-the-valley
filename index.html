@@ -626,15 +626,15 @@ function audioInit(){
 }
 function setVolume(v){ volumeLevel=v; if(masterGain) masterGain.gain.value=v; }
 function env(node,t0,a,peak,d){ node.gain.setValueAtTime(0.0001,t0); node.gain.linearRampToValueAtTime(peak,t0+a); node.gain.exponentialRampToValueAtTime(0.0001,t0+a+d); }
-function blip(freq,dur,type,peak,slide){
+function blip(freq,dur,type,peak,slide,out){
   if(!AC) return; const t=AC.currentTime;
   const o=AC.createOscillator(), g=AC.createGain();
   o.type=type||'square'; o.frequency.setValueAtTime(freq,t);
   if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(20,slide),t+dur);
   env(g,t,0.004,peak||0.15,dur);
-  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t+dur+0.05);
+  o.connect(g); g.connect(out||masterGain); o.start(t); o.stop(t+dur+0.05);
 }
-function noiseBurst(dur,peak,cutoff){
+function noiseBurst(dur,peak,cutoff,out){
   if(!AC) return; const t=AC.currentTime;
   const len=Math.max(1,Math.floor(AC.sampleRate*dur));
   const buf=AC.createBuffer(1,len,AC.sampleRate);
@@ -642,29 +642,50 @@ function noiseBurst(dur,peak,cutoff){
   const src=AC.createBufferSource(); src.buffer=buf;
   const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=cutoff||1800;
   const g=AC.createGain(); env(g,t,0.002,peak||0.3,dur);
-  src.connect(f); f.connect(g); g.connect(masterGain); src.start(t);
+  src.connect(f); f.connect(g); g.connect(out||masterGain); src.start(t);
 }
-function playSound(type){
+// SPATIAL OUT: given a world emitter position, return the node a sound connects to —
+// distance-attenuated gain + L/R pan by the emitter's side of the camera facing → master.
+// No pos → masterGain (UI, centered, full). Too far → null (caller skips the sound).
+function spatialOut(pos){
+  if(!pos||!masterGain) return masterGain;
+  const dx=pos.x-playerPos.x, dy=(pos.y||0)-(playerPos.y+0.9), dz=pos.z-playerPos.z;
+  const dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
+  const gainV=1/(1+dist*dist*0.006);                          // ~1 close, ~0.29 @20m, ~0.09 @40m — a distant alert no longer sits on you
+  if(gainV<0.02) return null;                                 // ~>90m: inaudible, don't build a graph for it
+  const g=AC.createGain(); g.gain.value=gainV;
+  let tail=g;
+  if(AC.createStereoPanner){                                  // pan by which side of your facing the emitter is on (flip the sign if L/R feels reversed in playtest)
+    const fx=Math.sin(cameraYaw), fz=Math.cos(cameraYaw);
+    const rl=dist>0.1?(dx*fz-dz*fx)/dist:0;
+    const p=AC.createStereoPanner(); p.pan.value=Math.max(-1,Math.min(1,rl*0.9));
+    g.connect(p); tail=p;
+  }
+  tail.connect(masterGain);
+  return g;
+}
+function playSound(type,pos){
   if(!AC) return;
+  const out=spatialOut(pos); if(out===null) return;           // beyond earshot — skip it entirely
   switch(type){
-    case 'shoot':      noiseBurst(0.16,0.42,2600); blip(180,0.08,'square',0.12,60); break;
-    case 'silenced':   noiseBurst(0.07,0.12,900); break;
-    case 'spark':      blip(900,0.22,'sawtooth',0.2,120); noiseBurst(0.2,0.25,3000); break;
-    case 'boom':       noiseBurst(0.5,0.5,700); blip(70,0.4,'sine',0.3,30); break;
-    case 'hit':        blip(320,0.06,'square',0.14,240); break;
-    case 'hurt':       blip(140,0.2,'sawtooth',0.25,70); noiseBurst(0.12,0.2,600); break;
-    case 'empty':      blip(1200,0.04,'square',0.08); break;
-    case 'reload':     blip(500,0.05,'square',0.1); setTimeout(()=>blip(700,0.05,'square',0.1),110); break;
-    case 'pickup':     blip(660,0.07,'triangle',0.12,880); break;
-    case 'place':      blip(440,0.06,'triangle',0.1); break;
-    case 'grab':       blip(300,0.09,'sine',0.1,420); break;
-    case 'drop':       blip(240,0.08,'sine',0.09,140); break;
-    case 'click':      blip(900,0.03,'square',0.07); break;
-    case 'alert':      blip(520,0.3,'sawtooth',0.2,780); setTimeout(()=>blip(520,0.3,'sawtooth',0.18,780),180); break;
-    case 'death':      blip(220,1.2,'sine',0.3,40); noiseBurst(0.8,0.3,500); break;
-    case 'breach':     blip(523,0.3,'triangle',0.2); setTimeout(()=>blip(659,0.3,'triangle',0.2),160); setTimeout(()=>blip(784,0.5,'triangle',0.22),320); break;
-    case 'step':       noiseBurst(0.04,0.05,500); break;
-    case 'stepRun':    noiseBurst(0.05,0.1,700); break;
+    case 'shoot':      noiseBurst(0.16,0.42,2600,out); blip(180,0.08,'square',0.12,60,out); break;
+    case 'silenced':   noiseBurst(0.07,0.12,900,out); break;
+    case 'spark':      blip(900,0.22,'sawtooth',0.2,120,out); noiseBurst(0.2,0.25,3000,out); break;
+    case 'boom':       noiseBurst(0.5,0.5,700,out); blip(70,0.4,'sine',0.3,30,out); break;
+    case 'hit':        blip(320,0.06,'square',0.14,240,out); break;
+    case 'hurt':       blip(140,0.2,'sawtooth',0.25,70,out); noiseBurst(0.12,0.2,600,out); break;
+    case 'empty':      blip(1200,0.04,'square',0.08,null,out); break;
+    case 'reload':     blip(500,0.05,'square',0.1,null,out); setTimeout(()=>blip(700,0.05,'square',0.1,null,out),110); break;
+    case 'pickup':     blip(660,0.07,'triangle',0.12,880,out); break;
+    case 'place':      blip(440,0.06,'triangle',0.1,null,out); break;
+    case 'grab':       blip(300,0.09,'sine',0.1,420,out); break;
+    case 'drop':       blip(240,0.08,'sine',0.09,140,out); break;
+    case 'click':      blip(900,0.03,'square',0.07,null,out); break;
+    case 'alert':      blip(520,0.3,'sawtooth',0.2,780,out); setTimeout(()=>blip(520,0.3,'sawtooth',0.18,780,out),180); break;
+    case 'death':      blip(220,1.2,'sine',0.3,40,out); noiseBurst(0.8,0.3,500,out); break;
+    case 'breach':     blip(523,0.3,'triangle',0.2,null,out); setTimeout(()=>blip(659,0.3,'triangle',0.2,null,out),160); setTimeout(()=>blip(784,0.5,'triangle',0.22,null,out),320); break;
+    case 'step':       noiseBurst(0.04,0.05,500,out); break;
+    case 'stepRun':    noiseBurst(0.05,0.1,700,out); break;
   }
 }
 function beamAudio(on){
@@ -5754,7 +5775,7 @@ function carveAt(pr){
 function explode(pr){
   const gen=_worldGen;                                   // self-splash can kill the maker mid-blast
   const big=pr.kind==='boom';                            // BOOM: the same blast, written larger
-  playSound('boom');
+  playSound('boom', pr.pos);                             // spatial: distant blasts fall off + pan
   addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.5,0.2],big?9:5,big?0.45:0.25);
   addNoise(pr.pos.x,pr.pos.y,pr.pos.z,big?36:26);
   const R=(big?4.5:2.4)*(pr.rMul||1);                    // rMul: TWIN'd instant boom pools ×1.4 · boom-thread pulse shrinks ×0.75 (R 1.8)
@@ -6165,7 +6186,7 @@ class Zealot{
 
     // --- state machine ---
     if(this.detection>=1&&this.state<2){
-      this.state=2; playSound('alert');
+      this.state=2; playSound('alert', this.position);   // spatial: a guard alerted across the map no longer blares in your face
       const _hasSup=enemies.some(o=>o!==this&&o.health>0&&o._faction===this._faction&&o.state===2&&o.alarmRole==='suppress');   // guarantee >=1 suppressor per alarmed squad so a small all-cover squad never freezes (the fire-gate always has covering fire)
       this.alarmRole = _hasSup ? (runRng()<0.5?'cover':'suppress') : 'suppress';   // COVER/SUPPRESS role as it wakes — the first waker always suppresses
       this.coverPoint=null; this._coverT=0;
