@@ -954,6 +954,7 @@ vec2 cellSDF(vec3 q, float h, bool isGate){
 uniform int   uLevelOn;
 uniform vec4  uLevelBounds;   // x0, z0, invTileW, invTileH
 uniform vec4  uLevelGround;   // rimH, rimW, noiseAmp, (pad)
+uniform vec4  uContain;       // AREA-1 CONTAINMENT wall: H, thick, gateX, gateHW (x<=0 = no wall)
 bool gNoGround=false;                 // primary rays split ground from structures
 float gBound=1e9;                     // nearest entity bound this map() call — paces the march, never a surface
 uniform highp sampler2D uLevelTex;  // rows0-15 tilemap(r,g=ids), row16 headers x3, row17+ pool
@@ -1201,6 +1202,16 @@ vec2 levelSDF(vec3 p){
     vec2 lo=uLevelBounds.xy, hi=uLevelBounds.xy+16.0/vec2(uLevelBounds.z,uLevelBounds.w);
     vec2 dxz=max(max(lo-p.xz, p.xz-hi), vec2(0.0));
     res.x=min(res.x, length(dxz)+1.0);
+  }
+  if(uContain.x>0.0){                                   // AREA-1 CONTAINMENT WALL (TWIN: levelSdfJS — mirror every literal)
+    vec2 lo=uLevelBounds.xy, hi=uLevelBounds.xy+16.0/vec2(uLevelBounds.z,uLevelBounds.w);
+    vec3 wc=vec3((lo.x+hi.x)*0.5, uContain.x*0.5, (lo.y+hi.y)*0.5);
+    vec3 wh=vec3((hi.x-lo.x)*0.5+uContain.y, uContain.x*0.5, (hi.y-lo.y)*0.5+uContain.y);
+    float wall=max( sdBoxL(p, wc, wh),                  // hollow: outer shell minus inner void
+                   -sdBoxL(p, wc, vec3(wh.x-2.0*uContain.y, wh.y+1.0, wh.z-2.0*uContain.y)) );
+    wall=max(wall, -sdBoxL(p, vec3(uContain.z,0.0,hi.y),// NORTH incline gap (future horde gate) — left open
+                          vec3(uContain.w, uContain.x+2.0, 3.0*uContain.y)));
+    if(wall<res.x) res=vec2(wall, 3.0);                 // mat 3 = stucco/concrete wall
   }
   return res;
 }
@@ -1906,7 +1917,7 @@ function setupAttrib(prog){
 const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
-  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uLevelOn','uLevelBounds','uLevelGround','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
@@ -2202,6 +2213,8 @@ let highestDetection=0;
 let bruteRespawnT=0;                          // BRUTE mini-boss: game-time countdown to the lone roamer's return (0 = a brute is live or none owed). Teardown-safe: reset in teardownWorld + resetLevel so a boss never leaks across worlds.
 const BRUTE_RESPAWN=15*60;                    // 15 min game-time (horde spec) — ticked by the same dt as worldClock
 let _poiRot=Math.floor(Math.random()*3);      // AREA-1 POI ROTATION (build 4): cursor into the opposite-quadrant hot pairs {c,c+half}; advances each CAMP raid so the NEXT raid draws a DISJOINT pair. Persisted per-slot (SAVE_VER 5) so rotation survives reload; re-randomized on a fresh run.
+let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying the radioactive haze THIS raid. Persisted so a mid-raid reload keeps the same hot/hazed split (derivable from _poiRot, but stored to stay stable). INERT this phase — haze DoT/tint is Phase 2/3; reserved slot, default [].
+let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. INERT this phase — the gate object/terminal is Phase 2; the wall build leaves the incline GAP in geometry. Reserved slot.
 
 // ======================================================================================
 // LEVEL MODULE — authored levels as self-contained data. A level is: bounds + region
@@ -2229,6 +2242,7 @@ LEVELS.area1={
                {x:60,  y:0,z:170, yaw:-2.6},  // north rim gap
                {x:186, y:0,z:-30, yaw:2.4} ], // east fence line
   ground:{rim:8, rimW:26, noise:0.35},      // a treed embankment; the hills carry the horizon
+  contain:{h:14, t:4, gateX:150, gateHW:12},// CONTAINMENT: perimeter wall h tall / t thick (inner face |x|,|z|=196), N incline gap at gateX +/- gateHW. TWIN: levelSDF + levelSdfJS
   atmos:{far:470, fog:0.0040},               // the haze is back — it was always the mood
   worldTop:18.0,                             // rim trees on rim ground; nothing lives higher
   ambient:1.0,
@@ -2725,6 +2739,15 @@ function levelSdfJS(px,py,pz){
     // eats its own or its neighbor's prims in either field.
     if(cut<1e4) res=Math.max(res,-cut);
     if(bd<res){ res=bd; mat=bm; }
+  }
+  const cw=activeLevel.contain;                          // AREA-1 CONTAINMENT WALL (TWIN: GLSL levelSDF — mirror every literal)
+  if(cw && cw.h>0){                                       // bit-match the shader guard (uContain.x>0.0) — a zero-height contain can't produce JS-only collision
+    const cx=(b.x0+b.x1)*0.5, cz=(b.z0+b.z1)*0.5;
+    const hx=(b.x1-b.x0)*0.5+cw.t, hz=(b.z1-b.z0)*0.5+cw.t, hh=cw.h*0.5;
+    let wall=Math.max( _sdBox3(px,py,pz, cx,hh,cz, hx,hh,hz),                 // hollow: outer shell minus inner void
+                      -_sdBox3(px,py,pz, cx,hh,cz, hx-2*cw.t, hh+1, hz-2*cw.t) );
+    wall=Math.max(wall, -_sdBox3(px,py,pz, cw.gateX,0,b.z1, cw.gateHW, cw.h+2, 3*cw.t));  // N incline gap (future gate) — left open
+    if(wall<res){ res=wall; mat=3.0; }
   }
   return res;
 }
@@ -6534,6 +6557,7 @@ function seedStashKit(){                       // the kit waits in the STASH now
 function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   _poiRot=Math.floor(Math.random()*3);             // fresh run: fresh POI rotation (loadGame overrides from the slot)
+  _hazedPOIs=[]; _gateOpen=false;                  // fresh run: no haze mapped, gate LOCKED (loadGame overrides from the slot)
   depth=1; kills=0; runClock=0; _lastReloadT=-9;   // reset the double-tap clock so the first reload of a run isn't read as a double-tap
   playerPos.health=playerPos.maxHealth;
   playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
@@ -6549,6 +6573,7 @@ function startRun(){
 }
 function newGame(){                            // the terminal's START OVER — a fresh run; the memory slots keep
   for(const row of stashInv) row.fill(null);   // the stash forgets, in place — the crate registry holds this array
+  for(const row of lockEpicInv) row.fill(null); for(const row of lockLegInv) row.fill(null);   // v6: the death-proof lockboxes forget too — only START OVER wipes them (onDeath never does)
   worldClock=0;                                // day one, dawn again — the only clock rewind outside boot
   startRun();                                  // the boot path: empty hands, stash kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
   toast('NEW RUN — THE KIT WAITS IN THE STASH');
@@ -6651,6 +6676,13 @@ function travelTo(dest){                      // THE LOOP: the valley is the lan
 // scope so it survives deploys; SAVE_VER 3 writes it into the slot blobs.
 const STASH_COLS=6, STASH_ROWS=8;
 const stashInv=Array(STASH_ROWS).fill(null).map(()=>Array(STASH_COLS).fill(null));
+// AREA-1 CONTAINMENT (SAVE_VER 6) — death-proof LOCKBOXES: same module-scope grid +
+// omission-from-onDeath model as the stash above. INERT this phase — empty grids, no
+// crate-registry entry, no UI, no drop; persistence only. Phase 4 wires the physical
+// hideout box + brute-kill drop into these. NOT world geometry — pure inventory data.
+const LOCK_EPIC_COLS=2, LOCK_EPIC_ROWS=2, LOCK_LEG_COLS=3, LOCK_LEG_ROWS=3;
+const lockEpicInv=Array(LOCK_EPIC_ROWS).fill(null).map(()=>Array(LOCK_EPIC_COLS).fill(null));   // epic 2×2
+const lockLegInv =Array(LOCK_LEG_ROWS ).fill(null).map(()=>Array(LOCK_LEG_COLS ).fill(null));   // legendary 3×3
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
 let crateRegistry=[], lootCrate=null;
 function buildCrateRegistry(L){
@@ -6973,7 +7005,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=5, SAVE_KEY=i=>'sotv_save_'+i;             // v5: + area-1 POI rotation cursor (j.poiRot). v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
+const SAVE_VER=6, SAVE_KEY=i=>'sotv_save_'+i;             // v6: AREA-1 CONTAINMENT scaffold — death-proof lockboxes (lockEpic 2×2 / lockLeg 3×3) + raid-state (hazed POI indices, gateOpen); keycards ride existing itemJSON grids, no new field. All additive — v2..v5 lack these, read as empty box / no haze / gate LOCKED. v5: + area-1 POI rotation cursor (j.poiRot). v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
@@ -7053,10 +7085,23 @@ function saveGame(slot){
     const ch=pocketsGrid[r][c];
     if(ch&&!pkSeen.has(ch)&&ch.x===c&&ch.y===r){ pkSeen.add(ch); pockets.push(itemToJSON(ch)); }
   }
+  // v6 CONTAINMENT: death-proof lockboxes serialize like the stash/pockets — same
+  // top-left-anchored walk. Empty this phase; Phase 4 fills them (brute-drop loot).
+  const lockEpic=[]; const leSeen=new Set();
+  for(let r=0;r<LOCK_EPIC_ROWS;r++) for(let c=0;c<LOCK_EPIC_COLS;c++){
+    const ch=lockEpicInv[r][c];
+    if(ch&&!leSeen.has(ch)&&ch.x===c&&ch.y===r){ leSeen.add(ch); lockEpic.push(itemToJSON(ch)); }
+  }
+  const lockLeg=[]; const llSeen=new Set();
+  for(let r=0;r<LOCK_LEG_ROWS;r++) for(let c=0;c<LOCK_LEG_COLS;c++){
+    const ch=lockLegInv[r][c];
+    if(ch&&!llSeen.has(ch)&&ch.x===c&&ch.y===r){ llSeen.add(ch); lockLeg.push(itemToJSON(ch)); }
+  }
   const params={}; for(const k in PARAMS) params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
               equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
-              params, poiRot:_poiRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll}};
+              params, poiRot:_poiRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},
+              lockEpic, lockLeg, hazed:_hazedPOIs, gateOpen:_gateOpen};   // v6 CONTAINMENT scaffold — lockboxes empty, raid-state reserved
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
   const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
@@ -7074,6 +7119,8 @@ function saveMeta(slot){
     walk(b.wield);
     (b.stash||[]).forEach(walk);
     (b.pockets||[]).forEach(walk);
+    (b.lockEpic||[]).forEach(walk);   // v6: lockbox contents count toward the slot's item tally
+    (b.lockLeg||[]).forEach(walk);
     return {stamp:b.stamp, items:n};
   }catch(e){ return null; }
 }
@@ -7105,6 +7152,20 @@ function loadGame(slot){
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
       else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
     }
+    // v6 CONTAINMENT: death-proof lockboxes restore exactly like the stash. Absent in
+    // v2..v5 blobs → (b.lockEpic||[]) empty → boxes stay empty. Phase 4 fills them.
+    for(const row of lockEpicInv) row.fill(null);
+    for(const cj of (b.lockEpic||[])){
+      const ch=itemFromJSON(cj); if(!ch) continue;        // unknown defKeys drop silently, as everywhere
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,lockEpicInv,LOCK_EPIC_COLS,LOCK_EPIC_ROWS)) placeInGrid(ch,cj.x,cj.y,lockEpicInv);
+      else autoPlace(ch,lockEpicInv,LOCK_EPIC_COLS,LOCK_EPIC_ROWS);
+    }
+    for(const row of lockLegInv) row.fill(null);
+    for(const cj of (b.lockLeg||[])){
+      const ch=itemFromJSON(cj); if(!ch) continue;
+      if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,lockLegInv,LOCK_LEG_COLS,LOCK_LEG_ROWS)) placeInGrid(ch,cj.x,cj.y,lockLegInv);
+      else autoPlace(ch,lockLegInv,LOCK_LEG_COLS,LOCK_LEG_ROWS);
+    }
     for(const row of pocketsGrid) row.fill(null);         // absent in old blobs → stays empty
     for(const cj of (b.pockets||[])){
       const ch=itemFromJSON(cj); if(!ch) continue;
@@ -7113,11 +7174,16 @@ function loadGame(slot){
     }
     applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
     _poiRot=(Number.isInteger(b.poiRot)&&b.poiRot>=0&&b.poiRot<6)?b.poiRot:0;   // POI rotation rides the slot (v5); missing/corrupt → 0
+    _hazedPOIs=Array.isArray(b.hazed)?b.hazed.filter(Number.isInteger):[];       // v6 raid-state; missing/corrupt → no haze
+    _gateOpen=!!b.gateOpen;                                                      // v6 raid-state; missing/corrupt → gate LOCKED
   }catch(e){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
     for(const row of stashInv) row.fill(null);
+    for(const row of lockEpicInv) row.fill(null);          // v6: a corrupt load must not leave stale lockbox contents in memory
+    for(const row of lockLegInv) row.fill(null);
     for(const row of pocketsGrid) row.fill(null);
+    _hazedPOIs=[]; _gateOpen=false; _poiRot=0;             // v6: corrupt slot → no haze, gate LOCKED, rotation reset (sane defaults)
     _retuneOrphans.length=0;
     syncBagAlias(); clampZone();
     applyDebugTuning(null,null);                          // a corrupt slot is an empty one — stock knobs
@@ -8736,12 +8802,14 @@ function frame(){
   const nd=Math.min(RLIM.DYN,dsorted.length);
   const lvOn=activeLevel&&activeLevel.kind==='authored';
   gl.uniform1i(U.uLevelOn,lvOn?1:0);
-  if(!lvOn){ gl.uniform4f(U.uLevelCutA,0,0,0,0); gl.uniform4f(U.uLevelCutB,0,0,0,0); }
+  if(!lvOn){ gl.uniform4f(U.uLevelCutA,0,0,0,0); gl.uniform4f(U.uLevelCutB,0,0,0,0); gl.uniform4f(U.uContain,0,0,0,0); }
   if(lvOn){
     const b=activeLevel.bounds;
     gl.uniform4f(U.uLevelBounds,b.x0,b.z0,16/(b.x1-b.x0),16/(b.z1-b.z0));
     const lg=activeLevel.ground;
     gl.uniform4f(U.uLevelGround,lg.rim,lg.rimW,lg.noise,0);
+    const cw=activeLevel.contain;                       // AREA-1 CONTAINMENT: wall dims to shader (x<=0 => no wall, e.g. hideout)
+    gl.uniform4f(U.uContain, cw?cw.h:0, cw?cw.t:0, cw?cw.gateX:0, cw?cw.gateHW:0);
     const pits=activeLevel.regions.find(r=>r.trench);
     if(pits){ const t=pits.trench;
       gl.uniform4f(U.uLevelCutA,(t[0]+t[2])/2, 0.4-pits.trenchD, (t[1]+t[3])/2, (t[2]-t[0])/2);
