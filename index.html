@@ -8293,7 +8293,7 @@ let stepAcc=0;
 let heldUseArm=null;           // △ tap-vs-hold: {t,subj} while the button rides a carried item OR the wielded gun
 let sprintIdleT=0;             // a stopped run lets the sprint toggle go after a beat
 const SLIDE_DUR=0.9;           // SLIDE — crouch pressed at sprint speed rides the run's momentum out
-let slideT=0, slideV0=0, slideDX=0, slideDZ=1, slideStand=false, slideVcur=0, slideHopSpd=0;   // slideVcur = live (decaying) slide speed; slideHopSpd = the launch floor a slide-hop holds through its whole airborne arc
+let slideT=0, slideV0=0, slideDX=0, slideDZ=1, slideVcur=0, slideHopSpd=0;   // slideVcur = live (decaying) slide speed; slideHopSpd = the launch floor a slide-hop holds through its whole airborne arc
 let sprintLatch=false, airSlideArmed=false;   // MOMENTUM CHAIN — sprintLatch: a slide/hop chain came off a sprint, resume it on landing (a slide crouch-kills sprintOn). airSlideArmed: a mid-air crouch queues a slide that starts on the next landing, carrying the air momentum
 const _c1=new Vec3(), _c2=new Vec3();
 
@@ -8339,13 +8339,13 @@ function updatePlayer(dt){
   // the same button flips the exit stance; a slide otherwise ends in a crouch.
   if(pressed('crouch')&&!menus){
     const m=Math.hypot(mx,mz);
-    if(slideT>0){ slideT=0; playerPos.isCrouching=false; slideStand=false; sprintLatch=false; }   // uncrouch cancels the slide — stand up now, drop the sprint latch
+    if(slideT>0){ slideT=0; playerPos.isCrouching=false; sprintLatch=false; }   // uncrouch cancels the slide — stand up now, drop the sprint latch
     else if(!playerPos.onGround) airSlideArmed=!airSlideArmed;   // MID-AIR CROUCH: arm a landing-slide (toggle). No mid-air duck — keeping the air speed is what lets the touchdown clear the slide's speed gate; the slide (and its crouch) begin on landing
     else if(!playerPos.isCrouching&&playerPos.isSprinting&&playerPos.onGround&&m>=0.8){
       const wx=rx*mx+fx*mz, wz=rz*mx+fz*mz;          // world-frame run direction, unit
       slideDX=wx/m; slideDZ=wz/m;
       slideV0=P('playerSpeed')*P('sprintMult')*Math.min(1,m);
-      slideT=SLIDE_DUR; slideStand=false;
+      slideT=SLIDE_DUR;
       playerPos.isCrouching=true; sprintOn=false; playerPos.isSprinting=false; sprintLatch=true;   // this slide came off a sprint — latch it so the chain lands sprinting
       playSound('step');                             // the scuff — walk-loud (noise floor below)
     }
@@ -8372,7 +8372,7 @@ function updatePlayer(dt){
       slideDX+=sx*1.0*dt; slideDZ+=sz*1.0*dt;
       const dl=Math.hypot(slideDX,slideDZ); if(dl>1e-6){ slideDX/=dl; slideDZ/=dl; }
       stepX=slideDX*v*dt; stepZ=slideDZ*v*dt;
-      if(slideT<=0){ if(slideStand) playerPos.isCrouching=false; slideStand=false; sprintLatch=false; }   // spent: settle into crouch — or stand, if released. The slide rode to a stop (no hop) — the chain's over, drop the sprint latch
+      if(slideT<=0){ sprintLatch=false; }   // spent: settle into crouch. The slide rode to a stop (no hop) — the chain's over, drop the sprint latch
     }else if(playerPos.launched&&!playerPos.onGround){
       // SLIDE-HOP airborne: fly the launch momentum (velX/velZ carried out of the slide);
       // WASD is air-control accel, the same model as the rope's air block (8 m/s², 16 m/s cap)
@@ -8494,7 +8494,7 @@ function updatePlayer(dt){
           const _hsp=Math.hypot(_hvx,_hvz), _slideMin=0.8*P('playerSpeed')*P('sprintMult');
           if(airSlideArmed&&_hsp>=_slideMin){   // MID-AIR CROUCH cashed in — land straight into a slide carrying the momentum (a jump-out then hops at THAT speed: the loop closes)
             slideDX=_hvx/_hsp; slideDZ=_hvz/_hsp;
-            slideV0=_hsp; slideVcur=_hsp; slideT=SLIDE_DUR; slideStand=false;
+            slideV0=_hsp; slideVcur=_hsp; slideT=SLIDE_DUR;
             playerPos.isCrouching=true; sprintLatch=true;   // the slide owns the momentum now; the chain still resumes sprint when its hop lands
             playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0;
             sprintOn=false; playerPos.isSprinting=false; playSound('step');
@@ -8522,7 +8522,7 @@ function updatePlayer(dt){
       if(slideT>0){   // SLIDE-HOP: fling at the CAPTURED run momentum (slideV0), NOT the bled-down slideVcur — a late hop must leap as hard as an early one (the prior fix launched at the decayed speed, so a real-timing jump felt like a plain hop)
         slideHopSpd=Math.max(slideV0,slideVcur);   // slideV0>=slideVcur always: the run's full, undecayed speed
         playerPos.velX=slideDX*slideHopSpd; playerPos.velZ=slideDZ*slideHopSpd; playerPos.launched=true;
-        slideT=0; slideStand=false; playerPos.isCrouching=false;   // the stance ends — standing, airborne — but the momentum carries
+        slideT=0; playerPos.isCrouching=false;   // the stance ends — standing, airborne — but the momentum carries
       }
       playerPos.velY=P('jumpVel'); playerPos.onGround=false;
       playerPos.coyoteT=0; playerPos.jumpBufT=0; playSound('step');
