@@ -2384,6 +2384,13 @@ LEVELS.area1={
     // South-east: weapons testing — fence ring, target blocks inside
     {id:'testing', kind:LVL.KIND.FENCE, box:[96,-96,184,-12], h:2.4,
      gates:[['W',-52],['N',132]], blocks:[[130,-40],[152,-62],[128,-78],[140,-30],[163,-44],[139,-70]]},
+    // P4 BREACH REWARD — the caches behind the keycard doors. Tiers ride spawn.regionLoot
+    // via lootOf (the wired loot registry); lockedBy keeps guaranteed cards OUT. Bake-checked:
+    // labCache shares tiles (9,1-2) with lab only; testCache shares (5,14-15) with testing only.
+    {id:'labCache', lootOf:'lab', lockedBy:'lab', kind:LVL.KIND.PROPS, box:[-162,30,-146,40],
+     crates:[[-159,32,0.85],[-157.6,33.1,0.7],[-152,37,0.8],[-148,34,0.75]]},
+    {id:'testCache', lootOf:'testing', lockedBy:'testing', kind:LVL.KIND.PROPS, box:[164,-64,176,-52],
+     crates:[[166,-60,0.85],[167.4,-59,0.7],[172,-56,0.8],[168,-62,0.7]]},
     // South: housing — tents scattered on the footpaths
     {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
     {id:'tentsB', kind:LVL.KIND.TENT, box:[-22,-132,34,-64],  tents:[[-8,-92,0.2],[14,-108,2.9],[26,-84,1.6],[-2,-120,5.1]]},
@@ -2456,6 +2463,10 @@ LEVELS.area1={
               'cyanide','aloe','ration','gummies',
               'barrelE','barrelL','platL','tool','scope3x','autoSear','burstCam','scopeAdapter']
     },
+    // regionLoot is LIVE (P4, owner call 2): a PROPS region with lootOf draws its tier
+    // character from here — the locked caches read lab/testing. armory stays unwired: an
+    // interior cache region would put 3 regions on tile (12,8) (road+armory) and break the
+    // 2-per-tile bake — P6's crate expansion owns that fight. lootRegions list still inert.
     regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
                  testing:['mods','common','rare'], tentsA:['common','gear','gear'],
                  tentsB:['common','gear','common'], lab:['gear','rare','cores'],
@@ -2779,6 +2790,7 @@ function buildLevelTexData(level,bake){
     if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,r.shrubs?1:0,r.cutX??0,r.hMin]; }
     if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
     if(r.kind===K.PROPS){ B=[r.kind,r.term?1:0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0]));
+      if(r.crates.length>10) console.warn('PROPS crate count over GLSL loop cap (GPU drops the rest):',r.id);   // lvRegion kind==10 marches i<10 — JS would still collide the extras (twin desync)
       if(r.term) items.push([r.term[0],r.term[1],r.term[2],0]); }   // terminal rides the last slot; B.y flags it
     if(r.kind!==K.PITS && r.kind!==K.TREES) C[1]=items.length;   // TREES keeps its shrub flag in C[1] (set above) so GLSL draws the understory bushes JS already collides with — fixes an invisible-collision desync AND adds forest cover
     C[0]=pool;
@@ -7082,9 +7094,10 @@ function buildCrateRegistry(L){
     const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
     crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3, tiers, lockedBy});
   };
+  const RL=(L.spawn&&L.spawn.regionLoot)||{};             // P4: the wired loot registry — lootOf regions draw their tiers here
   for(const r of (L.regions||[])){
     if(r.kind!==LVL.KIND.PROPS||!r.crates) continue;
-    for(const c of r.crates) add(c, r.loot||['common'], r.lockedBy);   // P4: lockedBy rides the entry — guaranteed cards skip crates behind that lock
+    for(const c of r.crates) add(c, r.loot||RL[r.lootOf]||['common'], r.lockedBy);   // P4: lockedBy rides the entry — guaranteed cards skip crates behind that lock
   }
   if(L.crates) for(const c of L.crates) add(c, L.crateTiers||['common']);
   if(L.kind==='rings'){
