@@ -6324,12 +6324,12 @@ class Zealot{
           if(this.coverPoint){
             moveTo=this.coverPoint;
             if(this.position.distanceTo(this.coverPoint)<1.0){ moveTo=null; }   // arrived — hold the cover
-          }else{ if(dist>7) moveTo=this.investigate; else if(dist<3) moveTo=new Vec3(this.position.x-dx/dist*2,0,this.position.z-dz/dist*2); }   // nowhere to hide — behave like a shooter
+          }else{ if(dist>7) moveTo=this.investigate; else if(dist<3){ const rd=Math.max(dist,1e-4); moveTo=new Vec3(this.position.x-dx/rd*2,0,this.position.z-dz/rd*2); } }   // nowhere to hide — behave like a shooter. rd: overlapped spawns can put dist at EXACTLY 0 — raw dx/dist NaN-poisons position into an invisible unkillable roster ghost
           if(this.squadMayFire()) this.tryShoot(dt,dist,seesLOS);
         }else{
           // COVERING FIRE (suppress): press the attack and lay it down — exempt from fire-discipline (it IS the covering fire)
           if(dist>7) moveTo=this.investigate;
-          else if(dist<3) moveTo=new Vec3(this.position.x-dx/dist*2,0,this.position.z-dz/dist*2);
+          else if(dist<3){ const rd=Math.max(dist,1e-4); moveTo=new Vec3(this.position.x-dx/rd*2,0,this.position.z-dz/rd*2); }   // rd: same zero-dist NaN guard as the cover branch
           this.tryShoot(dt,dist,seesLOS);
         }
       }else{
