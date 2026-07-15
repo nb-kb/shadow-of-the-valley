@@ -4076,6 +4076,12 @@ function findGadgetOnPlayer(kind){                                    // like fi
   let g=null; invArmWalk(it=>{ if(!g && it instanceof Gadget && it.kind===kind) g=it; });
   return g;
 }
+function findDefOnPlayer(defKey){                                     // per-LOCK card match: each lock names its OWN card by defKey (P4's unique lab cards ride this). kind:'keycard' stays a UI/identity tag ONLY — never a lock test, or every card opens every door
+  const hw=heldWorld&&heldWorld.w.item;
+  if(hw&&hw.defKey===defKey) return hw;
+  let g=null; invArmWalk(it=>{ if(!g&&it.defKey===defKey) g=it; });
+  return g;
+}
 // FOG EYES — a bank blinds the zealots too. ONE scale, shared by the AI rate,
 // the hard sight gate, and the photometer, so the drawn number never lies.
 function fogEye(){ return 1-0.65*fogW; }
@@ -4193,15 +4199,14 @@ function updateInteract(dt){
     const _cw=activeLevel.contain;
     if(_cw && isPlayable() && !uiOpen()){
       const _gx=_cw.gateX, _gz=activeLevel.bounds.z1-_cw.t, _gdx=playerPos.x-_gx, _gdz=playerPos.z-_gz;
-      if(_gdx*_gdx+_gdz*_gdz<36){                         // ~6m reach of the gate controls — easy to reach/trigger at the wall
-        if(_gateOpen){ setPrompt(_pr,'HORDE GATE — <span style="color:var(--gate)">OPEN</span>',true); return; }
-        const _card=findGadgetOnPlayer('keycard');
+      if(_gdx*_gdx+_gdz*_gdz<36 && !_gateOpen){           // ~6m reach of the gate controls — easy to reach/trigger at the wall (owner-widened, keep). OPEN → fall through: no prompt (the carved notch is self-evident) and no interact dead zone at the wall
+        const _card=findDefOnPlayer('gateCard');          // per-lock match on defKey — a future lab card (kind 'keycard' too) must NOT trip this gate
         if(pressed('interact')){
           if(_card){ _gateOpen=true; toast('HORDE GATE UNLOCKED'); playSound('pickup'); }
-          else { toast('KEYCARD REQUIRED'); playSound('empty'); }
+          else { toast('HORDE KEYCARD REQUIRED'); playSound('empty'); }
         }
         setPrompt(_pr, _card?'GATE TERMINAL — <b>E</b> UNLOCK'
-                            :'GATE TERMINAL — <span style="color:var(--exposed)">LOCKED</span> · KEYCARD REQUIRED', true);
+                            :'GATE TERMINAL — <span style="color:var(--exposed)">LOCKED</span> · HORDE KEYCARD REQUIRED', true);
         return;
       }
     }
