@@ -5584,7 +5584,7 @@ function updateProjectiles(dt){
       pr.fuseT-=dt;
       if(pr.kind==='decoy'&&pr.fuseT>0){                 // LURE: sing to the camp
         pr.pingT-=dt;
-        if(pr.pingT<=0){ pr.pingT=1.5; addNoise(pr.pos.x,pr.pos.y,pr.pos.z,14); addDyn(pr.pos.x,pr.pos.y,pr.pos.z,pr.col,1.4,0.12); playSound('click'); }
+        if(pr.pingT<=0){ pr.pingT=1.5; addNoise(pr.pos.x,pr.pos.y,pr.pos.z,14); addDyn(pr.pos.x,pr.pos.y,pr.pos.z,pr.col,1.4,0.12); playSound('click', pr.pos); }
       }
       if(pr.fuseT<=0){ triggerPayload(pr); projectiles.splice(i,1); }
       continue;
@@ -5768,7 +5768,7 @@ function updateProjectiles(dt){
           pr.vel.x-=2*dot*_n.x; pr.vel.y-=2*dot*_n.y; pr.vel.z-=2*dot*_n.z;
           pr.vel.multiplyScalar(0.8);
           pr.pos.addScaledVector(_n,0.08);
-          pr.bounces--; playSound('click');
+          pr.bounces--; playSound('click', pr.pos);
         }else if(pr.contact&&!(pr.fuse>0)){            // CONTACT: the LAST touch triggers — RICOCHET spends its banks first; flesh triggers any time (on the same core FUSE governs: stick+timer; contact vents)
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
           if(pr.relay&&pr.rdir) pr.rdir.set(_n.x,_n.y,_n.z);   // the cast leaves the FACE, not the flight
@@ -5782,7 +5782,7 @@ function updateProjectiles(dt){
           pr.pos.addScaledVector(_n,0.06);
           pr.vel.set(0,0,0); pr.grav=0;
           pr.stuck=true; pr.fuseT=pr.fuse;
-          playSound('click');
+          playSound('click', pr.pos);
           dead=false; break;
         }else{
           worldNormalJS(pr.pos.x,pr.pos.y,pr.pos.z,_n);
@@ -5896,7 +5896,7 @@ function carveAt(pr){
   addSdfEdit(pr.pos.x,pr.pos.y,pr.pos.z,r,true);
   addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[0.6,0.95,0.85],1.6,0.10);
   addNoise(pr.pos.x,pr.pos.y,pr.pos.z,26);               // carving is loud work
-  playSound('spark');
+  playSound('spark', pr.pos);
 }
 function explode(pr){
   const gen=_worldGen;                                   // self-splash can kill the maker mid-blast
@@ -6208,7 +6208,7 @@ class Zealot{
   }
   die(){
     kills++;
-    playSound('hit');
+    playSound('hit', this.position);                    // spatial: the body drops where it stands
     worldNormalJS(this.position.x,this.position.y+0.1,this.position.z,_n);
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
     if(this._faction==='zombie'){                          // BUILD 2: undead drop NOTHING (no rucksack / gear / tool roll)
@@ -6535,7 +6535,7 @@ class Zealot{
     const shot=pool[Math.floor(runRng()*pool.length)];
     if(shot.kind==='bolt'){
       if(!mag||mag.loaded<=0){
-        if(this.reserve>0){ this.reloadT=2.2; playSound('reload'); return; }
+        if(this.reserve>0){ this.reloadT=2.2; playSound('reload', this.position); return; }   // spatial (#8)
         // dry — close to swipe (routes cross-faction: a soldier's melee hits a zombie via hurt(), the player via damagePlayer())
         if(dist<1.4){ if(this.target&&!this.target.isPlayer) this.target.ent.hurt(8,this); else damagePlayer(8); this.shootCooldown=1.0; }
         return;
@@ -6551,7 +6551,7 @@ class Zealot{
     this._coveringFire=1.5;                               // squad-visible: it is actively laying down fire (decays in update)
     this.muzzle=1;
     const silent=shot.pend.silent||this.res.silenced;
-    playSound(shot.kind==='spark'?'spark':(silent?'silenced':'shoot'));
+    playSound(shot.kind==='spark'?'spark':(silent?'silenced':'shoot'), origin);   // spatial: the shot sounds from ITS muzzle, not yours (#8)
     addNoise(origin.x,origin.y,origin.z,toolNoise(silent));
     if(!silent) addDyn(origin.x,origin.y,origin.z,[1,0.7,0.3],2.2,0.06);
     this.shootCooldown=(this.res.auto?0.35:1.15)+runRng()*0.4;
@@ -8663,7 +8663,7 @@ function updateWorldItems(dt){
     if(li&&li._armT!=null){
       li._armT-=dt;
       w._beepT=(w._beepT||0)-dt;
-      if(w._beepT<=0){ w._beepT=li._armT>1.6?0.55:0.2; playSound('click'); addDyn(w.pos.x,w.pos.y+0.15,w.pos.z,[1,0.3,0.15],0.6,0.05); }   // blinks red, faster near the end
+      if(w._beepT<=0){ w._beepT=li._armT>1.6?0.55:0.2; playSound('click', w.pos); addDyn(w.pos.x,w.pos.y+0.15,w.pos.z,[1,0.3,0.15],0.6,0.05); }   // blinks red, faster near the end — ticks from where it lies
       if(li._armT<=0){
         if(heldWorld&&heldWorld.w===w) releaseHeld(false);
         worldItems.splice(wi,1);                            // gone BEFORE the blast shove loop runs
@@ -8690,7 +8690,7 @@ function updateWorldItems(dt){
     w.pos.set(_c1.x,_c1.y-0.02,_c1.z);
     const d=mapWorldJS(w.pos.x,w.pos.y,w.pos.z);
     if(d<0.22&&!w.held){
-      if(w.vel.y<-1.2){ w.vel.y*=-0.35; w.rotVelP=(runRng()*2-1)*2.2; playSound('drop'); }
+      if(w.vel.y<-1.2){ w.vel.y*=-0.35; w.rotVelP=(runRng()*2-1)*2.2; playSound('drop', w.pos); }
       else if(w.vel.y<0){ w.vel.y=0;
         const sy=restOnSurface(w.pos.x,w.pos.y+0.3,w.pos.z);
         if(sy>w.pos.y-0.6){
