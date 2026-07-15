@@ -9023,7 +9023,7 @@ function frame(){
     gl.uniform4f(U.decP[i],decals[i].pos.x,decals[i].pos.y,decals[i].pos.z,decals[i].size);
     gl.uniform3f(U.decN[i],decals[i].norm.x,decals[i].norm.y,decals[i].norm.z);
   }
-  dynLights.sort((a,b)=>b.intensity-a.intensity);     // in place — order carries no other meaning
+  dynLights.sort((a,b)=>b.intensity*clamp(b.ttl*8,0,1)-a.intensity*clamp(a.ttl*8,0,1));     // in place — order carries no other meaning. Rank by the UPLOADED term (ttl fade included): a dying muzzle flash must not evict a steady lamp (#6a strobe)
   const dsorted=dynLights;
   const nd=Math.min(RLIM.DYN,dsorted.length);
   const lvOn=activeLevel&&activeLevel.kind==='authored';
