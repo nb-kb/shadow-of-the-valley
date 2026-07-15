@@ -2946,7 +2946,7 @@ class Magazine extends Item{
     opts=opts||{}; this.adsTier=opts.adsTier||1; this.reloadMode=opts.reloadMode||'single'; this.spreadMul=opts.spreadMul||1; this.powder=!!opts.powder; this.anyCaliber=!!opts.anyCaliber; this.reloadTime=opts.reloadTime||0.6; }  // reloadTime = per-shell single-load cadence (barrel tiers speed up) // powder mag powders any round; anyCaliber takes any round; adsTier 1/2/3 = ADS+/++/+++ ; reloadMode 'single' (one round per reload) | 'mag' (whole-mag swap) ; spreadMul steadies the sniper tubes (feature 19)
   get acceptedType(){ return this.acceptedTypes[0]; }   // back-compat: single-caliber reads (~12 call sites unchanged)
   get renderType(){ return 2; }
-  desc(){ return this.powder ? 'Powder Mag · fires ANY loaded round with NO bolt core — feeder mods ride free (1 round each)' : 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
+  desc(){ return this.powder ? 'Powder Mag · feeds ANY caliber as plain lead; behind a BOLT CORE its relay mods fire free' : 'Holds '+this.maxCapacity+' · slot into the Tool rack'; }
 }
 function magType(m){ return m&&m.loaded>0 ? (m.loadedType||m.acceptedTypes[0]) : null; }   // the caliber chambered right now — fire-time damage (C12) reads this
 function magAccepts(m,t){ return !!m && (m.acceptedTypes.indexOf(t)>=0 || m.anyCaliber); }    // multi-caliber acceptance; a Powder Mag (anyCaliber) takes any round
@@ -3308,7 +3308,7 @@ const ITEM_DEFS={
   splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core returns to the thrower · +6⚡'),
   homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core steers toward the nearest warm target · +7⚡'),
-  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core fires free — no base ⚡, no round spent · +1⚡'),
+  refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core: base ⚡ waived (lead still spent) · +1⚡'),
   chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core flies wild and hits +45% harder — stacks twice. Beams arc like lightning · +6⚡'),
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glue glob · 6⚡'),
@@ -4401,13 +4401,13 @@ function foldFrame(out,m){
 // non-sequence items are cargo (skipped), the column's muzzle folds per-lane,
 // and a lane-final BEAM becomes the tactical laser instead of venting.
 function resolveLane(col,out){
-  const lane={shots:[],vented:[],flow:[],seq:[],tacLaser:false,isPowder:false,hasMag:false,
+  const lane={shots:[],vented:[],flow:[],seq:[],tacLaser:false,hasMag:false,
               spreadAdd:col.spreadAdd,silenced:false,spreadMul:1,mountIdx:col.mountIdx};
   let pend=freshPend(), feeders=[];
   for(const ref of col.refs){
     const m=readRef(ref);
     if(!m) continue;
-    if(m instanceof Magazine){ lane.hasMag=true; if(m.powder) lane.isPowder=true; }   // a mag rides this lane's OWN reserve (→ it can fire plain lead in parallel); a Powder Mag also → C3 refund frees the housed payload; the bare fallback keeps the synth round
+    if(m instanceof Magazine){ lane.hasMag=true; }   // a mag rides this lane's OWN reserve → it can fire plain lead in parallel (the boltless munition); a Powder Mag is no different here — its extras (any caliber, free relay mods) land in the fire loop with a bolt core
     if(ref.muzzle){                                 // active muzzle: per-COLUMN stats
       if(m instanceof ToolMod && m.cat==='muzzle'){
         if(m.effect.silenced) lane.silenced=true;
@@ -4485,16 +4485,11 @@ function resolveLane(col,out){
     lane.tacLaser=true;
     lane.vented=feeders.slice(0,-1);                // BEAM itself is working; anything under it vents
   }else lane.vented=feeders;
-  // POWDER SYNTH (v22 C14): trailing feeders that met no proj core normally just vent.
-  // A Powder Mag turns them into a ballistic shot — the loaded round carries their
-  // dmg/grav/spread, a trailing BEAM makes it PULSE hitscan. Built latent here (cost
-  // folds to 0 under powder's all-feeders-free waiver), activated only when mag.powder
-  // in the fire loop; inert for every other mag, so non-powder lanes still need a bolt core.
-  if(!lane.shots.length){
-    lane.powderShot={kind:'bolt',pend:{...pend},cost:pend.surcharge||0,core:null,spreadAdd:col.spreadAdd,lane,powder:false,synth:true};
-    // POWDER C4: REFUND on a core-less powder round has no housed payload to bill free — spend it on a TWIN instead (exactly one extra copy; capped as TWIN caps at 6; i===0-carries-chain keeps it chainless).
-    if(pend.refund) lane.powderShot.pend.twin=Math.min(6,Math.round(lane.powderShot.pend.twin||1)+1);
-  }
+  // CORELESS POWDER = PLAIN LEAD (corrected beta 1.1.x): a Powder Mag on a lane with
+  // trailing feeders but NO proj core does NOT synth a bolt — the feeders vent (above)
+  // and the mag throws plain lead via resolveTool's parallel-column pass, like any mag.
+  // Powder's only payoff is FREE RELAY MODS behind a real bolt core; there is no
+  // core-less synth (retires the old C1 self-detonate / C3 housed-waiver / C4 twin).
   return lane;
 }
 function resolveTool(tool){
@@ -4508,13 +4503,14 @@ function resolveTool(tool){
   out.shots=out.columns.flatMap(c=>c.shots);        // convenience for HUD/summaries
   // TWO-POOL FIRE (beta 1.1.x, MODS.md corrected model): boltless ammo fires ALONGSIDE
   // the ⚡ cores, never suppressed by them. A column that already fires a core but has NO
-  // ballistic (bolt/slug) shot, yet is fed by a NON-POWDER magazine, gets an implicit
-  // plain BOLT — plain lead, fresh pend (NO relay mods), its own 0-⚡/1-round pool. It
-  // rides the lane so the volley walk fires it SIMULTANEOUSLY with the energy cores; lead
-  // and battery then drain on independent rails — the by-design desync. STRUCTURAL, not
-  // loaded-gated: reload never rebuilds _res, so let the fire loop's okAmmo dry-click an
-  // empty mag instead. Powder mags keep their own synth round (free relay mods want a bolt
-  // core); a mag-only / empty tool still falls to the bare lane below.
+  // ballistic (bolt/slug) shot, yet is fed by a magazine, gets an implicit plain BOLT —
+  // plain lead, fresh pend (NO relay mods), its own 0-⚡/1-round pool. It rides the lane
+  // so the volley walk fires it SIMULTANEOUSLY with the energy cores; lead and battery
+  // then drain on independent rails — the by-design desync. STRUCTURAL, not loaded-gated:
+  // reload never rebuilds _res, so let the fire loop's okAmmo dry-click an empty mag
+  // instead. Powder mags feed here too — a boltless powder mag is just plain lead of any
+  // caliber (its free-relay-mod benefit needs a bolt core, handled in the fire loop, and
+  // there is NO core-less synth); a mag-only / empty tool still falls to the bare lane below.
   if(tool) for(const c of out.columns){
     // PARALLEL COLUMNS (MODS.md rule C — mags in series pass their sequence but fire
     // SIMULTANEOUSLY with the cores): a MAG-ONLY column (e.g. a new platform-wing lane
@@ -4524,7 +4520,7 @@ function resolveTool(tool){
     if(!c.shots.length && !c.hasMag) continue;
     if(c.shots.some(s=>s.kind==='bolt'||s.kind==='slug')) continue;  // already ballistic → don't double the lead
     const mg=columnMag(tool,c.mountIdx,false);
-    if(!mg||mg.powder) continue;                                     // needs a non-powder mag; a powder mag makes its own round
+    if(!mg) continue;                                                // any mounted mag throws plain lead here — powder or not; a powder mag's boltless round is plain lead of any caliber (corrected beta 1.1.x, no core-less synth)
     c.shots.push({kind:'bolt',pend:freshPend(),cost:0,core:null,spreadAdd:c.spreadAdd,lane:c,powder:false});
   }
   out.shots=out.columns.flatMap(c=>c.shots);        // refold: the implicit bolts join the HUD/summary + suppress the bare lane
@@ -4532,8 +4528,7 @@ function resolveTool(tool){
   // ORDER IS LAW: saw floor first, slug penalty after — the woodchipper is a trap on purpose.
   if(out.shots.some(sh=>sh.kind==='saw')) out.fireRate=0.06;
   if(out.shots.some(sh=>sh.kind==='slug'&&!out.shots.some(o=>o.relayNext===sh))) out.fireRate+=0.45;
-  const _livePow = tool && out.columns.some(c=>{ if(!c.powderShot) return false; const mg=columnMag(tool,c.mountIdx,true); return !!(mg&&mg.powder); });   // a LOADED Powder Mag on a core-less lane fires its synth round — the bare fallback must NOT discard it
-  if(!tool || (out.shots.length===0 && !_livePow)){
+  if(!tool || out.shots.length===0){
     const bare={shots:[{kind:'bolt',pend:freshPend(),cost:0,spreadAdd:0}],vented:[],flow:[],
                 seq:[],tacLaser:false,spreadAdd:0,silenced:false,spreadMul:1,mountIdx:0,bare:true};
     bare.shots[0].lane=bare;
@@ -4734,7 +4729,6 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
       bounces:p.bounce, pierce:p.pierce, grav:p.grav*12+(kind==='decoy'?9:kind==='boom'?12:0),
       fuse:kind==='decoy'?12:(p.fuse||0), split:p.split||0, contact:!!p.contact, stuck:false, pingT:0, push:!!(base&&base.pulse),
       timerT:p.timer||0,                                 // TIMER: the bell rides the flight
-      synthDet:!!(shot.synth&&!(shot.relayNext&&shot.relayNext.housed)&&(p.fuse>0||p.contact||p.timer>0)),   // POWDER C1: a payload-less powder round carrying a TRIGGER (FUSE/CONTACT/TIMER) IS the charge — self-detonates at that trigger instead of fizzling on an empty relay
       retT:p.boomerang?0.55:0, retSp:p.boomerang?speed:0, homing:p.homing||0, src:src||null,   // RETURN/SEEKER freight — src is the thrower a boomerang flies home to
       relay:rel, rdir:rel?new Vec3(d.x,d.y,d.z):null, rbase:rel?base:null, tool:_tl,
       burn:Math.round(((p.burn||0)+(_am&&_am.burn||0))*(shot.small||1)), bleed:(!!p.bleed)||(!!(_am&&_am.bleedChance)&&runRng()<_am.bleedChance), armorPen:(_am&&_am.armorPen)||0, chaos:p.chaos||0,
@@ -4752,12 +4746,11 @@ function emitProjectile(owner,origin,dir,shot,base,src,atPoint,srcTool){
 }
 function toolNoise(silent){ return silent?4:22; }
 // CARRIER PAYS THE LEAD TOO: a housed ballistic payload (bolt/slug) bills its
-// rounds to the trigger pull. REFUND waives its OWN core's lead only — on the
-// carrier it never covers the housed chain; feeding REFUND to the housed core
-// itself is the way to waive that link.
+// rounds to the trigger pull. REFUND does NOT touch lead (corrected beta 1.1.x —
+// it frees the core's base ⚡ ONLY); the housed chain's deferred rounds always
+// stand — feed the chain its own cores to change what it emits, never its lead.
 function roundsFor(sh){
-  const own=sh.pend.refund?0 : sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0;
-  if(sh.pend.refund && sh.lane && sh.lane.isPowder) return own;   // POWDER C3: REFUND in a powder lane frees the HOUSED payload's deferred rounds too, not just its own lead (the global carrier rule below — own lead only — still stands for every non-powder core)
+  const own=sh.kind==='slug'?3 : sh.kind==='bolt'?1 : 0;
   return own+(sh.relayNext&&sh.relayNext.housed?roundsFor(sh.relayNext):0);
 }
 // CHAIN ⚡ mirrors the lead: resolveLane parks every deeper housed link's cost on
@@ -4807,9 +4800,7 @@ function tryFirePlayer(dt){
     const cyc=res.bare?0:lane.cycleRef.get();
     const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true);   // bare bolt still drinks from the rack's mag
     const _pw=!!(mag&&mag.powder);                        // C13: a Powder Mag powders whatever's loaded → this lane PULSES hitscan & feeders cost no ⚡ (retired powderCore trait)
-    // POWDER SYNTH (C14): a Powder Mag with trailing feeders but no lead-bearing core
-    // supplies the ballistic shot itself — MASS/heavy apply with no bolt AND no battery, at 1 round.
-    const shots=(_pw&&lane.powderShot&&!lane.shots.some(s=>roundsFor(s)>0))?lane.shots.concat([lane.powderShot]):lane.shots;
+    const shots=lane.shots;                              // no core-less powder synth (corrected beta 1.1.x): a lane fires only its real cores + the parallel plain-lead bolt resolveTool folded in
     const n=shots.length; if(!n) continue;
     for(let s=0;s<n;s++){ const sx=shots[s]; if(sx.kind==='bolt') sx.powder=_pw; }
     // SIMULTANEOUS FIRE (C14): every AFFORDABLE shot in this lane fires this pull. Charge &
@@ -5789,7 +5780,6 @@ function triggerPayload(pr){
   if(pr.split>0) splinterBurst(pr);
   if(pr.kind!=='spark'&&pr.kind!=='pick'&&pr.kind!=='boom') addDyn(pr.pos.x,pr.pos.y,pr.pos.z,[1,0.8,0.4],0.8,0.05);
   // FUSE/CONTACT-RELAY: the death casts the next core — the pull pre-paid the first delivery
-  if(pr.synthDet) explode(pr);                          // POWDER C1: no payload to cast — detonate for the round's own flight damage (bolt → small splash)
   castRelay(pr,true);
 }
 // EXTRA CASTS COST A THIRD — the pull pre-pays ONE delivery of the housed chain.
@@ -7398,7 +7388,7 @@ function tipBrief(it){                                  // the info square's row
     if(e.kind==='orb') rows.push('slow orb');
     if(e.kind==='hope') rows.push('mends you & the faithful · burns the dead');
     if(e.powder) rows.push('mods cost no ⚡');
-    if(e.refund) rows.push('next core: base ⚡/bullets waived');
+    if(e.refund) rows.push('next core: base ⚡ waived');
     if(e.beltFeed) rows.push('LOUDLY chambers 1 round / 0.9s from your pockets');
     if(e.chaos) rows.push('unpredictable · beam threads arc like lightning'); 
     if(e.dmg) rows.push((e.dmg>0?'+':'')+e.dmg+' hurt');
@@ -7947,7 +7937,7 @@ function updateToolReadout(){
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
     if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS');
-    if(p.refund&&((s.lane&&s.lane.isPowder)||!(s.relayNext&&s.relayNext.housed)))tags.push('FREE');   // FREE when refund waives everything: a powder lane frees the housed payload too (C3), or there's no housed chain to bill
+    if(p.refund&&!(s.relayNext&&s.relayNext.housed))tags.push('FREE');   // refund frees this core's base ⚡ when there's no housed chain still to bill (corrected beta 1.1.x — no powder-lane housed-lead waiver)
     if(p.bounce)tags.push('RIC'); if(p.pierce)tags.push('DRILL'); if(p.grav)tags.push('MASS'); if(p.vel>1)tags.push('SWIFT');
     return (tags.length?tags.join('·')+' ':'')+(s.housed?'⌂':'')+s.kind.toUpperCase();
   }).join(' / ');
