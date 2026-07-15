@@ -2491,7 +2491,8 @@ LEVELS.hideout={
      bldg:[-4.5,-4.5,1.5,0.5], bldgH:2.55, door:['E',0,0.9], boards:true},
     {id:'clutter', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-8,-6,8,6],
      crates:[[-3.2,-3.4,0.9,'stash'],[-2.1,-2.9,0.7],[0.4,-3.7,0.6],[4.2,3.1,0.8],[-6.8,4.4,0.7],
-             [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65]],
+             [6.5,-4.5,0.7],[-6.5,0.5,0.8],[5.8,4.6,0.65],
+             [0.75,-0.6,0.62,'lockE'],[-1.3,-0.4,0.8,'lockL']],   // P4 lockboxes in the sealed room — geometry+registry appear only once OWNED (crate count 10/10 of the GLSL cap)
      term:[-3.4,-0.6,0.4]},   // the stolen terminal's body — keep on LEVELS.hideout.terminal below
   ],
   exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[],guaranteed:['photometer','compass']},
@@ -2719,6 +2720,7 @@ function regionSdfJS(r,px,py,pz){
     }
   }else if(r.kind===K.PROPS){
     for(const c of r.crates){
+      if(lockCrateHidden(c)) continue;               // P4: an unowned lockbox has no geometry (TWIN: buildLevelTexData packs the same skip)
       const cd=_sdBox3(px,py,pz,c[0],c[2]/2,c[1],c[2]*0.55,c[2]/2,c[2]*0.55);
       if(cd<d){ d=cd; m=4.0; }
     }
@@ -2789,8 +2791,9 @@ function buildLevelTexData(level,bake){
     }
     if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,r.shrubs?1:0,r.cutX??0,r.hMin]; }
     if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
-    if(r.kind===K.PROPS){ B=[r.kind,r.term?1:0,0,0]; r.crates.forEach(cr=>items.push([cr[0],cr[1],cr[2],0]));
-      if(r.crates.length>10) console.warn('PROPS crate count over GLSL loop cap (GPU drops the rest):',r.id);   // lvRegion kind==10 marches i<10 — JS would still collide the extras (twin desync)
+    if(r.kind===K.PROPS){ const vis=r.crates.filter(cr=>!lockCrateHidden(cr));   // P4 twin: unowned lockbox crates pack nothing (JS twin: regionSdfJS skip)
+      B=[r.kind,r.term?1:0,0,0]; vis.forEach(cr=>items.push([cr[0],cr[1],cr[2],0]));
+      if(vis.length>10) console.warn('PROPS crate count over GLSL loop cap (GPU drops the rest):',r.id);   // lvRegion kind==10 marches i<10 — JS would still collide the extras (twin desync)
       if(r.term) items.push([r.term[0],r.term[1],r.term[2],0]); }   // terminal rides the last slot; B.y flags it
     if(r.kind!==K.PITS && r.kind!==K.TREES) C[1]=items.length;   // TREES keeps its shrub flag in C[1] (set above) so GLSL draws the understory bushes JS already collides with — fixes an invisible-collision desync AND adds forest cover
     C[0]=pool;
@@ -3420,6 +3423,9 @@ const ITEM_DEFS={
   gateCard:   ()=>new Gadget('Horde Keycard','#c8a12e','keycard','A scarred access card — trips the horde gate at the north incline.'),
   testCard:   ()=>new Gadget('Range Keycard','#2e86c8','keycard','A blue access card — opens the weapons-testing fence gates.'),   // P4: color matches its lock's prompt (LOCKS.testing)
   labCard:    ()=>new Gadget('Lab Keycard','#8a3ec8','keycard','A violet access card — opens the weapon-lab compound gate.'),      // P4: color matches its lock's prompt (LOCKS.lab)
+  // --- lockboxes (P4): the brute's chance-drops — haul one HOME to anchor it (deployTo installs). Rarity colors match the barrel tiers; footprint = the grid it grants.
+  lockboxE:   ()=>Object.assign(new Gadget('Epic Lockbox','#7a4f8f','lockbox','A sealed strongbox. Get it home — what it keeps, death cannot take.'),{w:2,h:2}),
+  lockboxL:   ()=>Object.assign(new Gadget('Legendary Lockbox','#a3822e','lockbox','A sealed vault chest. Get it home — what it keeps, death cannot take.'),{w:3,h:3}),
 };
 for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
   ITEM_DEFS[k]=()=>{ const it=f(); it.defKey=k; return it; }; }
@@ -3578,8 +3584,8 @@ function invZones(){
     // show your kit AND the crate together, so you can lift loot into your hands
     // (Square) and stow it into a pocket yourself — container-to-container transfer
     return [...playerZones(),
-            lootCrate.stash                               // THE STASH is yours: put AND take
-              ? {id:'stash',label:'THE STASH',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows}
+            lootCrate.stash                               // THE STASH is yours: put AND take (P4: the lockboxes ride the same flag, named by their entry)
+              ? {id:'stash',label:lootCrate.label||'THE STASH',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows}
               : {id:'crate',label:'SUPPLY CRATE',grid:lootCrate.inv,cols:lootCrate.invCols,rows:lootCrate.invRows,
                  external:true}];
   return playerZones();
@@ -3744,7 +3750,7 @@ function menuInspect(item){
   refreshInvUI();
 }
 function closeAllInv(){ menuSet('closed'); lootCrate=null; }
-function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast(cr.stash?'THE STASH':'SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
+function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast(cr.stash?(cr.label||'THE STASH'):'SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
   else if(Menus.view==='crate') closeAllInv();            // a crate is a room you simply leave
@@ -4296,7 +4302,7 @@ function updateInteract(dt){
   if(activeLevel){
     const cr = isPlayable() ? nearestCrate(0.9) : null;   // arm's reach of a box FACE — home boxes open too, the stash lives there
     if(cr && !uiOpen()){
-      setPrompt(_pr, cr.stash?'THE STASH — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
+      setPrompt(_pr, cr.stash?(cr.label||'THE STASH')+' — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
       if(pressed('interact')){ openCrate(cr); }
       return;
     }
@@ -6327,7 +6333,13 @@ class Zealot{
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
     if(this._faction==='zombie'){                          // BUILD 2: undead drop NOTHING (no rucksack / gear / tool roll)
       if(this._lastBy==='player') zombiesKilled++;         // CONTAINMENT (System I): lifetime undead-kill PR — PLAYER-attributed only (owner call 11): the last hit decides credit, so soldier-inflicted undead deaths don't pad the record; re-killing a recycled body still counts (a kill is a kill). Persisted in the v6 slot for the stats page.
-      if(this._brute){ bruteRespawnT=BRUTE_RESPAWN; this.respawnT=Infinity; }   // the lone mini-boss returns on the 15-min session clock — NOT the 45s reinforce (dead-branch never auto-wakes it)
+      if(this._brute){ bruteRespawnT=BRUTE_RESPAWN; this.respawnT=Infinity;   // the lone mini-boss returns on the 15-min session clock — NOT the 45s reinforce (dead-branch never auto-wakes it)
+        // P4 — the stash-upgrade source (owner gap #6): the brute chance-drops the NEXT
+        // unowned lockbox, epic before legendary. Both owned → back to dropping nothing.
+        const bx=!LOCKBOX.lockE.own ? (runRng()<0.35?'lockboxE':null)
+               : !LOCKBOX.lockL.own ? (runRng()<0.20?'lockboxL':null) : null;
+        if(bx) spawnWorldItem(ITEM_DEFS[bx](),this.position.x,this.position.y+0.8,this.position.z,new Vec3((runRng()-0.5)*2.5,3.2,(runRng()-0.5)*2.5));
+      }
       else this.respawnT=300+runRng()*300;                  // rank-and-file undead take 5-10 min to shamble back — instant respawns felt cheesy
       return;
     }
@@ -6969,6 +6981,7 @@ function startRun(){
 function newGame(){                            // the terminal's START OVER — a fresh run; the memory slots keep
   for(const row of stashInv) row.fill(null);   // the stash forgets, in place — the crate registry holds this array
   for(const row of lockEpicInv) row.fill(null); for(const row of lockLegInv) row.fill(null);   // v6: the death-proof lockboxes forget too — only START OVER wipes them (onDeath never does)
+  for(const t in LOCKBOX) LOCKBOX[t].own=false;   // P4: the upgrades are progression — a fresh identity re-earns them (startRun's deployTo re-derives the bare hideout)
   zombiesKilled=0; outskirtsTime=0;            // v6 (System I): START OVER = a fresh identity → the personal-record counters zero here ONLY. NOT in startRun (boot / hard-death restart / START OVER — a lost raid skips it entirely) — the score-chase must survive the suicide runs.
   worldClock=0;                                // day one, dawn again — the only clock rewind outside boot
   startRun();                                  // the boot path: empty hands, stash kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
@@ -7029,6 +7042,7 @@ function teardownWorld(){
 }
 function deployTo(levelId){
   const L=LEVELS[levelId];
+  let _lkNews=null;                             // P4: lockbox installs announce AFTER the arrival banner (toast and banner share the element)
   teardownWorld();
   if(L.kind==='authored'){
     TRAVEL=null;                              // arrival ends the leg — stale legs never survive a death or a debug jump
@@ -7042,6 +7056,7 @@ function deployTo(levelId){
     cameraYaw=_ins.yaw; cameraPitch=0;
     playerPos.velY=0;
     for(const ex of L.exfils) ex.y=Math.max(0,levelGroundJS(ex.x,ex.z));   // smoke column bases sit on the dirt
+    if(levelId==='hideout') _lkNews=installLockboxes();   // P4: BEFORE the registry/pack read ownership — a box hauled home stands this very visit
     buildCrateRegistry(L);
     seedLevelSpawns(L);
     if(L.lights) for(const li of L.lights)
@@ -7060,6 +7075,7 @@ function deployTo(levelId){
   else if(TRAVEL){ hl.textContent='Trek'; hv.textContent=TRAVEL.dest==='hideout'?'HOME':'OUT'; }
   else{ hl.textContent='Ring'; hv.textContent=roman(depth); }
   showBanner(L.name);
+  if(_lkNews&&_lkNews.length){ toast(_lkNews.join(' + ')+' INSTALLED'); playSound('place'); }   // P4: rare news beats the routine arrival banner
   if(L.kind==='authored'&&L.exfils.length) toast('REACH AN EXFIL — HOLD E INSIDE THE SMOKE');   // once per arrival, travelTo-style
   else if(L.kind==='rings'&&!TRAVEL) toast('SMOKE MARKS THE WAY HOME — HOLD E INSIDE IT');      // the endless ring's own door out (legs get travelTo's toast)
   refreshInvUI();
@@ -7075,12 +7091,41 @@ function travelTo(dest){                      // THE LOOP: the valley is the lan
 const STASH_COLS=6, STASH_ROWS=8;
 const stashInv=Array(STASH_ROWS).fill(null).map(()=>Array(STASH_COLS).fill(null));
 // AREA-1 CONTAINMENT (SAVE_VER 6) — death-proof LOCKBOXES: same module-scope grid +
-// omission-from-onDeath model as the stash above. INERT this phase — empty grids, no
-// crate-registry entry, no UI, no drop; persistence only. Phase 4 wires the physical
-// hideout box + brute-kill drop into these. NOT world geometry — pure inventory data.
+// omission-from-onDeath model as the stash above. P4 wires the LIVE loop: the brute
+// chance-drops the box ITEM, hauling it home installs it (deployTo → installLockboxes),
+// and an owned box stands as a real clutter crate with a put-and-take grid.
 const LOCK_EPIC_COLS=2, LOCK_EPIC_ROWS=2, LOCK_LEG_COLS=3, LOCK_LEG_ROWS=3;
 const lockEpicInv=Array(LOCK_EPIC_ROWS).fill(null).map(()=>Array(LOCK_EPIC_COLS).fill(null));   // epic 2×2
 const lockLegInv =Array(LOCK_LEG_ROWS ).fill(null).map(()=>Array(LOCK_LEG_COLS ).fill(null));   // legendary 3×3
+// LOCKBOX REGISTRY (P4): crate tag -> box identity. A new death-proof box = ONE entry
+// here + one tagged crate in the hideout clutter + one ITEM_DEFS drop. `own` persists
+// as v6 lockOwn (additive); the tag gates the crate's GEOMETRY in both SDF twins.
+const LOCKBOX={
+  lockE:{label:'EPIC LOCKBOX',      item:'lockboxE', grid:lockEpicInv, cols:LOCK_EPIC_COLS, rows:LOCK_EPIC_ROWS, own:false},
+  lockL:{label:'LEGENDARY LOCKBOX', item:'lockboxL', grid:lockLegInv,  cols:LOCK_LEG_COLS,  rows:LOCK_LEG_ROWS,  own:false},
+};
+const lockCrateHidden=c=>{ const B=LOCKBOX[c[3]]; return !!B&&!B.own; };   // ONE predicate for BOTH twins (regionSdfJS + buildLevelTexData) — an unowned box has no geometry anywhere
+function lockCrateEntry(c,B){ return {x:c[0], z:c[1], size:c[2], inv:B.grid, invCols:B.cols, invRows:B.rows,
+  tiers:[], stash:true, lockTag:c[3], label:B.label}; }   // stash:true = put-and-take, never seeded, never guaranteed-eligible
+function installLockboxes(){                    // P4 — arriving home with a brute-dropped box anchors it (the hideout-stash rule).
+  const news=[];                                // Runs on hideout deploy BEFORE the registry/pack read ownership. Dying with the
+  for(const t in LOCKBOX){                      // box still in the field loses it — the same teeth that eat a carried keycard.
+    const B=LOCKBOX[t]; if(B.own) continue;     // (Returns labels; deployTo toasts AFTER its banner or the news would be stomped.)
+    let found=null, grid=null;
+    invArmWalk((it,g)=>{ if(!found&&g&&it.defKey===B.item){ found=it; grid=g; } });
+    if(!found) for(let r=0;r<STASH_ROWS&&!found;r++) for(let c=0;c<STASH_COLS;c++){   // belt-and-braces: a box parked in the stash installs too
+      const ch=stashInv[r][c]; if(ch&&ch.defKey===B.item){ found=ch; grid=stashInv; break; } }
+    if(found){ removeFromGrid(found,grid); B.own=true; news.push(B.label); }
+  }
+  return news;
+}
+function syncLockCrates(){                      // load/corrupt path: ownership moved under a LIVE hideout — re-derive the physical boxes
+  if(!activeLevel||activeLevel.id!=='hideout') return;
+  crateRegistry=crateRegistry.filter(cr=>!cr.lockTag);
+  for(const r of activeLevel.regions){ if(r.kind!==LVL.KIND.PROPS||!r.crates) continue;
+    for(const c of r.crates){ const B=LOCKBOX[c[3]]; if(B&&B.own) crateRegistry.push(lockCrateEntry(c,B)); } }
+  levelTexDirty=true;                           // the clutter pack changed shape — both twins re-read ownership
+}
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
 let crateRegistry=[], lootCrate=null;
 function buildCrateRegistry(L){
@@ -7091,6 +7136,8 @@ function buildCrateRegistry(L){
                           invCols:STASH_COLS, invRows:STASH_ROWS, tiers:[], stash:true});
       return;
     }
+    const B=LOCKBOX[c[3]];
+    if(B){ if(B.own) crateRegistry.push(lockCrateEntry(c,B)); return; }   // P4: an owned lockbox is a real put-and-take box; unowned = absent (geometry twin-gated too)
     const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
     crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3, tiers, lockedBy});
   };
@@ -7254,6 +7301,7 @@ function seedLevelSpawns(L){
     const owns=g=>!!g&&g.flat().some(x=>x&&(x.defKey===k||(x.inv&&x.inv.flat().some(y=>y&&y.defKey===k))));
     let has=crateRegistry.some(cr=>owns(cr.inv))
          || EQUIP_SLOTS.some(s=>equip[s]&&(equip[s].defKey===k||owns(equip[s].inv)));
+    if(!has) has=[stashInv,lockEpicInv,lockLegInv].some(owns);   // P4: home banks count from ANY world — a CAMP seed's registry can't see the stash/lockboxes, and a banked card must not re-seed ("one ANYWHERE keeps it")
     if(!has) invArmWalk(x=>{ if(x.defKey===k) has=true; });
     if(has) continue;
     const it=ITEM_DEFS[k]();
@@ -7437,7 +7485,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=6, SAVE_KEY=i=>'sotv_save_'+i;             // v6: AREA-1 CONTAINMENT scaffold — death-proof lockboxes (lockEpic 2×2 / lockLeg 3×3) + raid-state (hazed POI indices, gateOpen); keycards ride existing itemJSON grids, no new field. All additive — v2..v5 lack these, read as empty box / no haze / gate LOCKED. v5: + area-1 POI rotation cursor (j.poiRot). v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
+const SAVE_VER=6, SAVE_KEY=i=>'sotv_save_'+i;             // v6: AREA-1 CONTAINMENT scaffold — death-proof lockboxes (lockEpic 2×2 / lockLeg 3×3 contents + P4 lockOwn install flags) + raid-state (hazed POI indices, gateOpen, P4 labsOpen); keycards ride existing itemJSON grids, no new field. All additive — v2..v5 lack these, read as empty box / not owned / no haze / everything LOCKED. v5: + area-1 POI rotation cursor (j.poiRot). v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
@@ -7521,7 +7569,7 @@ function saveGame(slot){
     if(ch&&!pkSeen.has(ch)&&ch.x===c&&ch.y===r){ pkSeen.add(ch); pockets.push(itemToJSON(ch)); }
   }
   // v6 CONTAINMENT: death-proof lockboxes serialize like the stash/pockets — same
-  // top-left-anchored walk. Empty this phase; Phase 4 fills them (brute-drop loot).
+  // top-left-anchored walk. P4 live: the brute-drop → install → stow loop fills them.
   const lockEpic=[]; const leSeen=new Set();
   for(let r=0;r<LOCK_EPIC_ROWS;r++) for(let c=0;c<LOCK_EPIC_COLS;c++){
     const ch=lockEpicInv[r][c];
@@ -7538,6 +7586,7 @@ function saveGame(slot){
               params, poiRot:_poiRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},
               lockEpic, lockLeg, hazed:_hazedPOIs, gateOpen:_gateOpen,
               labsOpen:Object.keys(_lockOpen).filter(k=>_lockOpen[k]===true),   // P4 raid-state, additive — same law as gateOpen (v6 unshipped, no ver bump)
+              lockOwn:Object.keys(LOCKBOX).filter(t=>LOCKBOX[t].own),           // P4: installed lockboxes, additive — absent reads as none owned
               zombiesKilled, outskirtsTime};   // v6 CONTAINMENT scaffold — zombiesKilled/outskirtsTime = System-I personal-record counters (scalars, additive — old blobs just lack them)
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
@@ -7590,7 +7639,7 @@ function loadGame(slot){
       else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
     }
     // v6 CONTAINMENT: death-proof lockboxes restore exactly like the stash. Absent in
-    // v2..v5 blobs → (b.lockEpic||[]) empty → boxes stay empty. Phase 4 fills them.
+    // v2..v5 blobs → (b.lockEpic||[]) empty → boxes stay empty (and unowned, below).
     for(const row of lockEpicInv) row.fill(null);
     for(const cj of (b.lockEpic||[])){
       const ch=itemFromJSON(cj); if(!ch) continue;        // unknown defKeys drop silently, as everywhere
@@ -7614,6 +7663,8 @@ function loadGame(slot){
     _hazedPOIs=Array.isArray(b.hazed)?b.hazed.filter(i=>Number.isInteger(i)&&i>=0&&i<LEVELS.area1.spawn.pois.length):[];   // v6 raid-state; missing/corrupt/out-of-range → no haze (radAt indexes POIs with these)
     _gateOpen=b.gateOpen===true;                                                // v6 raid-state; only a real true opens (missing/corrupt/garbage → gate LOCKED)
     _lockOpen={}; if(Array.isArray(b.labsOpen)) for(const k of b.labsOpen) if(LOCKS[k]) _lockOpen[k]=true;   // P4 raid-state; unknown ids drop, missing/garbage → all labs LOCKED
+    for(const t in LOCKBOX) LOCKBOX[t].own=Array.isArray(b.lockOwn)&&b.lockOwn.indexOf(t)>=0;   // P4: missing/garbage → not owned
+    syncLockCrates();                                                            // loads run at the hideout — the physical boxes must match the loaded ownership NOW
     zombiesKilled=Number.isFinite(b.zombiesKilled)?b.zombiesKilled:0;            // v6 PR (System I); older/absent/garbage → 0
     outskirtsTime=Number.isFinite(b.outskirtsTime)?b.outskirtsTime:0;            // v6 PR (System I); older/absent/garbage → 0
   }catch(e){
@@ -7624,6 +7675,8 @@ function loadGame(slot){
     for(const row of lockLegInv) row.fill(null);
     for(const row of pocketsGrid) row.fill(null);
     _hazedPOIs=[]; _gateOpen=false; _lockOpen={}; _poiRot=0;   // v6: corrupt slot → no haze, gate + labs LOCKED, rotation reset (sane defaults)
+    for(const t in LOCKBOX) LOCKBOX[t].own=false;              // P4: corrupt = an empty identity — no boxes
+    syncLockCrates();                                          // and the LIVE hideout sheds them
     zombiesKilled=0; outskirtsTime=0;                      // v6: corrupt slot reads as an empty identity → PR counters zero too
     _retuneOrphans.length=0;
     syncBagAlias(); clampZone();
