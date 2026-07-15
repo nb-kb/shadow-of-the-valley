@@ -107,7 +107,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .termRow{padding:8px 10px;margin:3px 0;border:1px solid transparent;font-size:15px;
   letter-spacing:.14em;color:var(--bone);cursor:pointer;display:flex;justify-content:space-between;}
 .termRow.sel{border-color:var(--exposed);color:var(--exposed);background:rgba(80,200,120,.06);}
-.termRow .trMeta{color:var(--dust);font-size:13px;}
+.termRow .trMeta{color:var(--dust);font-size:14px;}
 .termHint{margin-top:12px;font-size:12px;letter-spacing:.12em;color:var(--dust);}
 /* DIEGETIC: the terminal shrinks onto the slab's phosphor — positioned per-frame by terminalFrame() */
 #terminalUI.diegetic{min-width:0;width:340px;padding:14px 18px;transform-origin:50% 50%;will-change:left,top,transform;
@@ -115,7 +115,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   box-shadow:0 0 22px rgba(20,80,50,.45) inset, 0 0 26px rgba(6,20,14,.85);}
 #terminalUI.diegetic .stencil{font-size:17px;letter-spacing:.16em;}
 #terminalUI.diegetic .termRow{font-size:15px;padding:6px 9px;margin:3px 0;letter-spacing:.08em;}
-#terminalUI.diegetic .termRow .trMeta{font-size:12px;}
+#terminalUI.diegetic .termRow .trMeta{font-size:14px;}   /* the meta column IS the payload on PERSONNEL RECORD — body floor, not caption size */
 #terminalUI.diegetic .termHint{font-size:12px;margin-top:10px;}
 /* the crosshair's cursor glyph — a little pointer parked at screen-center over the mini-display */
 #termCursor{position:absolute;top:50%;left:50%;width:15px;height:15px;z-index:53;display:none;pointer-events:none;
@@ -7131,7 +7131,7 @@ function terminalFrame(){
       const fov=playerPos.currentFov||1;                     // shader normalizes uv by iResolution.y → CSS px, DPR cancels
       const ndcx=(wx*b.right.x+wy*b.right.y+wz*b.right.z)/fwd/fov;
       const ndcy=(wx*b.up.x   +wy*b.up.y   +wz*b.up.z   )/fwd/fov;
-      const k=Math.max(0.55,Math.min(1.7,1.05/fwd));        // rough in-world size read, clamped legible — bigger ValleyOS screen
+      const k=Math.max(0.8,Math.min(1.7,1.05/fwd));         // rough in-world size read, clamped legible — the 0.8 floor keeps row text readable at the far half of the 0.9–1.4m hysteresis band
       ui.style.left=(innerWidth/2 +ndcx*innerHeight)+'px';
       ui.style.top =(innerHeight/2-ndcy*innerHeight)+'px';
       ui.style.transform='translate(-50%,-50%) scale('+k.toFixed(3)+')';
