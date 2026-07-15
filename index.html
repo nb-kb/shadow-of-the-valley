@@ -6263,8 +6263,7 @@ class Zealot{
     const dist=Math.hypot(dx,dz);
     const eyeY=this.position.y+1.55;
     const tEyeY=tgt.isPlayer?playerPos.y+0.9:tgt.y+0.95;
-    const losRay = FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz);   // pure sightline to the TARGET (reused for cover)
-    const seesLOS = dist<34*dayEye() && losRay;
+    const seesLOS = dist<34*dayEye() && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz));   // RANGE GATE FIRST: the SDF march only runs inside sight range — out-of-range soldiers were paying a full losClearJS ray every frame for a result the && then discarded (findCover casts its own rays; nothing else read the old losRay)
     this.inCover = this.state===2 && this.alarmRole==='cover' && !!this.coverPoint && this.position.distanceTo(this.coverPoint)<1.2;   // only an ALARMED cover-role zealot committed to its cover point counts — not oblivious patrollers, facing-away enemies, or Believers
     if(this._coveringFire>0) this._coveringFire-=dt;
     const fwdX=Math.sin(this.yaw), fwdZ=Math.cos(this.yaw);
