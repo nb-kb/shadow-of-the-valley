@@ -1462,7 +1462,7 @@ vec2 map(vec3 p){
   vec3 vp=p-ro;
   if(dot(vp,vp)<2.6){
     vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
-    if(uMenu>0.001){
+    if(uMenu>0.001 && uMenuMode!=0){   // mode 0 (closed/crate) raises NO prop — the ease-out belongs to the worn tool (bug #7)
       float rise=(1.0-uMenu)*(1.0-uMenu)*0.45;   // ease-out: the prop settles, no lunge
       if(uMenuMode==1){
         vec3 bp=vl-vec3(0.0,-0.04-rise,0.85);
@@ -1502,7 +1502,7 @@ vec2 map(vec3 p){
         }
         if(d<res.x) res=vec2(d,20.0);
       }
-    }else if(uHasTool>0.5){
+    }else if(uMenuMode==0 && uHasTool>0.5){
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.215:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 low -0.215; BARE -0.09 (lowered a touch for see-past visibility)
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:0.0);   // iron/red-dot/holo: pull the gun ~0.18 CLOSER at full ADS (closer than the bare tool) so the housing fills the view
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
@@ -3609,10 +3609,11 @@ function takeBagAmmo(type,want){
 
 // ---- MENU STATE: single authority. Everything below is derived. -------------------
 const Menus={view:'closed', inspect:null};
-// the worn tool has no business behind the rucksack: hidden while the bag is open,
-// and while a bag-originated close is still easing out. Tool-view exits raise it live.
+// the worn tool has no business behind the rucksack: hidden while the bag is open.
+// EVERY close raises it live — the shader draws no prop while mode 0 eases out (bug #7),
+// so there is no phantom to hide behind and no gun-raise replay.
 function wornHidden(){
-  return (menuMode===1) || (menuMode===0 && Menus.prev==='bag' && menuAnim>0.06);
+  return (menuMode===1);
 }
 function menuSet(view){
   Menus.prev=Menus.view;                                  // provenance: who are we leaving?
