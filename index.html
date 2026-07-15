@@ -5894,7 +5894,7 @@ function explode(pr){
     if(en.health<=0||en._dormant) continue;              // dormant: splash finds no one
     if(_bf&&en._faction===_bf) continue;                 // own faction — spared by a friendly blast (the firing believer still dies: tryBoom force-kills it after)
     const d=en.position.distanceTo(pr.pos);
-    if(d<R){ const fall=1-d/R; en.hurt(pr.dmg*fall*1.6, pr.owner); applyStatus(en,{burn:(pr.burn||0)+Math.round(pr.dmg*fall*0.35), bleed:pr.bleed}); }   // the blast SEARS — dose scales with the hurt at range
+    if(d<R){ const fall=1-d/R; en.hurt(pr.dmg*fall*1.6, pr.src||pr.owner); applyStatus(en,{burn:(pr.burn||0)+Math.round(pr.dmg*fall*0.35), bleed:pr.bleed}); }   // the blast SEARS — dose scales with the hurt at range. by = the src ENTITY when one threw it: hurt()'s cross-faction check reads .position/._faction, so blast victims turn on the bomber (the bare 'enemy' string was silently ignored); player blasts carry no src → 'player' attribution intact
   }
   const pd=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
   if(pd<R){ damagePlayer(pr.dmg*(1-pd/R)*1.6); if(gen!==_worldGen) return;   // it killed its maker — sear, kick, and shove die with the world (clearHudFx already swept the screen)
