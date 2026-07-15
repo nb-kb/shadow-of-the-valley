@@ -6551,7 +6551,8 @@ class Zealot{
     if(this.health<=0 && enemies.filter(e=>e.health>0).length>=P('maxEnemies')) { this.respawnT=10; return; }   // cap gates DEAD respawns only — resetLevel fills to maxEnemies exactly, so a live-count gate blocked EVERY valley >70m far-yank and nobody ever closed in
     const _poiLvl=activeLevel&&activeLevel.spawn&&activeLevel.spawn.pois;   // Area-1 (POI level): respawn AT the enemy's OWN spawn — no teleporting into a ring around the player. Open valley (no POIs): the endless horde still closes on you.
     let _rx,_rz;
-    if(_poiLvl){ if(this._home){ this.startPos=this._home; this._home=null; } _rx=this.startPos.x; _rz=this.startPos.z; }   // a gauntlet-stolen interior body comes back at its REAL spawn — _home undoes wakeUndead's startPos overwrite
+    if(_poiLvl){ if(this._home){ this.startPos=this._home; this._home=null; } _rx=this.startPos.x; _rz=this.startPos.z;   // a gauntlet-stolen interior body comes back at its REAL spawn — _home undoes wakeUndead's startPos overwrite
+      if(Math.hypot(_rx-playerPos.x,_rz-playerPos.z)<18){ this.respawnT=5+runRng()*5; return; } }   // POP-IN GUARD: the player is ON the spawn (looting the drop) — hold 5-10s and re-try via the dead-branch clock; the own-spot law stays intact, the body just waits for the room to clear
     else { const a=runRng()*Math.PI*2, r=45+runRng()*15; _rx=playerPos.x+Math.cos(a)*r; _rz=playerPos.z+Math.sin(a)*r; this.startPos=new Vec3(_rx,0,_rz); }
     const _gy=activeLevel ? levelGroundJS(_rx,_rz) : terrainHJS(_rx,_rz);   // valley has NO authored level → procedural terrain height (mirrors the constructor). levelGroundJS reads activeLevel.bounds and would NPE in the valley — that throw was aborting the whole enemy loop (frozen mid-air enemies).
     this.position.set(_rx, restOnSurface(_rx, _gy+2.5, _rz), _rz);
