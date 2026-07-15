@@ -6512,7 +6512,7 @@ class Zealot{
     }
   }
   reinforce(){
-    if(enemies.filter(e=>e.health>0).length>=P('maxEnemies')) { this.respawnT=10; return; }
+    if(this.health<=0 && enemies.filter(e=>e.health>0).length>=P('maxEnemies')) { this.respawnT=10; return; }   // cap gates DEAD respawns only — resetLevel fills to maxEnemies exactly, so a live-count gate blocked EVERY valley >70m far-yank and nobody ever closed in
     const _poiLvl=activeLevel&&activeLevel.spawn&&activeLevel.spawn.pois;   // Area-1 (POI level): respawn AT the enemy's OWN spawn — no teleporting into a ring around the player. Open valley (no POIs): the endless horde still closes on you.
     let _rx,_rz;
     if(_poiLvl){ _rx=this.startPos.x; _rz=this.startPos.z; }
