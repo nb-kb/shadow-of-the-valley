@@ -2372,19 +2372,22 @@ LEVELS.area1={
               'lantern','pulse','beltFeeder','lantern',             // UTILITIES
               'beltBasic','holster1','helmetCap','harnessL',        // ARMOR
               'ration','ration','gummies','bandAid',                // CONSUMABLES
-              'barrelC','battS','ironSights','watch'],              // frame/attach
+              'barrelC','battS','ironSights','watch',               // frame/attach
+              'maskFace','gasFilter','gasFilter'],                  // GAS KIT (P3): the face mask + cartridges ride the common stream
       gear:  ['ammo762','ammoBuck','pistolMag','smgMagI',
               'emberCore','pickCore','twin','beamCore',
               'beltFeeder','lantern','pulse','beltFeeder',
               'holster2','harnessM','platesL','goggles',
               'gummies','bandAid','aloe','ration',
-              'barrelU','battM','platS','reflex'],
+              'barrelU','battM','platS','reflex',
+              'maskHelm','gasFilter'],                              // GAS KIT (P3): the respirator helm sits one shelf up
       mods:  ['ammoFlch','magDrum','rifleMagI','shotMagI',
               'silentMod','bounce','pierce','heavy',
               'pulse','beltFeeder','lantern','pulse',
               'holster3','helmetSteel','headphones','harnessL',
               'aloe','gummies','ration','bandAid',
-              'barrelR','scope','heavyBarrel','compass','photometer'],
+              'barrelR','scope','heavyBarrel','compass','photometer',
+              'gasFilter'],                                         // GAS KIT (P3): cartridges keep dropping mid-tier
       cores: ['ammoSlug','barrelMagI','smgMagII','rifleMagII',
               'decoyCore','boomCore','waveCore','sawCore',
               'lantern','pulse','beltFeeder','lantern',
@@ -3321,6 +3324,10 @@ const ITEM_DEFS={
   helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
+  // ---- gas kit (CONTAINMENT P3): two masks, one cartridge — the PROTECTION lives in LIVE filters (−45% each, −90% cap; radProtection reads the worn seats) ----
+  maskHelm:   ()=>new Armor('Respirator Helm',2,1,'#5f6b4e','helmet',{reduce:0.92,dur:12,mask:true,invCols:2,invRows:1}),   // LIGHT/tier-1 head armor + gas: 2 filter seats — max gas safety forgoes the heavy helmet (P5's headshot tiers read the light class)
+  maskFace:   ()=>new Armor('Filter Mask',2,1,'#6a7258','face',{mask:true,invCols:1,invRows:1}),   // face-slot respirator: 1 seat, rides UNDER any helmet — max head armor costs a filter seat
+  gasFilter:  ()=>{ const it=new Item('Gas Filter',1,1,'#8a8f6a'); it.filter=true; it.lifeMax=600; it.life=600; return it; },   // cartridge: breathes down ONLY in the gas (~1–2 casual runs), then spent
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it · +4⚡'),
   contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core fires the one after it · +5⚡'),
   slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{timer:1.5,surcharge:3},'Next core goes off at 1.5s or on first touch, whichever comes first — and fires the one after it · +3⚡'),
@@ -3379,11 +3386,18 @@ class Armor extends Item{
   desc(){
     switch(this.armorType){
       case 'plates': return 'incoming ×'+this.damageMult+this.wearTag();
-      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port · dormant':'')+this.wearTag();
+      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port · dormant':'')+(this.mask?' · '+maskLine(this):'')+this.wearTag();
+      case 'face':   return maskLine(this)+' · worn under any helmet';
       case 'goggles': case 'headphones': return 'a settings device — dials live inside'+this.foldTag();
       default: return this.invCols? this.invCols+'×'+this.invRows+' pockets'+this.foldTag():'';
     }
   }
+}
+// mask readout — live filters seated → the shave they buy (radProtection twin: −45% each, −90% cap)
+function maskLine(m){
+  const n=m.inv?m.inv.flat().filter(c=>c&&c.filter&&c.life>0).length:0, seats=m.invCols*m.invRows;
+  return n? n+'/'+seats+' live filter'+(seats>1?'s':'')+' · −'+Math.min(90,n*45)+'% gas burn'
+          : 'NO LIVE FILTER · '+seats+' seat'+(seats>1?'s':'')+' — [X] opens';
 }
 // ---- SETTINGS DEVICES: goggles/headphones own a grid of SettingWidgets, built from
 // ---- this open registry. New setting = one entry here; nav/render/interact untouched.
@@ -3472,8 +3486,8 @@ function adjustWidget(wd,dir){
   toast(wd.label+' · '+widgetValueText(wd)+(wd.functional?'':' · not wired'));
   playSound('click');
 }
-const EQUIP_SLOTS=['helmet','goggles','headphones','plates','harness','holster','belt','rucksack'];
-let equip={helmet:null,goggles:null,headphones:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
+const EQUIP_SLOTS=['helmet','face','goggles','headphones','plates','harness','holster','belt','rucksack'];   // 'face' (P3): the respirator rides UNDER the helmet — the goggles-mask never costs head armor, only a filter seat. Additive: saves key equip by slot NAME, old blobs just lack 'face'.
+let equip={helmet:null,face:null,goggles:null,headphones:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
 let BAG_COLS=5,BAG_ROWS=6;
 const GUN_COLS=4,GUN_ROWS=4;
 let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
@@ -3810,6 +3824,9 @@ function interactInventory(){
     // Scope Adapter is a SIGHTS-ONLY 2-slot container — its grid takes reticles, nothing else
     if(f.inspectGrid && inspectItem && inspectItem.effect && inspectItem.effect.adapter && !isSight(it)){
       toast('SIGHTS ONLY'); playSound('empty'); return; }
+    // gas masks are FILTER-ONLY containers — their seats take cartridges, nothing else (P3)
+    if(f.inspectGrid && inspectItem && inspectItem.mask && !it.filter){
+      toast('FILTER SEATS — FILTERS ONLY'); playSound('empty'); return; }
 
     if(f.rack){
       const ref=refAt(f);
@@ -3893,6 +3910,7 @@ function activateAtCursor(){
     clampCursor(f);
     const it=cellAt(f);
     if(it&&zoneFolds(it)){ toggleZoneFold(it); return; }
+    if(it&&it.inv&&!it.settingsDevice){ menuInspect(it); playSound('click'); return; }   // worn mask: [X] opens its filter seats (the adapter idiom — masks are never storage zones)
     if(inspectItem) closeInspect();
     return;
   }
@@ -5940,6 +5958,9 @@ function armorWear(slot){
   const a=equip[slot]; if(!a||!a.durMax) return;
   if(--a.dur>0) return;
   equip[slot]=null;
+  if(a.inv){ const seen=new Set();                        // a broken container SPILLS its cargo at your feet — seated filters survive the mask (P3)
+    for(let r=0;r<a.invRows;r++) for(let c=0;c<a.invCols;c++){ const ch=a.inv[r][c];
+      if(ch&&!ch.widget&&!seen.has(ch)){ seen.add(ch); spawnWorldItem(ch,playerPos.x,playerPos.y+1.0,playerPos.z,new Vec3((runRng()-0.5)*2,2.5,(runRng()-0.5)*2)); } } }
   syncBagAlias(); clampZone();
   toast(a.name.toUpperCase()+' BROKE'); playSound('empty'); refreshInvUI();
 }
@@ -6158,6 +6179,12 @@ class Zealot{
     const q=clamp((legDepth()-1)/5,0,1);               // 0 at the door · 1 by ring VI — travel legs dress Ring I
     this.helm   = runRng()<0.25+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'helmetSteel':'helmetCap']() : null;
     this.plates = runRng()<0.20+0.45*q ? ITEM_DEFS[runRng()<0.2+0.6*q?'platesH':'platesL']() : null;
+    // GAS KIT (P3): ~30% walk in masked — a REAL face mask with a part-lived cartridge seated
+    // (die() drops it worn, so hunting masked soldiers is the field source). _mask also steers
+    // the AI: masked soldiers HOLD the haze; unmasked FEAR it (gas-fear in update). No render
+    // tell yet (a mask silhouette = enemy-body GLSL = compile budget) — behavior is the tell.
+    this._mask  = runRng()<0.30 ? ITEM_DEFS.maskFace() : null;
+    if(this._mask){ const f=ITEM_DEFS.gasFilter(); f.life=Math.round(f.lifeMax*(0.25+runRng()*0.65)); this._mask.inv[0][0]=f; }
     // ---- RUCKSACK ROLL: ~55% hump a REAL bag seeded like a crate on legs.
     // ---- it drops WORN in die() and CARRIES the ammo roll — fewer world items.
     this.pack   = runRng()<0.55 ? this.rollPack(q) : null;
@@ -6228,6 +6255,7 @@ class Zealot{
     spawnWorldItem(this.tool,this.position.x,this.position.y+0.8,this.position.z,new Vec3((runRng()-0.5)*2,3,(runRng()-0.5)*2));
     // loot follows gear: they drop exactly what they wore — same item, wear and all
     if(this.helm){ spawnWorldItem(this.helm,this.position.x,this.position.y+0.9,this.position.z,new Vec3((runRng()-0.5)*2.5,3.2,(runRng()-0.5)*2.5)); this.helm=null; }
+    if(this._mask){ spawnWorldItem(this._mask,this.position.x,this.position.y+0.85,this.position.z,new Vec3((runRng()-0.5)*2.5,3,(runRng()-0.5)*2.5)); this._mask=null; }   // the worn mask drops filter-and-all (P3)
     if(this.plates){ spawnWorldItem(this.plates,this.position.x,this.position.y+0.7,this.position.z,new Vec3((runRng()-0.5)*2.5,2.8,(runRng()-0.5)*2.5)); this.plates=null; }
     // the worn bag drops contents-and-all (live .inv rides the item object) and
     // CARRIES the ammo roll — one world item, not five, under the RLIM.ITEMS squeeze
@@ -7230,6 +7258,7 @@ function itemToJSON(it){
   if(it instanceof Ammunition) j.count=it.count;
   if(it instanceof Battery){ j.cap=it.cap; j.charge=it.charge; }
   if(it instanceof Gadget && it.on!==undefined) j.on=it.on;
+  if(it.filter) j.lf=Math.round(it.life);                 // gas filter: remaining breath rides the slot (additive — old blobs lack it, reads full)
   if(it instanceof Armor && it.durMax){ j.dur=it.dur; j.rs=[it.resist.burn,it.resist.bleed]; }
   if(it instanceof Barrel){ j.slots=it.slots.map(itemToJSON); j.muzzle=itemToJSON(it.muzzle); }
   if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
@@ -7254,6 +7283,7 @@ function itemFromJSON(j){
   if(j.count!==undefined) it.count=j.count;
   if(j.cap!==undefined){ it.cap=j.cap; it.charge=Math.min(j.charge,j.cap); }
   if(j.on!==undefined) it.on=j.on;
+  if(it.filter&&j.lf!==undefined) it.life=Math.max(0,Math.min(+j.lf||0,it.lifeMax));   // clamp garbage: a spent filter stays spent, never over-full
   if(it instanceof Armor && it.durMax){
     if(j.dur!==undefined) it.dur=Math.min(Math.max(1,j.dur|0),it.durMax);     // missing → full
     if(j.rs){ it.resist.burn=Math.min(0.6,Math.max(0,+j.rs[0]||0)); it.resist.bleed=Math.min(0.6,Math.max(0,+j.rs[1]||0)); }
@@ -7266,6 +7296,7 @@ function itemFromJSON(j){
   if(it instanceof Armor && j.inv && it.inv){
     for(const cj of j.inv){
       const ch=itemFromJSON(cj); if(!ch) continue;
+      if(it.mask&&!ch.filter){ _retuneOrphans.push(ch); continue; }   // mask seats hold cartridges only — foreign blob content salvages, never vanishes
       if(it.slotMode){                                    // slot-racks (belt/holster): one item per cell, ANY footprint —
         // gridFits below would refuse a 2×2 tool in a 1-row rack and the gun would vanish on load
         if(cj.x!==undefined && it.inv[cj.y] && it.inv[cj.y][cj.x]===null){ it.inv[cj.y][cj.x]=ch; ch.x=cj.x; ch.y=cj.y; }
@@ -7514,6 +7545,9 @@ function tipBrief(it){                                  // the info square's row
   if(it.ration) return {kind:'RATION', rows:['+14 vitality','tastes like the war']};
   if(it.pill) return {kind:'LAST RESORT',
     rows:['every zealot carries one. now you do.','hold it · press [F] twice · the run ends']};
+  if(it.filter) return {kind:'MASK FILTER',
+    rows: it.life>0 ? ['seats in a mask · −45% gas burn','life '+Math.round(100*it.life/it.lifeMax)+'% — breathes down only in the gas']
+                    : ['SPENT — stops nothing','swap a fresh one into the seat']};
   if(it instanceof Battery) return {kind:'BATTERY · '+it.size.toUpperCase(),
     rows: battFunctional(it)
       ? [it.charge.toFixed(0)+' / '+it.cap+' \u26a1', it.cap<it.capMax?'worn: '+it.cap+' of '+it.capMax:'unworn']
