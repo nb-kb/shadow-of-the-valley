@@ -8788,7 +8788,7 @@ function frame(){
   lastRender=Math.max(lastRender+FRAME_MS, now-FRAME_MS);
   ensureFullProgram();          // bind the current level's full variant once it links (else the preview keeps rendering)
   if(_pendingRes){ _pendingRes=false; resize(); }   // apply a deferred auto-res change BEFORE drawing — never after drawArrays, or it clears the frame we just showed (the flicker)
-  const dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
+  const dtRaw=(now-lastT)/1000, dt=Math.min(0.05,dtRaw); lastT=now;
   fpsEma=lerp(fpsEma,1/Math.max(dt,1e-4),0.04);
   pollGamepad();
   physgunInputTick();
@@ -9068,12 +9068,12 @@ function frame(){
   if(DIAG && window.__wantFullRGB){ window.__wantFullRGB=0; window.__fullRGB=centerRGB(); bootDiag(); }  // full render proof, post-swap
 
   // ---- auto resolution: if the GPU can't keep pace, shrink the ray count ----
-  dynResT-=dt;
+  dynResT-=dtRaw;                                              // wall time, not the 0.05-clamped dt — shedding keeps its 1s cadence even at 5fps
   if(dynResT<=0 && isPlayable()){
     dynResT=1.0;                                               // slower cadence + wider dead-band below = no per-half-second sharpness pump
     const before=Math.round(dynScale*20)/20;
     if(fpsEma<48) dynScale=Math.max(0.55,dynScale*0.92);       // losing pace: shed pixels
-    else if(fpsEma>60) dynScale=Math.min(1.0,dynScale*1.04);   // real headroom only: claw them back
+    else if(fpsEma>58) dynScale=Math.min(1.0,dynScale*1.04);   // headroom: claw them back. NOT >60 — the 60fps cap parks fpsEma at ~59.9 on 60Hz panels, so strict >60 never recovered after a hitch
     if(Math.round(dynScale*20)/20!==before) _pendingRes=true;  // DEFER — resize here (post-drawArrays) reallocates+clears the drawing buffer and flashes the just-drawn frame dark
   }
 
