@@ -8422,9 +8422,12 @@ function updatePlayer(dt){
     playerPos.x=_c2.x; playerPos.y=_c2.y-0.95; playerPos.z=_c2.z;
     // idle on tilted dirt: the ground's push-out leans sideways a few mm a frame.
     // small idle displacement is creep, not a wall — a planted stance ignores it.
+    // 0.12 covers the steepest standable slope's push (~0.09 a frame at 45°) so an
+    // idle player HOLDS on 28-45° ground instead of skating off (owner call 8);
+    // guarded by !moving, so walk/sprint/slide/hop never pass through here.
     if(_wasGrounded && !moving){
       const _cd=Math.hypot(playerPos.x-_ix, playerPos.z-_iz);
-      if(_cd>0 && _cd<0.06){ playerPos.x=_ix; playerPos.z=_iz; }
+      if(_cd>0 && _cd<0.12){ playerPos.x=_ix; playerPos.z=_iz; }
     }
     // grounded: resting equilibrium on scaled terrain reads ~0.15 at the feet,
     // on structure floors ~0.04 — 0.22 covers both without licking walls
