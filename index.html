@@ -6239,6 +6239,7 @@ class Zealot{
     this.investigate=null;
     this.target=null;                   // BUILD 3: resolved nearest-hostile {ent,isPlayer,x,y,z} — set each frame by acquireTarget() in update/updateZombie
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;   // COVER/SUPPRESS squad state (set on alarm)
+    this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // P5 MORALE: current break ('flee'|'stand') · its clock · check throttle · re-break calm
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
@@ -6499,11 +6500,35 @@ class Zealot{
 
     let speed=P('enemySpeed')*globSlow(this.position,this), moveTo=null, faceTo=null;   // glue is glue
     if(this.state===2){
+      // ZEALOT MORALE (P5 / spec E): a pressed line zealot can BREAK instead of always pressing —
+      // read ~1/s while it can see its threat: 2+ of {low HP, outnumbered close, faction losing
+      // the war, no cover to take} rolls FLEE (60% — runs the threat bearing out, trigger cold)
+      // or STAND (40% — feet pinned where it broke, fires through its role's gate), held 6-9s,
+      // then a 12s calm before it can break again. Believers never break (the walk IS the bomb);
+      // the undead never read this (mindless — updateZombie has no morale path, the brute rides it).
+      if(this._brkT>0){ this._brkT-=dt; if(this._brkT<=0){ this._brk=null; this._morCd=12; } }
+      if(this._morCd>0) this._morCd-=dt;
       this.investigate=(this.investigate||new Vec3()).set(tx,0,tz);   // .set() reuse — this line runs EVERY alarmed frame (never identity-compared; nulled only on state drops)
       faceTo=this.investigate;
       if(seesLOS){
         this.lostSightT=0;
+        if(!this._believer&&!this._brk&&this._morCd<=0&&(this._morT-=dt)<=0){
+          this._morT=1.0;
+          let sc=this.health<70?1:0, al=0, fo=0, ls=0, lz=0;   // low blood is the first read
+          for(const o of enemies){ if(o===this||o.health<=0) continue;
+            if(o._faction==='soldier') ls++; else lz++;
+            if(o._dormant) continue;
+            const dd=o.position.distanceTo(this.position);
+            if(dd<22){ if(o._faction===this._faction) al++; else fo++; } }
+          if(tgt.isPlayer&&dist<22) fo++;                      // the player counts among the guns pointed at it
+          if(fo>=al+2) sc++;                                   // outnumbered where it stands
+          if(ls+1<lz*0.6) sc++;                                // the war map reads lost (live line count, self included)
+          if(sc>=1&&!this.coverPoint&&!(this.coverPoint=this.findCover(tx,tz))) sc++;   // nothing to duck behind — probed only when already shaky (8 rays)
+          if(sc>=2){ this._brk=runRng()<0.6?'flee':'stand'; this._brkT=6+runRng()*3; this.coverPoint=null; }
+        }
         if(this._believer){ moveTo=this.investigate; this.tryBoom(dt,dist); }   // a bomber only closes in — no retreat, no bullets
+        else if(this._brk==='flee'){}                          // broken and running — the override below owns the feet, the trigger stays cold
+        else if(this._brk==='stand'){ if(this.alarmRole!=='cover'||this.squadMayFire()) this.tryShoot(dt,dist,seesLOS); }   // dug in: advances nowhere, fires through its role's gate
         else if(this.alarmRole==='cover'){
           // SEEK COVER: sit on a spot that breaks the sightline; peek-fire only if the squad allows it
           if(!this.coverPoint||this._coverT<=0){ this.coverPoint=this.findCover(tx,tz); this._coverT=2.5; }
@@ -6524,6 +6549,14 @@ class Zealot{
         moveTo=this.investigate;
         if(this.lostSightT>4){ this.state=1; this.detection=0.6; }
       }
+      // morale override (P5): a broken zealot's feet obey the break, not the role — FLEE runs the
+      // threat bearing straight out, LOS or no LOS (gas fear below still trumps: worse air wins the
+      // argument); STAND holds the ground it broke on, even blind.
+      if(this._brk==='flee'){
+        const rd=Math.max(dist,1e-4);                          // overlapped-spawn zero-dist guard (the retreat idiom)
+        moveTo=(this._brkMv||(this._brkMv=new Vec3())).set(this.position.x-dx/rd*8,0,this.position.z-dz/rd*8);
+        faceTo=moveTo; speed*=1.25;                            // it RUNS, eyes front
+      }else if(this._brk==='stand') moveTo=null;
     }else if(this.state===1){
       speed*=0.8;
       if(this.investigate){
@@ -6778,6 +6811,7 @@ class Zealot{
     }
     this.detection=0; this.state=0; this.investigate=null;
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;
+    this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // a fresh body carries no broken nerve
     this.patrolDir=runRng()*6.28; this.dwellT=0; this._roam=null;   // fresh roam goal on respawn (brute re-picks from its new drop point)
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
