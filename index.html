@@ -4506,6 +4506,23 @@ function resolveTool(tool){
     out.columns.push(lane);
   }
   out.shots=out.columns.flatMap(c=>c.shots);        // convenience for HUD/summaries
+  // TWO-POOL FIRE (beta 1.1.x, MODS.md corrected model): boltless ammo fires ALONGSIDE
+  // the ⚡ cores, never suppressed by them. A column that already fires a core but has NO
+  // ballistic (bolt/slug) shot, yet is fed by a NON-POWDER magazine, gets an implicit
+  // plain BOLT — plain lead, fresh pend (NO relay mods), its own 0-⚡/1-round pool. It
+  // rides the lane so the volley walk fires it SIMULTANEOUSLY with the energy cores; lead
+  // and battery then drain on independent rails — the by-design desync. STRUCTURAL, not
+  // loaded-gated: reload never rebuilds _res, so let the fire loop's okAmmo dry-click an
+  // empty mag instead. Powder mags keep their own synth round (free relay mods want a bolt
+  // core); a mag-only / empty tool still falls to the bare lane below.
+  if(tool) for(const c of out.columns){
+    if(!c.shots.length) continue;                                    // no core here → mag-only; the bare lane fires it
+    if(c.shots.some(s=>s.kind==='bolt'||s.kind==='slug')) continue;  // already ballistic → don't double the lead
+    const mg=columnMag(tool,c.mountIdx,false);
+    if(!mg||mg.powder) continue;                                     // needs a non-powder mag; a powder mag makes its own round
+    c.shots.push({kind:'bolt',pend:freshPend(),cost:0,core:null,spreadAdd:c.spreadAdd,lane:c,powder:false});
+  }
+  out.shots=out.columns.flatMap(c=>c.shots);        // refold: the implicit bolts join the HUD/summary + suppress the bare lane
   // SAW unlocks the whole tool's cycle; a free-standing SLUG weighs it back down.
   // ORDER IS LAW: saw floor first, slug penalty after — the woodchipper is a trap on purpose.
   if(out.shots.some(sh=>sh.kind==='saw')) out.fireRate=0.06;
