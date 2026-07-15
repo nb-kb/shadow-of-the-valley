@@ -8977,7 +8977,7 @@ function frame(){
 
   // items (nearest first) — cull follows the fog wall in: past uFar nothing uploads
   renderItemsBuf.length=0;
-  const cullR2=Math.min(60, dayNight.farE+5)**2;
+  const cullR2=Math.min(60, dayNight.farE*P('viewDist')+5)**2;   // × the goggles VIEW dial like uFar itself — at CLOSE, items behind the pulled-in fog wall must not eat the 16 slots
   for(const w of worldItems){
     const d=(w.pos.x-playerPos.x)**2+(w.pos.y-playerPos.y)**2+(w.pos.z-playerPos.z)**2;
     if(d<cullR2){ w._d2=d; renderItemsBuf.push(w); }   // _d2 rides the wrapper (the enemy-loop idiom) — no [d,w] pair alloc per item per frame
