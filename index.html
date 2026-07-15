@@ -7273,13 +7273,19 @@ function seedLevelSpawns(L){
       const an=poi.anchors[Math.floor(rng()*poi.anchors.length)];   // one cover anchor = the knot's core
       for(let n=0;n<perHot;n++) drop(an[0],an[1],5,2.2,'soldier');   // ~5m disc → a tight knot (brief: cluster ~within 8m)
     }
-    // BRUTE — exactly one roamer (zombie faction), central forest cover; a big-disc fallback guarantees it lands
-    if(!drop(22,65,12,4,'brute') && !drop(0,10,22,6,'brute') && POI.length) enemies.push(new Zealot(POI[0].c[0],POI[0].c[1],'brute'));   // guaranteed: exactly one brute always lands (POI centers are valid by construction)
+    // P5 FACTION SEPARATION (spec E): every undead anchor keeps >=60m from BOTH hot knots, so each
+    // faction coheres on its own ground before the war finds the seam — 34m acquire + 14m loop disc
+    // + 5m knot still leaves daylight. POI centers sit >=85m apart by authoring, so this only ever
+    // trims ZONES (forest / NE belt when armory / facility run hot); the fallback is belt-and-braces.
+    const farOf=c=>hot.every(hi=>!POI[hi]||Math.hypot(c[0]-POI[hi].c[0],c[1]-POI[hi].c[1])>=60);
+    // BRUTE — exactly one roamer (zombie faction), central forest cover unless a hot knot sits close; a big-disc fallback guarantees it lands
+    if(!(farOf([22,65])&&drop(22,65,12,4,'brute')) && !drop(0,10,22,6,'brute') && POI.length) enemies.push(new Zealot(POI[0].c[0],POI[0].c[1],'brute'));   // guaranteed: exactly one brute always lands (POI centers are valid by construction)
     // ZOMBIES — loose loops at the NON-hot POIs + the dedicated zombie zones/outskirts (wide radius, kept apart)
     const loops=[];
-    for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) loops.push(POI[i].c);
+    for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0&&farOf(POI[i].c)) loops.push(POI[i].c);
     loops.push(...loops.slice());                        // HAZE TURF (P3): the hazed (non-hot) POIs enter the round-robin TWICE — ~2 undead each there before a zone sees one (the spec's higher concentration; unmasked soldiers shun the same ground, so the faction map reinforces itself)
-    for(const zz of ZZ) loops.push(zz);
+    for(const zz of ZZ) if(farOf(zz)) loops.push(zz);
+    if(!loops.length) for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) loops.push(POI[i].c);   // separation must never starve the horde — unfiltered non-hot POIs win over an empty list
     for(let n=0;n<N_ZOMB&&loops.length;n++){ const lc=loops[n%loops.length]; drop(lc[0],lc[1],14,5,'zombie'); }
   }else{
     for(const spec of (L.spawn.zealots||[])){
