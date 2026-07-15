@@ -6445,10 +6445,23 @@ class Zealot{
   }
   settle(dt){
     this.velocity.y=0;                          // enemies are GROUND-BOUND: never carry vertical momentum. Root fix for "flying into the sky" — shoves (KINETIC/WAVE/blast) ADD to velocity.y and the move step only ever set x/z, so y accumulated every frame and launched them upward faster than settle's 6/s descent.
-    const c=new Vec3(this.position.x,this.position.y+0.9,this.position.z);
-    stepOver(c,0.42,0);                          // STEP-OVER: clamber a low ledge instead of catching (single body sphere -> headroom implicit)
+    // STEP-OVER split by faction (owner call 6): SOLDIERS probe a FEET sphere like the player
+    // (cap ~0.46m — hip-high ruin walls / truck beds read as cover against them again, jump-only),
+    // headY hands them the player's overhang guard at their head line. The UNDEAD keep the tall
+    // body-sphere clamber (~0.9m) as flavor.
+    const zk=this._faction==='zombie';
+    const c=zk?new Vec3(this.position.x,this.position.y+0.9,this.position.z)
+              :new Vec3(this.position.x,this.position.y+0.35,this.position.z);
+    let lift=false;
+    if(this._nsT>0) this._nsT-=dt;               // FAILED-CLAMBER LATCH cooling — no lift re-tries while hot
+    else lift=zk?stepOver(c,0.42,0):stepOver(c,0.34,this.position.y+0.9);
+    if(!zk) c.y+=0.55;                           // re-center feet probe -> body sphere for the push-out
     resolveCollision(c,0.42);
     this.position.set(c.x,c.y-0.9,c.z);
+    if(lift){ this._lftT=0.3; this._lftY=this.position.y; }
+    else if(this._lftT>0){ this._lftT-=dt;
+      if(this.position.y<this._lftY-0.3){ this._nsT=1.2; this._lftT=0; }   // the lift SANK straight back: a too-tall face, not a step — stop re-trying (kills the 8-12Hz face-pogo). A real clamber rides up and over and never trips this
+    }
     const g=mapWorldJS(this.position.x,this.position.y+0.05,this.position.z);
     if(g>0.55) this.position.y-=6*dt;          // falling
     else{
