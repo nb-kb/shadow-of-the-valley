@@ -3390,13 +3390,17 @@ const ITEM_DEFS={
   harnessH:   ()=>new Armor('Assault Harness',2,3,'#4a5640','harness',{invCols:4,invRows:4}),
   platesL:    ()=>new Armor('Scrap Plates',2,2,'#5c5c60','plates',{damageMult:0.75,dur:20}),
   platesH:    ()=>new Armor('Ceramic Plates',2,2,'#6a6a70','plates',{damageMult:0.6,dur:30}),
-  helmetCap:  ()=>new Armor('Padded Cap',2,1,'#6b5a3e','helmet',{reduce:0.94,dur:10}),
-  helmetSteel:()=>new Armor('Steel Pot',2,1,'#61646a','helmet',{reduce:0.88,dur:18}),
-  helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14}),
+  // P5 HEADSHOT TIERS (spec F): hs = headSHOTS the dome eats before it shatters — LIGHT/tier-1 eats
+  // 1 (2 shots end you), HEAVY/tier-2 eats 2 (3 end you), a bare head dies to ONE. Symmetric law:
+  // crackHelm spends the enemy's, damagePlayer's head channel spends yours; dur stays body-wear.
+  // The Rig reads heavy (cores-tier find, reduce beside the Pot) — owner may re-tier it light.
+  helmetCap:  ()=>new Armor('Padded Cap',2,1,'#6b5a3e','helmet',{reduce:0.94,dur:10,hs:1}),
+  helmetSteel:()=>new Armor('Steel Pot',2,1,'#61646a','helmet',{reduce:0.88,dur:18,hs:2}),
+  helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14,hs:2}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
   // ---- gas kit (CONTAINMENT P3): two masks, one cartridge — the PROTECTION lives in LIVE filters (−45% each, −90% cap; radProtection reads the worn seats) ----
-  maskHelm:   ()=>new Armor('Respirator Helm',2,1,'#5f6b4e','helmet',{reduce:0.92,dur:12,mask:true,invCols:2,invRows:1}),   // LIGHT/tier-1 head armor + gas: 2 filter seats — max gas safety forgoes the heavy helmet (P5's headshot tiers read the light class)
+  maskHelm:   ()=>new Armor('Respirator Helm',2,1,'#5f6b4e','helmet',{reduce:0.92,dur:12,hs:1,mask:true,invCols:2,invRows:1}),   // LIGHT/tier-1 head armor + gas: 2 filter seats — max gas safety forgoes the heavy helmet (hs:1 = the light headshot class, as promised)
   maskFace:   ()=>new Armor('Filter Mask',2,1,'#6a7258','face',{mask:true,invCols:1,invRows:1}),   // face-slot respirator: 1 seat, rides UNDER any helmet — max head armor costs a filter seat
   gasFilter:  ()=>{ const it=new Item('Gas Filter',1,1,'#8a8f6a'); it.filter=true; it.lifeMax=600; it.life=600; return it; },   // cartridge: breathes down ONLY in the gas (~1–2 casual runs), then spent
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it · +4⚡'),
@@ -3462,7 +3466,7 @@ class Armor extends Item{
   desc(){
     switch(this.armorType){
       case 'plates': return 'incoming ×'+this.damageMult+this.wearTag();
-      case 'helmet': return 'incoming ×'+this.reduce+(this.medPort?' · med port · dormant':'')+(this.mask?' · '+maskLine(this):'')+this.wearTag();
+      case 'helmet': return 'incoming ×'+this.reduce+' · stops '+(this.hs||1)+' headshot'+((this.hs||1)>1?'s':'')+(this.medPort?' · med port · dormant':'')+(this.mask?' · '+maskLine(this):'')+this.wearTag();
       case 'face':   return maskLine(this)+' · worn under any helmet';
       case 'goggles': case 'headphones': return 'a settings device — dials live inside'+this.foldTag();
       default: return this.invCols? this.invCols+'×'+this.invRows+' pockets'+this.foldTag():'';
@@ -5660,14 +5664,15 @@ function enemyBodyDist(en,px,py,pz){                  // point → capsule-axis 
 }
 function crackHelm(en){
   if(!en.helm) return;
-  if(--en.helm.dur>0){ playSound('click'); return; }
+  en.helm.hs=(en.helm.hs===undefined?1:en.helm.hs)-1;   // P5 (spec F): headshots spend hs (1 light / 2 heavy), not dur — a dropped helm carries its cracks
+  if(en.helm.hs>0){ playSound('click'); return; }
   en.helm=null; playSound('hit');                     // rings off — the dome vanishes with it
   const hp=enemyHeadPos(en,_hpV);
   addDyn(hp.x,hp.y+0.08,hp.z,[0.9,0.85,0.6],0.8,0.06);
 }
 function headshotDmg(en,dmg,head){
   if(!head) return dmg;
-  if(!en.helm) return dmg*4;
+  if(!en.helm) return en._brute?dmg*4:9999;   // P5 (spec F): a bare-head shot ENDS a rank body — the same law damagePlayer wears. The 800hp BRUTE alone keeps the old x4 (a one-tap mini-boss guts the lockbox hunt — owner-flagged)
   crackHelm(en);
   return dmg;
 }
@@ -5825,7 +5830,12 @@ function updateProjectiles(dt){
           if(dead) continue;
         }
         const d=Math.hypot(pr.pos.x-playerPos.x,pr.pos.y-(playerPos.y+0.9),pr.pos.z-playerPos.z);
-        if(d<(pr.kind==='slug'?0.7:0.42)){
+        // P5 HEADSHOT SYMMETRY (spec F): the player's head is its own ball riding the eye line —
+        // baseHeight ducks with crouch/slide, lean carries it sideways. They still AIM center-mass;
+        // spread makes the lucky one. Impact hits pass the head flag; DRILL ticks stay body-channel.
+        const _hx=playerPos.x+Math.cos(cameraYaw)*playerPos.currentLean, _hz=playerPos.z-Math.sin(cameraYaw)*playerPos.currentLean;
+        const pHead=Math.hypot(pr.pos.x-_hx,pr.pos.y-(playerPos.y+playerPos.baseHeight+0.05),pr.pos.z-_hz)<0.21;
+        if(pHead||d<(pr.kind==='slug'?0.7:0.42)){
           if(pr.pierce>0){                               // DRILL: the body is a tunnel — one bill per body per 0.1s
             if(!pr._dHit) pr._dHit=new Map();
             const last=pr._dHit.get(playerPos);
@@ -5837,7 +5847,7 @@ function updateProjectiles(dt){
             }
             continue;                                    // keep flying
           }
-          damagePlayer(pr.dmg); if(gen!==_worldGen) return;   // the killing shot: onDeath cleaned the fresh spawn — no re-dose, no payload after it
+          damagePlayer(pr.dmg,pHead); if(gen!==_worldGen) return;   // the killing shot: onDeath cleaned the fresh spawn — no re-dose, no payload after it
           if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(playerPos,pr); dead=impactOrPierce(pr,playerPos.x,playerPos.y+0.9,playerPos.z); continue; }   // spark/boom dose rides the explosion — once; slug flies fat
       }
       if(pr.owner==='player' && pr.kind!=='pick'){       // PICK eats stone, spares flesh
@@ -6084,13 +6094,24 @@ function clearHudFx(){
   document.getElementById('radStrip').classList.add('hidden'); _radTintO=0; _radSig='';
   playerPos.viewKick=0; playerPos.kickV=0; playerPos.pitchPend=0;
 }
-function damagePlayer(dmg){
-  // ---- armor seam: plates multiply, helmet shaves. Enemy fire aims center-mass, so
-  // ---- there is no head channel to read on received fire yet — both pieces wear a
-  // ---- point per absorbed hit instead; medPort stays dormant.
+function damagePlayer(dmg,head){
+  // ---- armor seam: plates multiply, helmet shaves; medPort stays dormant.
+  // ---- P5 HEADSHOT SYMMETRY (spec F): enemy rounds read the head sphere (updateProjectiles) —
+  // ---- bare head: the lucky shot ENDS you, same law the horde wears. A worn helm eats it
+  // ---- instead (hs cracks: 1 light / 2 heavy) and SHATTERS when spent; plates never read heads.
   if(FLAGS.god||gameState!=='play') return;
-  if(equip.plates){ dmg*=equip.plates.damageMult; armorWear('plates'); }
-  if(equip.helmet){ dmg*=equip.helmet.reduce; armorWear('helmet'); }
+  if(head){
+    const h=equip.helmet;
+    if(!h) dmg=playerPos.health;
+    else{
+      h.hs=(h.hs===undefined?1:h.hs)-1; dmg*=h.reduce;
+      if(h.hs>0){ toast('HELMET CRACKED'); playSound('click'); }
+      else{ h.dur=1; armorWear('helmet'); }            // spent — ride the break path: destroy, spill seated filters, 'BROKE' toast
+    }
+  }else{
+    if(equip.plates){ dmg*=equip.plates.damageMult; armorWear('plates'); }
+    if(equip.helmet){ dmg*=equip.helmet.reduce; armorWear('helmet'); }
+  }
   playerPos.health=Math.max(0,playerPos.health-dmg);
   playSound('hurt');
   const v=document.getElementById('vignette');
@@ -7507,6 +7528,7 @@ function itemToJSON(it){
   if(it instanceof Gadget && it.on!==undefined) j.on=it.on;
   if(it.filter) j.lf=Math.round(it.life);                 // gas filter: remaining breath rides the slot (additive — old blobs lack it, reads full)
   if(it instanceof Armor && it.durMax){ j.dur=it.dur; j.rs=[it.resist.burn,it.resist.bleed]; }
+  if(it instanceof Armor && it.hs!==undefined) j.hs=it.hs;   // P5: headshot cracks ride the item (additive v6 field — old blobs just read fresh)
   if(it instanceof Barrel){ j.slots=it.slots.map(itemToJSON); j.muzzle=itemToJSON(it.muzzle); }
   if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
   if(it instanceof Tool){ j.slots=it.base.slots.map(itemToJSON); j.muzzle=itemToJSON(it.base.muzzle);
@@ -7535,6 +7557,7 @@ function itemFromJSON(j){
     if(j.dur!==undefined) it.dur=Math.min(Math.max(1,j.dur|0),it.durMax);     // missing → full
     if(j.rs){ it.resist.burn=Math.min(0.6,Math.max(0,+j.rs[0]||0)); it.resist.bleed=Math.min(0.6,Math.max(0,+j.rs[1]||0)); }
   }
+  if(it.hs!==undefined&&j.hs!==undefined) it.hs=Math.min(Math.max(1,j.hs|0),it.hs);   // P5: clamp to the def's tier — garbage never over-crowns a cap (dur idiom)
   if(it instanceof Barrel){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } }); it.muzzle=itemFromJSON(j.muzzle); }   // pre-retune saves ran longer — tail mods salvage, never vanish
   if(it instanceof Platform){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } });   // same clamp as the Barrel — overlong saves salvage, never overrun
     if(j.cycles) it.cycles=j.cycles.slice(); }
