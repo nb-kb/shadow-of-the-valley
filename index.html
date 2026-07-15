@@ -2284,6 +2284,28 @@ let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying
 let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. RAID-state, live: the gate terminal (interact block) sets it, BOTH SDF twins carve the notch off it (levelSDF uContain.w / levelSdfJS), and seedLevelSpawns RE-LOCKS it at every CAMP raid seed.
 let outskirtsTime=0;    // AREA-1 CONTAINMENT (P2b): lifetime seconds the player has lingered in the outskirts (past the OPEN gate) — the suicide-run PR metric. Session-scoped for now; the stats page (System I) wires save persistence + the terminal readout (reuse THIS global, don't redeclare).
 let zombiesKilled=0;    // AREA-1 CONTAINMENT (System I): lifetime undead-kill personal record — the suicide-run score-chase. Counts undead die()s the PLAYER landed the last hit on (shamblers + brute; owner call 11 — soldier-inflicted undead deaths don't score), NOT soldiers/believers (that stays run-scoped `kills`). Persisted in the v6 slot; survives raids/deaths, only START OVER (newGame) or a corrupt slot zeroes it.
+// AREA-1 CONTAINMENT (P4) — LAB LOCKS: region id -> its OWN card (per-lock defKey match,
+// item 14: kind 'keycard' stays identity-only, no card opens another card's door). New
+// locked area = ONE entry here + a gate/gates on its region. LOCKED seals the gate carve
+// in BOTH SDF twins (width 0 = no carve — the horde-gate idiom, zero new GLSL): JS reads
+// lockShut() live, buildLevelTexData packs the same 0 (levelTexDirty re-packs on unlock).
+const LOCKS={ testing:{card:'testCard', label:'TESTING RANGE GATE', cardName:'RANGE KEYCARD', col:'#2e86c8'},
+              lab:    {card:'labCard',  label:'WEAPON LAB GATE',    cardName:'LAB KEYCARD',   col:'#8a3ec8'} };
+let _lockOpen={};       // region id -> true once carded open THIS raid (v6 blob: labsOpen). seedLevelSpawns re-locks every CAMP raid beside _gateOpen — the card is not consumed.
+const lockShut=r=>!!LOCKS[r.id]&&!_lockOpen[r.id];   // ONE predicate, read by BOTH twins — they cannot drift
+let _lockDoors=[];      // [{rid,x,z}] gate interact points, derived from the ACTIVE level's region data at deploy (no hand-kept coords)
+function buildLockDoors(L){
+  const out=[];
+  for(const r of (L.regions||[])){
+    if(!LOCKS[r.id]||!r.box) continue;
+    const bx=r.box, cx=(bx[0]+bx[2])/2, cz=(bx[1]+bx[3])/2;
+    const pt=(ax,off,abs)=>ax==='E'?{x:bx[2],z:abs?off:cz+off}:ax==='W'?{x:bx[0],z:abs?off:cz+off}
+                          :ax==='N'?{x:abs?off:cx+off,z:bx[3]}:{x:abs?off:cx+off,z:bx[1]};
+    if(r.gate) out.push({rid:r.id,...pt(r.gate[0],r.gate[1],false)});               // WALLS: offset is center-relative (regionSdfJS carves cz+g[1])
+    if(r.gates) for(const g of r.gates) out.push({rid:r.id,...pt(g[0],g[1],true)}); // FENCE: offsets are ABSOLUTE (the pack pre-subtracts center)
+  }
+  return out;
+}
 
 // ======================================================================================
 // LEVEL MODULE — authored levels as self-contained data. A level is: bounds + region
@@ -2319,10 +2341,10 @@ LEVELS.area1={
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
     {id:'crateA', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-114,-92,-102,-78],
      crates:[[-110,-86,0.85],[-108.7,-85.1,0.7],[-104,-80,0.75],[-112,-79,0.9]]},
-    {id:'crateB', loot:['mods','common'], kind:LVL.KIND.PROPS, box:[104,-70,120,-50],
-     crates:[[108,-64,0.9],[109.3,-63,0.7],[116,-56,0.8],[106,-54,0.7]]},
-    {id:'crateC', loot:['mods','rare'], kind:LVL.KIND.PROPS, box:[128,-80,140,-68],
-     crates:[[132,-76,0.85],[133.4,-75.1,0.7],[137,-71,0.75]]},
+    {id:'crateB', loot:['mods','common'], lockedBy:'testing', kind:LVL.KIND.PROPS, box:[104,-70,120,-50],
+     crates:[[108,-64,0.9],[109.3,-63,0.7],[116,-56,0.8],[106,-54,0.7]]},   // P4: sits INSIDE the locked range — guaranteed cards must not seed here
+    {id:'crateC', loot:['mods','rare'], lockedBy:'testing', kind:LVL.KIND.PROPS, box:[128,-80,140,-68],
+     crates:[[132,-76,0.85],[133.4,-75.1,0.7],[137,-71,0.75]]},             // P4: sits INSIDE the locked range — guaranteed cards must not seed here
     {id:'crateD', loot:['common'], kind:LVL.KIND.PROPS, box:[-142,-142,-134,-134],
      crates:[[-140,-140,0.8],[-138.6,-139.2,0.65],[-136,-136,0.75]]},
     {id:'crateE', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-67,-142,-59,-134],
@@ -2439,7 +2461,7 @@ LEVELS.area1={
                  tentsB:['common','gear','common'], lab:['gear','rare','cores'],
                  armory:['mods','cores','rare'] },
     lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
-    guaranteed:['gateCard'],   // CONTAINMENT: one horde-gate keycard always seeds a crate — the gate can never soft-lock a raid
+    guaranteed:['gateCard','testCard','labCard'],   // CONTAINMENT: each missing keycard always seeds an UNLOCKED crate (elig skips lockedBy) — no lock can soft-lock a raid, and a card lost to the teeth re-seeds next raid
   },
 };
 LEVELS.hideout={
@@ -2551,7 +2573,7 @@ function regionSdfJS(r,px,py,pz){
     const inner=_sdBox3(px,py,pz,cx,r.h/2,cz,hx-0.5,r.h/2+0.2,hz-0.5);
     d=Math.max(outer,-inner);
     const g=r.gate;                                          // gate gap on one face
-    if(g){ const gw=g[2];                                    // carve centered at y=1.5 — GLSL lvHole hh
+    if(g){ const gw=lockShut(r)?0:g[2];                      // carve centered at y=1.5 — GLSL lvHole hh. P4 LAB LOCK: width 0 while locked = no carve = sealed (TWIN: buildLevelTexData packs the same 0 — the horde-gate idiom)
       const gd=(g[0]==='E'||g[0]==='W')
         ? _sdBox3(px,py,pz,(g[0]==='E'?bx[2]:bx[0]),1.5,cz+g[1],1.2,1.5,gw)
         : _sdBox3(px,py,pz,cx+g[1],1.5,(g[0]==='N'?bx[3]:bx[1]),gw,1.5,1.2);
@@ -2618,9 +2640,10 @@ function regionSdfJS(r,px,py,pz){
     const inner=_sdBox3(px,py,pz,cx,r.h/2+0.2,cz,hx-0.22,r.h/2+0.4,hz-0.22);
     d=Math.max(outer,-inner); m=14.0;
     for(const g of r.gates){
+      const gw=lockShut(r)?0:2.2;                            // P4 LAB LOCK: width 0 while locked = no carve = sealed (TWIN: buildLevelTexData packs the same 0)
       const gd=(g[0]==='E'||g[0]==='W')
-        ? _sdBox3(px,py,pz,(g[0]==='E'?bx[2]:bx[0]),1.3,g[1],0.8,1.3,2.2)
-        : _sdBox3(px,py,pz,g[1],1.3,(g[0]==='N'?bx[3]:bx[1]),2.2,1.3,0.8);
+        ? _sdBox3(px,py,pz,(g[0]==='E'?bx[2]:bx[0]),1.3,g[1],0.8,1.3,gw)
+        : _sdBox3(px,py,pz,g[1],1.3,(g[0]==='N'?bx[3]:bx[1]),gw,1.3,0.8);
       d=Math.max(d,-gd); }
     if(r.blocks) for(const bl of r.blocks){
       const bd=_sdBox3(px,py,pz,bl[0],0.9,bl[1],1.1,0.9,0.5);
@@ -2730,7 +2753,7 @@ function buildLevelTexData(level,bake){
       if(B[3]>6||C[2]>4||C[3]>4) console.warn('ROAD prim count over GLSL loop cap (GPU drops the rest):',r.id); }
     if(r.kind===K.WALLS){
       B=[r.kind,r.h,0,r.bldgH||0];
-      const g=r.gate; items.push([axis[g[0]],g[1],g[2],0]);
+      const g=r.gate; items.push([axis[g[0]],g[1],lockShut(r)?0:g[2],0]);   // P4 LAB LOCK twin: locked packs a zero-width gate — lvHole carves nothing (JS twin: regionSdfJS gw)
       if(r.bldg){ const b2=r.bldg;
         items.push([(b2[0]+b2[2])/2,(b2[1]+b2[3])/2,(b2[2]-b2[0])/2,(b2[3]-b2[1])/2]);
         const dr=r.door; items.push([axis[dr[0]],dr[1],dr[2]*0.5,r.boards?1:0]); }
@@ -2743,7 +2766,7 @@ function buildLevelTexData(level,bake){
       // door offsets are authored ABSOLUTE; lvHole adds region center, so pre-subtract it (E/W→z, N/S→x)
       r.doors.forEach(dr=>{ const a=axis[dr[0]]; items.push([a, dr[1]-(a<1.5?cz:cx), 0.95, 0]); }); }
     if(r.kind===K.FENCE){ B=[r.kind,r.h,0,0];
-      r.gates.forEach(g=>{ const a=axis[g[0]]; items.push([a, g[1]-(a<1.5?cz:cx), 2.2, 1]); });
+      r.gates.forEach(g=>{ const a=axis[g[0]]; items.push([a, g[1]-(a<1.5?cz:cx), lockShut(r)?0:2.2, 1]); });   // P4 LAB LOCK twin: locked packs zero-width gates (JS twin: regionSdfJS gw)
       r.blocks.forEach(b2=>items.push([b2[0],b2[1],0,0]));
       if(items.length>10) console.warn('FENCE item count over GLSL loop cap (GPU drops the rest):',r.id); }
     if(r.kind===K.PITS){ B=[r.kind,0,r.trenchD,0];
@@ -3383,6 +3406,8 @@ const ITEM_DEFS={
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
   // --- keycards: identity-only Gadgets (kind read by locks; no per-kind behavior) ---
   gateCard:   ()=>new Gadget('Horde Keycard','#c8a12e','keycard','A scarred access card — trips the horde gate at the north incline.'),
+  testCard:   ()=>new Gadget('Range Keycard','#2e86c8','keycard','A blue access card — opens the weapons-testing fence gates.'),   // P4: color matches its lock's prompt (LOCKS.testing)
+  labCard:    ()=>new Gadget('Lab Keycard','#8a3ec8','keycard','A violet access card — opens the weapon-lab compound gate.'),      // P4: color matches its lock's prompt (LOCKS.lab)
 };
 for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
   ITEM_DEFS[k]=()=>{ const it=f(); it.defKey=k; return it; }; }
@@ -4284,6 +4309,22 @@ function updateInteract(dt){
                             :'GATE TERMINAL — <span style="color:var(--exposed)">LOCKED</span> · HORDE KEYCARD REQUIRED', true);
         return;
       }
+    }
+    // AREA-1 LAB LOCKS (P4) — the gate-terminal diegesis, once per sealed doorway: walk
+    // its OWN card (defKey match) to the gate, E opens the lock for THIS raid. Both twins
+    // reopen together: JS via lockShut(), the shader via the levelTexDirty re-pack.
+    if(isPlayable() && !uiOpen()) for(const dg of _lockDoors){
+      if(_lockOpen[dg.rid]) continue;                     // OPEN → no prompt, no dead zone (the carved gap is self-evident)
+      const _dx=playerPos.x-dg.x, _dz=playerPos.z-dg.z;
+      if(_dx*_dx+_dz*_dz>=36) continue;                   // same ~6m reach as the horde gate controls
+      const lk=LOCKS[dg.rid], _card=findDefOnPlayer(lk.card);
+      if(pressed('interact')){
+        if(_card){ _lockOpen[dg.rid]=true; levelTexDirty=true; toast(lk.label+' UNLOCKED'); playSound('pickup'); }
+        else { toast(lk.cardName+' REQUIRED'); playSound('empty'); }
+      }
+      setPrompt(_pr, _card?lk.label+' — <b>E</b> UNLOCK'
+                          :lk.label+' — <span style="color:var(--exposed)">LOCKED</span> · <span style="color:'+lk.col+'">'+lk.cardName+'</span> REQUIRED', true);
+      return;
     }
   }
   // the crosshair probe is a full world march — 12Hz is plenty for a prompt;
@@ -6980,6 +7021,7 @@ function deployTo(levelId){
   if(L.kind==='authored'){
     TRAVEL=null;                              // arrival ends the leg — stale legs never survive a death or a debug jump
     activeLevel=L;
+    _lockDoors=buildLockDoors(L);             // P4: gate interact points derive from THIS level's region data (hideout carries none)
     levelBake=bakeLevel(L);
     levelTexDirty=true;
     const _ins = L.insertions ? L.insertions[Math.floor(runRng()*L.insertions.length)] : L.insertion;
@@ -6995,7 +7037,7 @@ function deployTo(levelId){
     if(levelId==='hideout'){ playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; }  // home stanches open wounds — the burn scar still wants aloe
     gameState = levelId==='hideout' ? 'hideout' : 'play';
   }else{
-    activeLevel=null; levelBake=null;
+    activeLevel=null; levelBake=null; _lockDoors=[];
     gameState='play';
     resetLevel();                       // the endless valley keeps its ring machinery (crates seed inside)
     playerPos.x=0; playerPos.z=0; playerPos.y=0;
@@ -7031,18 +7073,18 @@ const lockLegInv =Array(LOCK_LEG_ROWS ).fill(null).map(()=>Array(LOCK_LEG_COLS )
 let crateRegistry=[], lootCrate=null;
 function buildCrateRegistry(L){
   crateRegistry=[]; lootCrate=null;
-  const add=(c,tiers)=>{
+  const add=(c,tiers,lockedBy)=>{
     if(c[3]==='stash'){                                   // THE STASH: persistent grid, never seeded
       crateRegistry.push({x:c[0], z:c[1], size:c[2], inv:stashInv,
                           invCols:STASH_COLS, invRows:STASH_ROWS, tiers:[], stash:true});
       return;
     }
     const inv=Array(3).fill(null).map(()=>Array(3).fill(null));
-    crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3, tiers});
+    crateRegistry.push({x:c[0], z:c[1], size:c[2], inv, invCols:3, invRows:3, tiers, lockedBy});
   };
   for(const r of (L.regions||[])){
     if(r.kind!==LVL.KIND.PROPS||!r.crates) continue;
-    for(const c of r.crates) add(c, r.loot||['common']);
+    for(const c of r.crates) add(c, r.loot||['common'], r.lockedBy);   // P4: lockedBy rides the entry — guaranteed cards skip crates behind that lock
   }
   if(L.crates) for(const c of L.crates) add(c, L.crateTiers||['common']);
   if(L.kind==='rings'){
@@ -7126,6 +7168,7 @@ function seedLevelSpawns(L){
     const half=Math.floor(POI.length/2)||1, c=_poiRot%half, hot=[c, c+half];
     _poiRot=(_poiRot+1)%half;
     _gateOpen=false;   // per-raid RE-LOCK — gateOpen is RAID-state (the SAVE_VER 6 note files it so): every fresh CAMP raid seals the notch, and the guaranteed gateCard below seeds against the sealed gate. loadGame's override still works (saves are hideout-terminal-only, so a load never lands mid-raid).
+    _lockOpen={};      // P4: the lab locks re-seal on the same law — cards persist, doors don't (deployTo already set levelTexDirty, so the sealed pack uploads before first draw)
     _hazedPOIs=[];     // HAZE MAP (P3): every NON-hot POI carries the radioactive haze THIS raid — re-rolled here, the same per-raid site as the rotation, so the 'THIS raid' comment stays true; radAt()/the gas-fog uniforms read it, loadGame's override keeps a saved split
     for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) _hazedPOIs.push(i);
     const N_SOLD=10, N_ZOMB=9;                           // + 1 brute = 20 (RLIM.ENEMIES) — single-site dials
@@ -7193,13 +7236,15 @@ function seedLevelSpawns(L){
   for(const k of (L.spawn.guaranteed||[])){
     if(!ITEM_DEFS[k]) continue;
     if(k==='gateCard'&&_gateOpen) continue;        // belt-and-braces: an OPEN gate wants no fresh card (the per-raid re-lock above keeps this moot today)
+    let openLk=false; for(const rid in LOCKS) if(LOCKS[rid].card===k&&_lockOpen[rid]) openLk=true;   // P4: same belt-and-braces for an OPEN lab's card
+    if(openLk) continue;
     const owns=g=>!!g&&g.flat().some(x=>x&&(x.defKey===k||(x.inv&&x.inv.flat().some(y=>y&&y.defKey===k))));
     let has=crateRegistry.some(cr=>owns(cr.inv))
          || EQUIP_SLOTS.some(s=>equip[s]&&(equip[s].defKey===k||owns(equip[s].inv)));
     if(!has) invArmWalk(x=>{ if(x.defKey===k) has=true; });
     if(has) continue;
     const it=ITEM_DEFS[k]();
-    const elig=crateRegistry.filter(cr=>!cr.stash);
+    const elig=crateRegistry.filter(cr=>!cr.stash&&!cr.lockedBy);   // P4: a promised card never seeds BEHIND a lock — no card-to-get-the-card trap
     while(elig.length){ const cr=elig.splice(Math.floor(rng()*elig.length),1)[0]; if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break; }
   }
 }
@@ -7479,7 +7524,8 @@ function saveGame(slot){
               equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
               params, poiRot:_poiRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},
               lockEpic, lockLeg, hazed:_hazedPOIs, gateOpen:_gateOpen,
-              zombiesKilled, outskirtsTime};   // v6 CONTAINMENT scaffold — lockboxes empty, raid-state reserved; zombiesKilled/outskirtsTime = System-I personal-record counters (scalars, additive — old blobs just lack them)
+              labsOpen:Object.keys(_lockOpen).filter(k=>_lockOpen[k]===true),   // P4 raid-state, additive — same law as gateOpen (v6 unshipped, no ver bump)
+              zombiesKilled, outskirtsTime};   // v6 CONTAINMENT scaffold — zombiesKilled/outskirtsTime = System-I personal-record counters (scalars, additive — old blobs just lack them)
   try{ ls.setItem(SAVE_KEY(slot), JSON.stringify(blob)); }
   catch(e){ toast('SAVE FAILED — '+(e&&e.name==='QuotaExceededError'?'MEMORY FULL':'THE TERMINAL REFUSES')); playSound('empty'); return; }
   const m=saveMeta(slot);                                  // trust the disk, not the write: read the slot BACK
@@ -7554,6 +7600,7 @@ function loadGame(slot){
     _poiRot=(Number.isInteger(b.poiRot)&&b.poiRot>=0&&b.poiRot<6)?b.poiRot:0;   // POI rotation rides the slot (v5); missing/corrupt → 0
     _hazedPOIs=Array.isArray(b.hazed)?b.hazed.filter(i=>Number.isInteger(i)&&i>=0&&i<LEVELS.area1.spawn.pois.length):[];   // v6 raid-state; missing/corrupt/out-of-range → no haze (radAt indexes POIs with these)
     _gateOpen=b.gateOpen===true;                                                // v6 raid-state; only a real true opens (missing/corrupt/garbage → gate LOCKED)
+    _lockOpen={}; if(Array.isArray(b.labsOpen)) for(const k of b.labsOpen) if(LOCKS[k]) _lockOpen[k]=true;   // P4 raid-state; unknown ids drop, missing/garbage → all labs LOCKED
     zombiesKilled=Number.isFinite(b.zombiesKilled)?b.zombiesKilled:0;            // v6 PR (System I); older/absent/garbage → 0
     outskirtsTime=Number.isFinite(b.outskirtsTime)?b.outskirtsTime:0;            // v6 PR (System I); older/absent/garbage → 0
   }catch(e){
@@ -7563,7 +7610,7 @@ function loadGame(slot){
     for(const row of lockEpicInv) row.fill(null);          // v6: a corrupt load must not leave stale lockbox contents in memory
     for(const row of lockLegInv) row.fill(null);
     for(const row of pocketsGrid) row.fill(null);
-    _hazedPOIs=[]; _gateOpen=false; _poiRot=0;             // v6: corrupt slot → no haze, gate LOCKED, rotation reset (sane defaults)
+    _hazedPOIs=[]; _gateOpen=false; _lockOpen={}; _poiRot=0;   // v6: corrupt slot → no haze, gate + labs LOCKED, rotation reset (sane defaults)
     zombiesKilled=0; outskirtsTime=0;                      // v6: corrupt slot reads as an empty identity → PR counters zero too
     _retuneOrphans.length=0;
     syncBagAlias(); clampZone();
