@@ -8776,6 +8776,7 @@ function menuNav(){
 // ============================================================
 let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
+const _liveEn=[];                            // reused live-enemy sort buffer (dormancy ranking) — no per-frame filter/sort alloc
 
 const FRAME_MS=1000/60;
 let lastRender=0, _pendingRes=false;
@@ -8965,14 +8966,17 @@ function frame(){
     gl.uniform4f(U.itemData[i],w.item.renderType,w.ry,w.held?1:0,w.pitch||0);
   }
 
-  // enemies: nearest first — the uniform array is small, the camp is not
+  // enemies: nearest first — the uniform array is small, the camp is not.
+  // _d2 is the cached sort key: squared distance, with a 25m² (~5m-sq) STICKY
+  // credit for the currently-awake so the cap-boundary body stops flapping
+  // rendered<->dormant every frame (a dormant rival must close ~0.3-0.6m of
+  // real ground at typical band distances to displace it)
   let ei=0;
-  const _liveEn=enemies.filter(e=>e.health>0)
-    .sort((a,b)=>{
-      const da=(a.position.x-playerPos.x)**2+(a.position.z-playerPos.z)**2;
-      const db=(b.position.x-playerPos.x)**2+(b.position.z-playerPos.z)**2;
-      return da-db;
-    });
+  _liveEn.length=0;
+  for(const e of enemies){ if(e.health<=0) continue;
+    e._d2=(e.position.x-playerPos.x)**2+(e.position.z-playerPos.z)**2-(e._dormant?0:25);
+    _liveEn.push(e); }
+  _liveEn.sort((a,b)=>a._d2-b._d2);
   for(const en of _liveEn){
     en._dormant = ei>=Math.min(RLIM.ENEMIES,P('crowdCap')|0);   // past the cap: unrendered = dormant. goggles CROWD dial can pull it below RLIM for FPS
     if(en._dormant) continue;
