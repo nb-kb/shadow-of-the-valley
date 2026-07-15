@@ -2236,7 +2236,7 @@ let _poiRot=Math.floor(Math.random()*3);      // AREA-1 POI ROTATION (build 4): 
 let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying the radioactive haze THIS raid. Persisted so a mid-raid reload keeps the same hot/hazed split (derivable from _poiRot, but stored to stay stable). INERT until P3 wires the haze (DoT/tint) — no writer yet; reserved slot, default [].
 let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. RAID-state, live: the gate terminal (interact block) sets it, BOTH SDF twins carve the notch off it (levelSDF uContain.w / levelSdfJS), and seedLevelSpawns RE-LOCKS it at every CAMP raid seed.
 let outskirtsTime=0;    // AREA-1 CONTAINMENT (P2b): lifetime seconds the player has lingered in the outskirts (past the OPEN gate) — the suicide-run PR metric. Session-scoped for now; the stats page (System I) wires save persistence + the terminal readout (reuse THIS global, don't redeclare).
-let zombiesKilled=0;    // AREA-1 CONTAINMENT (System I): lifetime undead-kill personal record — the suicide-run score-chase. Counts EVERY undead die() (shamblers + brute), NOT soldiers/believers (that stays run-scoped `kills`). Persisted in the v6 slot; survives raids/deaths, only START OVER (newGame) or a corrupt slot zeroes it.
+let zombiesKilled=0;    // AREA-1 CONTAINMENT (System I): lifetime undead-kill personal record — the suicide-run score-chase. Counts undead die()s the PLAYER landed the last hit on (shamblers + brute; owner call 11 — soldier-inflicted undead deaths don't score), NOT soldiers/believers (that stays run-scoped `kills`). Persisted in the v6 slot; survives raids/deaths, only START OVER (newGame) or a corrupt slot zeroes it.
 
 // ======================================================================================
 // LEVEL MODULE — authored levels as self-contained data. A level is: bounds + region
@@ -6177,6 +6177,7 @@ class Zealot{
   }
   hurt(dmg,by,part){
     if(this.health<=0) return;
+    this._lastBy=by;                                  // KILL ATTRIBUTION (owner call 11): the last hand that hurt it takes the credit — die() reads this for the System-I PR (a burn/bleed death credits whoever landed the dosing hit)
     // worn plates eat body hits first — the helm's cut already landed in headshotDmg/crackHelm
     if(part!=='head'&&this.plates){
       dmg*=this.plates.damageMult;
@@ -6195,7 +6196,7 @@ class Zealot{
     worldNormalJS(this.position.x,this.position.y+0.1,this.position.z,_n);
     addDecal(new Vec3(this.position.x,this.position.y+0.05,this.position.z),new Vec3(0,1,0),0.9);
     if(this._faction==='zombie'){                          // BUILD 2: undead drop NOTHING (no rucksack / gear / tool roll)
-      zombiesKilled++;                                     // CONTAINMENT (System I): lifetime undead-kill PR — every downed shambler/brute counts; re-killing a recycled body counts again (a kill is a kill). Persisted in the v6 slot for the stats page.
+      if(this._lastBy==='player') zombiesKilled++;         // CONTAINMENT (System I): lifetime undead-kill PR — PLAYER-attributed only (owner call 11): the last hit decides credit, so soldier-inflicted undead deaths don't pad the record; re-killing a recycled body still counts (a kill is a kill). Persisted in the v6 slot for the stats page.
       if(this._brute){ bruteRespawnT=BRUTE_RESPAWN; this.respawnT=Infinity; }   // the lone mini-boss returns on the 15-min session clock — NOT the 45s reinforce (dead-branch never auto-wakes it)
       else this.respawnT=300+runRng()*300;                  // rank-and-file undead take 5-10 min to shamble back — instant respawns felt cheesy
       return;
