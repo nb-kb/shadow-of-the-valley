@@ -2878,7 +2878,7 @@ function updateDayNight(){
 }
 
 // how lit is the player right now? (drives stealth)
-let exposureTimer=0;
+let exposureTimer=0, _expVis=0.5;   // _expVis: render-only smoothed twin of the 8Hz-stepped sim field — the eye gets a ramp, enemy AI keeps the steps (#6b)
 function updateExposure(dt){
   exposureTimer-=dt;
   if(exposureTimer>0){ playerPos.muzzleGlow=Math.max(0,playerPos.muzzleGlow-dt*2.5); return; }
@@ -8949,7 +8949,8 @@ function frame(){
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, resT&&resT.fovAim<0.55?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.3):0);
-  gl.uniform1f(U.uExposure, playerPos.exposure);
+  _expVis+=(playerPos.exposure-_expVis)*Math.min(1,dt*10);   // smooth the 0.12s exposure steps for the viewmodel dim only
+  gl.uniform1f(U.uExposure, _expVis);
 
   // items (nearest first) — cull follows the fog wall in: past uFar nothing uploads
   renderItemsBuf.length=0;
