@@ -6076,6 +6076,7 @@ function finishReload(){          // single-load only (mag-mode never starts the
 // ZEALOTS — patrol / suspicion / alarm; they carry real Tools
 // built from the same mod pool, and drop them when they fall
 // ============================================================
+const _stC=new Vec3();   // settle() scratch (the _n/_c1 idiom) — one body sphere per live enemy per frame was pure GC feed
 class Zealot{
   constructor(x,z,kind){                // kind: undefined/'soldier' · 'zombie' · 'brute' (build 2 faction spawn)
     const gy=activeLevel ? levelGroundJS(x,z) : terrainHJS(x,z);
@@ -6246,8 +6247,9 @@ class Zealot{
       if(d<bestD){ bestD=d; bestEnt=o; }
     }
     const pdx=playerPos.x-this.position.x, pdz=playerPos.z-this.position.z, pd=pdx*pdx+pdz*pdz;
-    if(bestEnt&&bestD<pd) return {ent:bestEnt,isPlayer:false,x:bestEnt.position.x,y:bestEnt.position.y,z:bestEnt.position.z};
-    return {ent:null,isPlayer:true,x:playerPos.x,y:playerPos.y,z:playerPos.z};
+    const t=this._tgt||(this._tgt={ent:null,isPlayer:true,x:0,y:0,z:0});   // per-instance reuse — a fresh result object per enemy per frame was pure GC feed (consumers read fields same-frame, never keep the ref)
+    if(bestEnt&&bestD<pd){ t.ent=bestEnt; t.isPlayer=false; t.x=bestEnt.position.x; t.y=bestEnt.position.y; t.z=bestEnt.position.z; return t; }
+    t.ent=null; t.isPlayer=true; t.x=playerPos.x; t.y=playerPos.y; t.z=playerPos.z; return t;
   }
   update(dt){
     if(this._dormant){                             // DORMANT SLOW-TICK 4:1 (perf): past the render cap it can't be seen, hit, or bite — run perception/walk/settle at ~15Hz on the BANKED dt so speeds, burn/bleed dosing and respawn clocks keep exact rate. Damage verbs stay hard-gated on _dormant regardless; phase seeded off spawn yaw so the herd doesn't tick in lockstep.
@@ -6333,7 +6335,7 @@ class Zealot{
 
     let speed=P('enemySpeed')*globSlow(this.position,this), moveTo=null, faceTo=null;   // glue is glue
     if(this.state===2){
-      this.investigate=new Vec3(tx,0,tz);
+      this.investigate=(this.investigate||new Vec3()).set(tx,0,tz);   // .set() reuse — this line runs EVERY alarmed frame (never identity-compared; nulled only on state drops)
       faceTo=this.investigate;
       if(seesLOS){
         this.lostSightT=0;
@@ -6388,7 +6390,7 @@ class Zealot{
         if(Math.hypot(this.position.x-this.startPos.x,this.position.z-this.startPos.z)>28){ tx=this.startPos.x; tz=this.startPos.z; }   // LEASH: hold the POI — turn back before drifting far from the spawn, so the camp stays put instead of wandering the map
         const ix=tx-this.position.x, iz=tz-this.position.z, il=Math.hypot(ix,iz);   // BLOCKED test rides the FINAL intent: cohesion/leash steer up to 180° off patrolDir, and testing the raw heading let the steered walk grind walls
         if(il>0.001&&this.patrolBlocked(ix/il,iz/il)){ this.dwellT=1.5+runRng(); this._reDir=this.patrolAvoidDir(ix/il,iz/il); }   // wall/steep along the actual path — pause briefly, pick a turn away
-        else{ moveTo=new Vec3(tx,0,tz); faceTo=moveTo; }
+        else{ moveTo=(this._mv||(this._mv=new Vec3())).set(tx,0,tz); faceTo=moveTo; }   // per-instance _mv — patrol walked a fresh Vec3 every frame
       }
     }
 
@@ -6431,7 +6433,7 @@ class Zealot{
         for(const o of enemies){ if(o!==this&&o.health>0&&o._faction==='zombie'&&o.state!==2&&o.position.distanceTo(this.position)<18){
           o.state=2; o.investigate=new Vec3(tx,0,tz); } }
       }
-      this.state=2; this.detection=1; this.investigate=new Vec3(tx,0,tz);
+      this.state=2; this.detection=1; this.investigate=(this.investigate||new Vec3()).set(tx,0,tz);   // .set() reuse — every seeing frame
       moveTo=this.investigate; faceTo=this.investigate;
       if(dist<1.6){                                        // LUNGE: in reach — stop shambling, swipe. Routes cross-faction: soldiers get hurt(), the player gets damagePlayer().
         moveTo=null;
@@ -6460,7 +6462,7 @@ class Zealot{
           const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
           let zx=this.position.x+fx*3, zz=this.position.z+fz*3;
           if(Math.hypot(this.position.x-this.startPos.x,this.position.z-this.startPos.z)>30){ zx=this.startPos.x; zz=this.startPos.z; }   // hold the spawn zone (undead still rally to a brute within 80m, above)
-          moveTo=new Vec3(zx,0,zz); faceTo=moveTo; speed*=0.5; }
+          moveTo=(this._mv||(this._mv=new Vec3())).set(zx,0,zz); faceTo=moveTo; speed*=0.5; }   // per-instance _mv reuse
       }
     }
     // move · face · settle — undead never shoot/reload, but a WAVE press still shoves them
@@ -6481,8 +6483,7 @@ class Zealot{
     // headY hands them the player's overhang guard at their head line. The UNDEAD keep the tall
     // body-sphere clamber (~0.9m) as flavor.
     const zk=this._faction==='zombie';
-    const c=zk?new Vec3(this.position.x,this.position.y+0.9,this.position.z)
-              :new Vec3(this.position.x,this.position.y+0.35,this.position.z);
+    const c=_stC.set(this.position.x,this.position.y+(zk?0.9:0.35),this.position.z);   // module scratch — consumed before return, stepOver/resolveCollision keep no ref
     let lift=false;
     if(this._nsT>0) this._nsT-=dt;               // FAILED-CLAMBER LATCH cooling — no lift re-tries while hot
     else lift=zk?stepOver(c,0.42,0):stepOver(c,0.34,this.position.y+0.9);
@@ -8971,13 +8972,13 @@ function frame(){
   const cullR2=Math.min(60, dayNight.farE+5)**2;
   for(const w of worldItems){
     const d=(w.pos.x-playerPos.x)**2+(w.pos.y-playerPos.y)**2+(w.pos.z-playerPos.z)**2;
-    if(d<cullR2) renderItemsBuf.push([d,w]);
+    if(d<cullR2){ w._d2=d; renderItemsBuf.push(w); }   // _d2 rides the wrapper (the enemy-loop idiom) — no [d,w] pair alloc per item per frame
   }
-  renderItemsBuf.sort((a,b)=>a[0]-b[0]);
+  renderItemsBuf.sort((a,b)=>a._d2-b._d2);
   const nItems=Math.min(RLIM.ITEMS,renderItemsBuf.length);
   gl.uniform1i(U.worldItemCount,nItems);
   for(let i=0;i<nItems;i++){
-    const w=renderItemsBuf[i][1];
+    const w=renderItemsBuf[i];
     gl.uniform3f(U.itemPos[i],w.pos.x,w.pos.y,w.pos.z);
     gl.uniform4f(U.itemData[i],w.item.renderType,w.ry,w.held?1:0,w.pitch||0);
   }
