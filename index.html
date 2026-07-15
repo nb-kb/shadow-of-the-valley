@@ -5264,10 +5264,10 @@ function runContinuousBeams(dt){
             const rx=en.position.x-P.x, ry=(en.position.y+0.95)-P.y, rz=en.position.z-P.z;
             const tt=rx*dx+ry*dy+rz*dz;
             if(tt>0.05&&tt<ts){
-              const d=Math.hypot(en.position.x-(P.x+dx*tt),(en.position.y+0.95)-(P.y+dy*tt),en.position.z-(P.z+dz*tt));
+              const d=enemyBodyDist(en,P.x+dx*tt,P.y+dy*tt,P.z+dz*tt);
               const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
               const hd=Math.hypot(hp.x-(P.x+dx*tt),hp.y-(P.y+dy*tt),hp.z-(P.z+dz*tt));
-              if(d<0.55||hd<hr){
+              if(d<enemyBodyR(en)||hd<hr){
                 bit.add(en);
                 let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
                 const hh=hd<hr;
@@ -5298,10 +5298,10 @@ function runContinuousBeams(dt){
         const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
         const tt=rx*dir.x+ry*dir.y+rz*dir.z;
         if(tt>0.3&&tt<t){
-          const d=Math.hypot(en.position.x-(o.x+dir.x*tt),(en.position.y+0.95)-(o.y+dir.y*tt),en.position.z-(o.z+dir.z*tt));
+          const d=enemyBodyDist(en,o.x+dir.x*tt,o.y+dir.y*tt,o.z+dir.z*tt);
           const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
           const hd=Math.hypot(hp.x-(o.x+dir.x*tt),hp.y-(o.y+dir.y*tt),hp.z-(o.z+dir.z*tt));
-          if(d<0.55||hd<hr){ t=tt; hitEn=en; hitHead=hd<hr; }
+          if(d<enemyBodyR(en)||hd<hr){ t=tt; hitEn=en; hitHead=hd<hr; }
         }
       }
       const end=arc?arcApex:pts?pathEnd:new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);   // arc: spark/boom pulses fire at the (sagged) APEX · drooped thread: at its terminus — the dirt hit at range
@@ -5457,10 +5457,10 @@ function runContinuousBeams(dt){
                 const rx=en.position.x-sO.x, ry=(en.position.y+0.95)-sO.y, rz=en.position.z-sO.z;
                 const tt=rx*ds.x+ry*ds.y+rz*ds.z;
                 if(tt>0.05&&tt<ts){
-                  const d=Math.hypot(en.position.x-(sO.x+ds.x*tt),(en.position.y+0.95)-(sO.y+ds.y*tt),en.position.z-(sO.z+ds.z*tt));
+                  const d=enemyBodyDist(en,sO.x+ds.x*tt,sO.y+ds.y*tt,sO.z+ds.z*tt);
                   const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
                   const hd=Math.hypot(hp.x-(sO.x+ds.x*tt),hp.y-(sO.y+ds.y*tt),hp.z-(sO.z+ds.z*tt));
-                  if(d<0.55||hd<hr){ ts=tt; sEn=en; sHead=hd<hr; }
+                  if(d<enemyBodyR(en)||hd<hr){ ts=tt; sEn=en; sHead=hd<hr; }
                 }
               }
               if(sEn){
@@ -5518,10 +5518,10 @@ function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
     const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
     const tt=rx*f.x+ry*f.y+rz*f.z;
     if(tt>0.3&&tt<t){
-      const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
+      const d=enemyBodyDist(en,o.x+f.x*tt,o.y+f.y*tt,o.z+f.z*tt);
       const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
       const hd=Math.hypot(hp.x-(o.x+f.x*tt),hp.y-(o.y+f.y*tt),hp.z-(o.z+f.z*tt));
-      if(d<0.55||hd<hr) hits.push({en,tt,head:hd<hr});
+      if(d<enemyBodyR(en)||hd<hr) hits.push({en,tt,head:hd<hr});
     }
   }
   hits.sort((a,b)=>a.tt-b.tt);
@@ -5649,6 +5649,15 @@ function enemyHeadPos(en,out){
                  en.position.z+Math.cos(hy)*0.07);
 }
 const enemyHeadR=en=>en._brute?0.30:0.24;             // KNOWN_BUGS #4: GLSL inflates the whole brute d-=0.12 (drawn head ~0.285) — the hit sphere must cover the drawn flesh or grazes pass through it; rank-and-file keep 0.24
+// P5 HONEST BODY (spec F prerequisite): hits test ONE vertical capsule hugging the DRAWN body —
+// axis y+0.20..y+1.40, r 0.32 (GLSL body: torso capsule r.205 spans .92-1.40, hip box corner ~.26,
+// shoulder flesh ~.315; the brute rides its d-=0.12 inflate → .44). Replaces the old y+0.95 r 0.55
+// ball that paid hits ~25cm off visible flesh. Heads keep their own sphere (enemyHeadR).
+const enemyBodyR=en=>en._brute?0.44:0.32;
+function enemyBodyDist(en,px,py,pz){                  // point → capsule-axis distance (ray sites hand their foot, projectiles their pos)
+  const cy=Math.min(Math.max(py,en.position.y+0.20),en.position.y+1.40);
+  return Math.hypot(px-en.position.x,py-cy,pz-en.position.z);
+}
 function crackHelm(en){
   if(!en.helm) return;
   if(--en.helm.dur>0){ playSound('click'); return; }
@@ -5797,8 +5806,8 @@ function updateProjectiles(dt){
         if(_sf&&pr.kind!=='pick'){                         // PICK eats stone, spares flesh — same rule the player→enemy loop keeps
           for(const en of enemies){
             if(en.health<=0||en._dormant||en===pr.src||en._faction===_sf) continue;
-            const ed=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
-            if(ed<(pr.kind==='slug'?0.9:0.55)){
+            const ed=enemyBodyDist(en,pr.pos.x,pr.pos.y,pr.pos.z);
+            if(ed<enemyBodyR(en)+(pr.kind==='slug'?0.30:0)){       // slug keeps its fat-ordnance grace on top of the honest capsule
               if(pr.pierce>0){                             // DRILL: flesh is a tunnel — one bill per body per 0.1s
                 if(!pr._dHit) pr._dHit=new Map();
                 const last=pr._dHit.get(en);
@@ -5838,10 +5847,10 @@ function updateProjectiles(dt){
         }
         if(!dead) for(const en of enemies){
           if(en.health<=0||en._dormant) continue;        // dormant: bullets pass through
-          const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
+          const d=enemyBodyDist(en,pr.pos.x,pr.pos.y,pr.pos.z);
           const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
           const hd=Math.hypot(pr.pos.x-hp.x,pr.pos.y-hp.y,pr.pos.z-hp.z);
-          if(d<(pr.kind==='slug'?0.9:0.55)||hd<hr){
+          if(d<enemyBodyR(en)+(pr.kind==='slug'?0.30:0)||hd<hr){   // slug keeps its fat-ordnance grace on top of the honest capsule
             if(pr.kind==='grip'){ addGlobOnEnemy(en); dead=true; break; }   // glue takes flesh: it sticks, it does not cut
             if(pr.kind==='hope'&&en._faction==='soldier'){                  // HOPE — mercy for the faithful: mend (cap at their spawn max), the mote spends itself. The undead (zombie/brute) FALL THROUGH to the wound path below → recoil dmg, pierce/headshot/status for free.
               en.health=Math.min(en._believer?100:200,en.health+(pr.heal||25));   // no en.maxHealth exists — soldier max is believer 100 / line zealot 200 (mirrors the constructor)
