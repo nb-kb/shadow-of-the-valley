@@ -8356,6 +8356,7 @@ function updatePlayer(dt){
     if(down('jump')) playerPos.y+=4*dt;
     if(down('leanL')&&down('leanR')) playerPos.y-=4*dt;
   }else{
+    const _sw0x=playerPos.x, _sw0y=playerPos.y, _sw0z=playerPos.z;   // pre-flight pose — the swept resolve below walks from here. Captured BEFORE the gravity step: a plain fast fall (>20 m/s at 30fps = 0.7m a frame) must sweep too, or it tunnels the 0.3m watchtower deck
     playerPos.velY-=P('gravity')*dt;
     if(playerPos.velY<-34) playerPos.velY=-34;           // terminal velocity
     playerPos.y+=playerPos.velY*dt;
@@ -8374,7 +8375,6 @@ function updatePlayer(dt){
       _swing.len=clamp(_swing.len + clamp(INPUT.wheel,-2,2)*0.35, 1.2, 26);   // reel rides the WHEEL: 0.35 m/notch — d-pad up/down feed the same notches (padWheelStep). Capped at 2 notches a FRAME: smooth-scroll mice burst 10-30 events between frames and the taut sphere would yank metres in one step
     }
     if(playerPos.swinging&&!_swing&&playerPos.onGround){ playerPos.swinging=false; playerPos.velX=0; playerPos.velZ=0; }  // momentum spends itself on landing
-    const _sw0x=playerPos.x, _sw0y=playerPos.y, _sw0z=playerPos.z;   // pre-flight pose — the swept resolve below walks from here
     if(playerPos.swinging&&!playerPos.onGround){
       playerPos.velX+=(rx*mx+fx*mz)*8*dt; playerPos.velZ+=(rz*mx+fz*mz)*8*dt;    // air control: input is an accel now (8 m/s²), not a step
       const _hs=Math.hypot(playerPos.velX,playerPos.velZ);
@@ -8393,11 +8393,12 @@ function updatePlayer(dt){
       }
       if(cd>_swing.len+3 || mapWorldJS(_swing.ax,_swing.ay,_swing.az)>0.75) _swing=null;   // anchor carved out / glob evicted / impossible stretch — the rope lets go
     }
-    // SWEPT SWING (anti-tunnel): only the two blocks above moved x/y/z since the
-    // capture — velocity flight (16 m/s lateral) + reel-taut projection can cover
-    // metres in one capped-dt frame, and ruin walls are 0.3m thin. Walk the whole
-    // displacement in 0.18m substeps with the same feet-sphere resolve the ground
-    // slide uses: the wall wins over the rope, no far-side eject.
+    // SWEPT FLIGHT (anti-tunnel): only the gravity step and the two rope blocks
+    // above moved x/y/z since the capture — a terminal fall (34 m/s), velocity
+    // flight (16 m/s lateral) or reel-taut projection can cover metres in one
+    // capped-dt frame, and decks/roofs/ruin walls are 0.24-0.3m thin. Walk the
+    // whole displacement in 0.18m substeps with the same feet-sphere resolve the
+    // ground slide uses: the wall wins over rope and fall, no far-side eject.
     {
       const _mdx=playerPos.x-_sw0x, _mdy=playerPos.y-_sw0y, _mdz=playerPos.z-_sw0z;
       const _md=Math.hypot(_mdx,_mdy,_mdz);
