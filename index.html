@@ -8022,9 +8022,10 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   });
   return d;
 }
+let _trPips=null;        // last pips HTML — the setPrompt dedup idiom (this rebuilt every 8Hz HUD tick, changed or not)
 function updateToolReadout(){
   const nm=document.getElementById('trName'), md=document.getElementById('trMode');
-  if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; document.getElementById('trPips').innerHTML=''; document.getElementById('chargeFill').style.width='0%'; return; }
+  if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; if(_trPips!==''){ _trPips=''; document.getElementById('trPips').innerHTML=''; } document.getElementById('chargeFill').style.width='0%'; return; }
   activeTool._res=activeTool._res||resolveTool(activeTool);
   const res=activeTool._res;
   nm.textContent=dispName(activeTool).toUpperCase();
@@ -8038,7 +8039,7 @@ function updateToolReadout(){
   md.textContent=(res.silenced?'SUPPRESSED ':'')+(res.auto?'AUTO ':'')+(res.burst>1?'BURST'+res.burst+' ':'')+kinds
     +(res.grip?' +GRIP':'')+(res.pulse?' +PUSH':'');
   // the fire cycle, visible: per COLUMN — the volley is one shot from each
-  document.getElementById('trPips').innerHTML=res.columns.filter(l=>l.shots.length).map(lane=>{
+  const pips=res.columns.filter(l=>l.shots.length).map(lane=>{
     const n=lane.shots.length;
     const cyc=res.bare?0:cycleShotIdx(lane,lane.cycleRef.get()%n);   // ▶ marks the next LIVE entry — housed payloads never head the lane
     return lane.shots.map((sh,i)=>
@@ -8046,6 +8047,7 @@ function updateToolReadout(){
       :'<span class="'+(i===cyc?'on':'off')+'">'+(i===cyc?'▶':'·')+sh.kind.toUpperCase()
       +(sh.cost?'⚡'+sh.cost:'')+'</span>').join('');
   }).join(' <span style="opacity:.4">‖</span> ');
+  if(pips!==_trPips){ _trPips=pips; document.getElementById('trPips').innerHTML=pips; }   // identical -> zero DOM churn
   const cm=toolChargeMax(activeTool);
   document.getElementById('chargeFill').style.width=(cm>0?100*activeTool.charge/cm:0).toFixed(0)+'%';
 }
@@ -8798,6 +8800,7 @@ function menuNav(){
 let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
 const _liveEn=[];                            // reused live-enemy sort buffer (dormancy ranking) — no per-frame filter/sort alloc
+let _sgEl=null;                              // #scopeGlass, cached on first use — no per-frame getElementById in the upload path
 
 const FRAME_MS=1000/60;
 let lastRender=0, _pendingRes=false;
@@ -9072,9 +9075,9 @@ function frame(){
   gl.uniform1i(U.uReticle,(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0);
   gl.uniform1f(U.uSights, resT&&resT.sights?1:0);
   { const ret=(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0;   // scope glass: red-dot(1)/holo(2) only, in lockstep with the shader reticle's uAim>0.55 gate
-    const sg=document.getElementById('scopeGlass');
+    const sg=_sgEl||(_sgEl=document.getElementById('scopeGlass'));
     if(sg){ const on=playerPos.aimAmt>0.55&&(ret===1||ret===2)&&!pausedUI();   // off while paused/dead/menu so the glass can't stick on screen
-      sg.classList.toggle('on',on); if(on) sg.dataset.optic=ret; } }
+      sg.classList.toggle('on',on); if(on&&sg.dataset.optic!==''+ret) sg.dataset.optic=ret; } }   // dataset writes invalidate style — only on change
   for(let i=0;i<GLOBS.length;i++) gl.uniform4f(U.uGlobs[i],GLOBS[i].x,GLOBS[i].y,GLOBS[i].z,GLOBS[i].r);
   for(let i=0;i<SDF_EDITS.length;i++){
     const ed=SDF_EDITS[i];
