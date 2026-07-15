@@ -2226,8 +2226,8 @@ let highestDetection=0;
 let bruteRespawnT=0;                          // BRUTE mini-boss: game-time countdown to the lone roamer's return (0 = a brute is live or none owed). Teardown-safe: reset in teardownWorld + resetLevel so a boss never leaks across worlds.
 const BRUTE_RESPAWN=15*60;                    // 15 min game-time (horde spec) — ticked by the same dt as worldClock
 let _poiRot=Math.floor(Math.random()*3);      // AREA-1 POI ROTATION (build 4): cursor into the opposite-quadrant hot pairs {c,c+half}; advances each CAMP raid so the NEXT raid draws a DISJOINT pair. Persisted per-slot (SAVE_VER 5) so rotation survives reload; re-randomized on a fresh run.
-let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying the radioactive haze THIS raid. Persisted so a mid-raid reload keeps the same hot/hazed split (derivable from _poiRot, but stored to stay stable). INERT this phase — haze DoT/tint is Phase 2/3; reserved slot, default [].
-let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. INERT this phase — the gate object/terminal is Phase 2; the wall build leaves the incline GAP in geometry. Reserved slot.
+let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying the radioactive haze THIS raid. Persisted so a mid-raid reload keeps the same hot/hazed split (derivable from _poiRot, but stored to stay stable). INERT until P3 wires the haze (DoT/tint) — no writer yet; reserved slot, default [].
+let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. RAID-state, live: the gate terminal (interact block) sets it, BOTH SDF twins carve the notch off it (levelSDF uContain.w / levelSdfJS), and seedLevelSpawns RE-LOCKS it at every CAMP raid seed.
 let outskirtsTime=0;    // AREA-1 CONTAINMENT (P2b): lifetime seconds the player has lingered in the outskirts (past the OPEN gate) — the suicide-run PR metric. Session-scoped for now; the stats page (System I) wires save persistence + the terminal readout (reuse THIS global, don't redeclare).
 let zombiesKilled=0;    // AREA-1 CONTAINMENT (System I): lifetime undead-kill personal record — the suicide-run score-chase. Counts EVERY undead die() (shamblers + brute), NOT soldiers/believers (that stays run-scoped `kills`). Persisted in the v6 slot; survives raids/deaths, only START OVER (newGame) or a corrupt slot zeroes it.
 
@@ -4187,8 +4187,9 @@ function updateInteract(dt){
       setPrompt(_pr,'A DOOR INTO THE FACILITY — SEALED',true); return; }
     // (the stolen terminal is AUTO-ON by proximity in the main loop now — no interact-to-open branch here)
     // AREA-1 HORDE GATE — card-locked control panel at the north incline (x≈gateX, inner face).
-    // Reads LOCKED without a keycard; UNLOCK with one sets _gateOpen (persisted, v6 save) so the
-    // notch carve turns ON in BOTH SDF twins (levelSDF/levelSdfJS). One-way; the card is not consumed.
+    // Reads LOCKED without a keycard; UNLOCK with one sets _gateOpen (v6 save blob) so the
+    // notch carve turns ON in BOTH SDF twins (levelSDF/levelSdfJS). One-way WITHIN the raid —
+    // seedLevelSpawns re-locks every fresh CAMP raid; the card is not consumed.
     const _cw=activeLevel.contain;
     if(_cw && isPlayable() && !uiOpen()){
       const _gx=_cw.gateX, _gz=activeLevel.bounds.z1-_cw.t, _gdx=playerPos.x-_gx, _gdz=playerPos.z-_gz;
@@ -6704,7 +6705,7 @@ function startRun(){
 function newGame(){                            // the terminal's START OVER — a fresh run; the memory slots keep
   for(const row of stashInv) row.fill(null);   // the stash forgets, in place — the crate registry holds this array
   for(const row of lockEpicInv) row.fill(null); for(const row of lockLegInv) row.fill(null);   // v6: the death-proof lockboxes forget too — only START OVER wipes them (onDeath never does)
-  zombiesKilled=0; outskirtsTime=0;            // v6 (System I): START OVER = a fresh identity → the personal-record counters zero here ONLY. NOT in startRun (that fires every death/boot) — the score-chase must survive the suicide runs.
+  zombiesKilled=0; outskirtsTime=0;            // v6 (System I): START OVER = a fresh identity → the personal-record counters zero here ONLY. NOT in startRun (boot / hard-death restart / START OVER — a lost raid skips it entirely) — the score-chase must survive the suicide runs.
   worldClock=0;                                // day one, dawn again — the only clock rewind outside boot
   startRun();                                  // the boot path: empty hands, stash kit, full health, clean statuses, ring I, deployTo('hideout') ends any leg
   toast('NEW RUN — THE KIT WAITS IN THE STASH');
@@ -6912,6 +6913,7 @@ function seedLevelSpawns(L){
     // NEXT raid draws a DISJOINT pair (persisted per-slot in the save blob, SAVE_VER 5).
     const half=Math.floor(POI.length/2)||1, c=_poiRot%half, hot=[c, c+half];
     _poiRot=(_poiRot+1)%half;
+    _gateOpen=false;   // per-raid RE-LOCK — gateOpen is RAID-state (the SAVE_VER 6 note files it so): every fresh CAMP raid seals the notch, and the guaranteed gateCard below seeds against the sealed gate. loadGame's override still works (saves are hideout-terminal-only, so a load never lands mid-raid).
     const N_SOLD=10, N_ZOMB=9;                           // + 1 brute = 20 (RLIM.ENEMIES) — single-site dials
     PARAMS.maxEnemies.v=N_SOLD+N_ZOMB+1;                 // the horde REVIVES to its full 16 (reinforce gate reads maxEnemies) instead of thinning to the leftover valley cap
     // SOLDIERS — tight knot around ONE cover anchor per hot POI (~7m, minSpace 2: overrides the loose level minSpace)
