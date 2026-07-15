@@ -8780,9 +8780,9 @@ function frame(){
     if(activeLevel&&activeLevel.terminal){
       const _tt=activeLevel.terminal, _tR=faceReach(_tt.x,_tt.z,0.42,0.30,_tt.yaw);
       if(!isTerminalOpen){ if(_tR.fd<0.9 && !uiMenusOpen() && !isManualOpen && !isDebugOpen) openTerminal(false); }
-      else if(_tR.fd>1.4) closeTerminal(false);   // hysteresis: wake ≤0.9m, sleep >1.4m so it can't flicker at the edge
+      else if(_tR.fd>1.4 || uiMenusOpen() || isManualOpen || isDebugOpen) closeTerminal(false);   // hysteresis: wake ≤0.9m, sleep >1.4m so it can't flicker at the edge — and ANY other UI puts the desk to sleep (E must never drive the bag and an invisible DEPLOY row at once; it re-wakes when the menu closes)
     }
-    if(isTerminalOpen){ terminalFrame(); termNav(); }   // place the mini-display + crosshair-pick a row, then run nav/confirm
+    if(isTerminalOpen){ terminalFrame(); if(!uiMenusOpen()&&!isManualOpen&&!isDebugOpen) termNav(); }   // place the mini-display + crosshair-pick a row, then run nav/confirm (nav skipped under any other UI — belt for the sleep gate above)
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
       else if(uiMenusOpen())closeAllInv();
