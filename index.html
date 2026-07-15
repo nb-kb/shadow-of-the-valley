@@ -2797,12 +2797,10 @@ let _worldGen=0;                              // WORLD GENERATION — teardownWo
                                               // kill the world through its own body (damagePlayer→onDeath→deployTo)
                                               // captures it at entry and bails when it moves: the arrays it held are a
                                               // dead world's and its index is a lie (v22n fault: pr.stuck, pr undefined)
-const tracersR=[];                            // render segments {a,b,col,life}
 const decals=[];
 const dynLights=[];                           // {pos,col,intensity,ttl}
 const noisePings=[];                          // {pos,r,ttl}
 let heldWorld=null;                           // physgun state
-let visitedCells=new Set();
 
 const dayNight={ lightDir:new Vec3(0,1,0.3), lightCol:[1,1,1], ambient:0.3,
                  skyHi:[0.3,0.45,0.7], skyLo:[0.7,0.6,0.5], sunUp:true, t01:0.32, clock:'07:40' };
@@ -6673,7 +6671,6 @@ function updateOutskirts(dt){
 // LOOT · GATE · RUN FLOW
 // ============================================================
 // (ground scatter retired in v21l — the world's loot lives in crates now)
-function maybeSpawnCellLoot(){}
 
 function placeGate(){
   const rr=mulberry32((SEED.x*73856093)^(SEED.y*19349663));
@@ -6705,7 +6702,6 @@ function resetLevel(){
   SEED.x=Math.floor(runRng()*900)+17;
   SEED.y=Math.floor(runRng()*900)+13;
   placeGate();
-  visitedCells.clear();
   worldItems.length=0; projectiles.length=0; beamSegs.length=0; SDF_EDITS.length=0;
   _laserBursts.length=0;
   decals.length=0; dynLights.length=0; noisePings.length=0;
@@ -6812,7 +6808,7 @@ function teardownWorld(){
   _worldGen++;                                // any loop still walking the old arrays must see the world die
   bruteRespawnT=0;                            // BRUTE mini-boss clock never survives a world swap (teardown-safe)
   worldItems.length=0; enemies.length=0; projectiles.length=0;
-  beamSegs.length=0; tracersR.length=0; GLOBS.length=0;
+  beamSegs.length=0; GLOBS.length=0;
   _swing=null; playerPos.swinging=false; playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; meleeT=0;
   slideT=0; slideHopSpd=0; sprintLatch=false; airSlideArmed=false;   // MOMENTUM CHAIN state must not leak across a world swap / respawn
   SDF_EDITS.length=0; dynLights.length=0;
@@ -8886,8 +8882,6 @@ function frame(){
     for(let i=beamSegs.length-1;i>=0;i--){ beamSegs[i].ttl-=dt; if(beamSegs[i].ttl<=0) beamSegs.splice(i,1); }
 
     updateExposure(dt);
-    const ccx=Math.floor((playerPos.x+10)/20), ccz=Math.floor((playerPos.z+10)/20);
-    maybeSpawnCellLoot(ccx,ccz);
     if(!activeLevel && Math.hypot(playerPos.x-GATE.x,playerPos.z-GATE.z)<2.4) onBreach();
   }
   if(uiMenusOpen() && !isDebugOpen) menuNav();      // debug owns the pad while open
