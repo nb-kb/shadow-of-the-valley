@@ -6542,8 +6542,8 @@ function reviveBrute(){                          // BRUTE mini-boss returns on t
 // ============================================================
 let _outskDwell=0, _outskSpawnT=3;               // continuous linger (drives the ramp) + spawn cadence; both re-arm when the player steps back inside
 const OUTSK_MAX=16;                               // concurrent LIVE outskirts undead — the gauntlet pool rides ON TOP of the sealed arena roster (full & dormant behind the wall). nearest-N render+dormancy caps active work, so this never overflows the material band
-function inOutskirts(){                           // gate OPEN and the player actually out past the north wall (z>z1). The notch is the perimeter's ONLY breach, so z>z1 ⇒ they came through it.
-  return !!activeLevel && activeLevel.id==='area1' && _gateOpen && playerPos.z>activeLevel.bounds.z1;
+function inOutskirts(){                           // the player is out past the north wall (z>z1) — HOWEVER they got there: open gate, PICK-carved hole, or WARP. The wall physics gates ACCESS; the horde just spawns whenever you're out there (no door trigger).
+  return !!activeLevel && activeLevel.id==='area1' && playerPos.z>activeLevel.bounds.z1;
 }
 function outskirtsSpawnPoint(){                   // a clear ground spot 10–24m from the player, kept OUT past the wall
   const z1=activeLevel.bounds.z1;
