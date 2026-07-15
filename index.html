@@ -6775,6 +6775,7 @@ let TRAVEL=null;                              // {dest:'area1'|'hideout'} — th
 const legDepth=()=>TRAVEL?1:depth;            // travel legs walk Ring I weather; the endless loop keeps its own count
 let isTerminalOpen=false;
 function teardownWorld(){
+  if(isTerminalOpen) closeTerminal(false);    // a swap with the desk awake (debug jump) must not strand the terminal gate over fire/interact in a desk-less world
   _worldGen++;                                // any loop still walking the old arrays must see the world die
   bruteRespawnT=0;                            // BRUTE mini-boss clock never survives a world swap (teardown-safe)
   worldItems.length=0; enemies.length=0; projectiles.length=0;
@@ -7051,6 +7052,8 @@ function nearStubDoor(){
 // ---- {label, meta?, action()} or {label, screen}. Doors will reuse this as
 // ---- `transition` rows later — the terminal doesn't know what a hideout is.
 let termScreen='home', termSel=0, _termOverRow=false;   // _termOverRow: is the center crosshair on a terminal row THIS frame — gates click-confirm so a fire-press while not aimed at the panel can't trigger a hidden option
+let _termPlaced=false;   // did terminalFrame land the panel ON SCREEN this frame — gates E/pad confirms so a player facing away can't blind-drive an invisible row
+let _termSnooze=false;   // a MANUAL close latches the desk dark inside the wake radius (else it blinks back next frame); stepping past 1.4m lifts it
 const TERM_SCREENS={
   home:()=>({title:'ValleyOS', rows:[
     {label:'DEPLOY', screen:'deploy'},
@@ -7100,11 +7103,12 @@ function openTerminal(spend=true){ isTerminalOpen=true; termScreen='home'; termS
   const ui=document.getElementById('terminalUI');
   ui.classList.remove('hidden'); ui.classList.add('diegetic');    // an in-world mini-display on the slab, not a full-screen sheet
   document.getElementById('termCursor').classList.add('on');
+  setPrompt(document.getElementById('interactPrompt'),'',false);   // the desk owns E now and updateInteract stops — a stale grab/crate verb must not freeze on screen
   // pointer STAYS locked: the camera is live, the center crosshair IS the mouse — aim a row, □/E/LMB to pick.
   // (If the pointer was already free, the row mouseenter/mousedown handlers still give a hover+click fallback.)
   playSound('click'); renderTerminal(); terminalFrame(); }        // park it on the slab this frame — no open-flash
 function closeTerminal(spend=true){ isTerminalOpen=false;
-  if(spend){ INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={}; }   // a MANUAL close spends the press; AUTO-close (walking away) must NOT wipe held movement keys
+  if(spend){ INPUT.frameDown={}; INPUT.rawKey={}; INPUT.rawPad={}; _termSnooze=true; }   // a MANUAL close spends the press AND snoozes the desk — CLOSE/Esc/○ stick instead of re-waking next frame; AUTO-close (walking away) must NOT wipe held movement keys
   const ui=document.getElementById('terminalUI');
   ui.classList.add('hidden'); ui.classList.remove('diegetic');
   document.getElementById('termCursor').classList.remove('on');
@@ -7135,6 +7139,8 @@ function terminalFrame(){
     }
   }
   ui.classList.toggle('hidden', !placed);   // AUTO-ON: the panel lives ON the monitor — hidden when the screen is off-camera (look away → gone), shown when you face it
+  document.getElementById('termCursor').classList.toggle('on', placed);   // the cursor glyph rides the panel — no floating pointer over an off-camera slab
+  _termPlaced=placed;
   // the fixed center crosshair picks a row. _termOverRow (checked EVERY frame) gates the click-confirm;
   // the termSel *update* still fires only while the MOUSE MOVES, so the stick/dpad (termNav) can nav
   // without the hit-test snapping the selection back to the centered row each frame.
@@ -7170,7 +7176,7 @@ function termNav(){
   const nav=navEdges();
   if(nav.up){ termSel=(termSel+sc.rows.length-1)%sc.rows.length; playSound('click'); renderTerminal(); }
   if(nav.down){ termSel=(termSel+1)%sc.rows.length; playSound('click'); renderTerminal(); }
-  if(nav.confirm||INPUT.rawPad[0]||INPUT.rawPad[2]||(_termOverRow&&pressed('fire'))) termActivate();   // □/✕ (pad) + E confirm the nav row; LMB confirms ONLY when the crosshair is on a row — a click while looking away can't trigger a hidden option
+  if(_termPlaced&&(nav.confirm||INPUT.rawPad[0]||INPUT.rawPad[2]||(_termOverRow&&pressed('fire')))) termActivate();   // □/✕ (pad) + E confirm the nav row ONLY while the panel is on screen — facing away can't blind-confirm; LMB additionally needs the crosshair on a row. Up/down/back stay live so Esc always exits
   if(nav.back||INPUT.rawPad[1]){
     if(termScreen!=='home'){ termScreen='home'; termSel=0; playSound('click'); renderTerminal(); }
     else closeTerminal();
@@ -8779,7 +8785,8 @@ function frame(){
     // TERMINAL: AUTO-ON at the desk — the screen wakes when you step up to the computer, goes dark when you walk off (no open press). Hideout is safe, so it doesn't pause.
     if(activeLevel&&activeLevel.terminal){
       const _tt=activeLevel.terminal, _tR=faceReach(_tt.x,_tt.z,0.42,0.30,_tt.yaw);
-      if(!isTerminalOpen){ if(_tR.fd<0.9 && !uiMenusOpen() && !isManualOpen && !isDebugOpen) openTerminal(false); }
+      if(_tR.fd>1.4) _termSnooze=false;   // a real step away lifts a manual-close snooze
+      if(!isTerminalOpen){ if(_tR.fd<0.9 && _tR.face>0.5 && !_termSnooze && !uiMenusOpen() && !isManualOpen && !isDebugOpen) openTerminal(false); }   // wake needs FACING the desk — brushing past mid-haul must not seize E/pad-look or drop the rope
       else if(_tR.fd>1.4 || uiMenusOpen() || isManualOpen || isDebugOpen) closeTerminal(false);   // hysteresis: wake ≤0.9m, sleep >1.4m so it can't flicker at the edge — and ANY other UI puts the desk to sleep (E must never drive the bag and an invisible DEPLOY row at once; it re-wakes when the menu closes)
     }
     if(isTerminalOpen){ terminalFrame(); if(!uiMenusOpen()&&!isManualOpen&&!isDebugOpen) termNav(); }   // place the mini-display + crosshair-pick a row, then run nav/confirm (nav skipped under any other UI — belt for the sleep gate above)
