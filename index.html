@@ -3382,15 +3382,19 @@ function mkWidget(def){
           get:def.get, set:def.set, functional:!!def.functional,
           _stub:def.functional?undefined:(def.init!==undefined?def.init:0)};
 }
+// enum readback: match the live value to its preset label, with tolerance. An off-preset value
+// (debug-edited PARAM) reads RAW instead of masquerading as the first label — the dial tells the
+// truth. adjustWidget's indexOf(raw) misses → 0 → the first nudge snaps back onto a preset.
+const enumRead=(labels,vals,cur,tol)=>{ const i=vals.findIndex(v=>Math.abs(v-cur)<tol); return i<0?String(cur):labels[i]; };
 const SETTINGS_REGISTRY=[
   // goggles — the eyes
   {container:'goggles', id:'opticsQ', label:'OPTICS', kind:'enum', functional:true,
    options:['50%','70%','85%','100%'],
-   get:()=>['50%','70%','85%','100%'][Math.max(0,[0.5,0.7,0.85,1.0].findIndex(v=>Math.abs(v-P('renderScale'))<0.03))],
+   get:()=>enumRead(['50%','70%','85%','100%'],[0.5,0.7,0.85,1.0],P('renderScale'),0.03),
    set:v=>{ PARAMS.renderScale.v=[0.5,0.7,0.85,1.0][['50%','70%','85%','100%'].indexOf(v)]; resize(); }},
   {container:'goggles', id:'rayQ', label:'DETAIL', kind:'enum', functional:true,
    options:['FAST','MED','FULL'],
-   get:()=>['FAST','MED','FULL'][Math.max(0,[80,120,150].findIndex(v=>Math.abs(v-P('rayQuality'))<6))],
+   get:()=>enumRead(['FAST','MED','FULL'],[80,120,150],P('rayQuality'),6),
    set:v=>{ PARAMS.rayQuality.v=[80,120,150][['FAST','MED','FULL'].indexOf(v)]; }},
   {container:'goggles', id:'brightness', label:'BRIGHT', kind:'range', functional:true,
    min:0.002,max:0.06,step:0.002,                     // mirrors PARAMS.nightFloor — one source of truth
@@ -3399,15 +3403,15 @@ const SETTINGS_REGISTRY=[
    set:v=>{ PARAMS.nightFloor.v=v; }},                // updateDayNight reads it per frame — applies live, no resize
   {container:'goggles', id:'drawDist', label:'VIEW', kind:'enum', functional:true,
    options:['CLOSE','MED','FAR'],
-   get:()=>['CLOSE','MED','FAR'][Math.max(0,[0.65,0.82,1.0].findIndex(v=>Math.abs(v-P('viewDist'))<0.06))],
+   get:()=>enumRead(['CLOSE','MED','FAR'],[0.65,0.82,1.0],P('viewDist'),0.06),
    set:v=>{ PARAMS.viewDist.v=[0.65,0.82,1.0][['CLOSE','MED','FAR'].indexOf(v)]; }},
   {container:'goggles', id:'haze', label:'HAZE', kind:'enum', functional:true,
    options:['CLEAR','NORM','THICK'],
-   get:()=>['CLEAR','NORM','THICK'][Math.max(0,[0.6,1.0,1.6].findIndex(v=>Math.abs(v-P('hazeMul'))<0.18))],
+   get:()=>enumRead(['CLEAR','NORM','THICK'],[0.6,1.0,1.6],P('hazeMul'),0.18),
    set:v=>{ PARAMS.hazeMul.v=[0.6,1.0,1.6][['CLEAR','NORM','THICK'].indexOf(v)]; }},
   {container:'goggles', id:'crowd', label:'CROWD', kind:'enum', functional:true,
    options:['SPARSE','NORM','HORDE'],
-   get:()=>['SPARSE','NORM','HORDE'][Math.max(0,[8,14,20].findIndex(v=>Math.abs(v-P('crowdCap'))<3))],
+   get:()=>enumRead(['SPARSE','NORM','HORDE'],[8,14,20],P('crowdCap'),3),
    set:v=>{ PARAMS.crowdCap.v=[8,14,20][['SPARSE','NORM','HORDE'].indexOf(v)]; }},
   {container:'goggles', id:'sat', label:'COLOR', kind:'range', functional:true,
    min:0.4,max:1.6,step:0.1, tip:'color saturation — how punchy the palette reads',
@@ -3419,7 +3423,7 @@ const SETTINGS_REGISTRY=[
   // headphones — the ears (per-category buses are a later seam: route each to its own gain node)
   {container:'headphones', id:'master', label:'MASTER', kind:'enum', functional:true,
    options:['0%','35%','70%','100%'],
-   get:()=>['0%','35%','70%','100%'][Math.max(0,[0,0.35,0.7,1.0].findIndex(v=>Math.abs(v-volumeLevel)<0.03))],
+   get:()=>enumRead(['0%','35%','70%','100%'],[0,0.35,0.7,1.0],volumeLevel,0.03),
    set:v=>{ setVolume([0,0.35,0.7,1.0][['0%','35%','70%','100%'].indexOf(v)]); }},
   {container:'headphones', id:'music',    label:'MUSIC',  kind:'range', min:0,max:1,step:0.1, functional:false, init:0.7},
   {container:'headphones', id:'ambience', label:'AMBNC',  kind:'range', min:0,max:1,step:0.1, functional:false, init:0.7},
