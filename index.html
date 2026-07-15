@@ -785,6 +785,12 @@ uniform vec3  enemyPos[${RLIM.ENEMIES}];
 uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates · +8 zombie · +16 brute)
 uniform vec2  uEnemyEye;                     // x:cos(fov/2) y:vision-cone range
 
+#ifdef AUTHORED
+uniform float uRadOn;                        // GAS HAZE (CONTAINMENT P3): 0 = clean level · 1 = area-1 (field live)
+uniform vec4  uRadBounds;                    // x0,z0,x1,z1 — OUTSIDE this box the outskirts gas owns the air
+uniform vec4  uRadZone[5];                   // xy center · z radius (<=0.5 = empty) · w unused — 4 hazed POIs + the brute's trailing aura
+#endif
+
 uniform int   tracerCount;
 uniform vec3  tracerA[${RLIM.TRACERS}];
 uniform vec3  tracerB[${RLIM.TRACERS}];
@@ -1825,6 +1831,20 @@ void main(){
     if(m>19.5 && m<21.5) col *= mix(0.35, 1.0, smoothstep(0.0, 0.8, uExposure)); // hands darken with the cover you stand in — viewmodel only
     float fogAmt = (1.0-exp(-uFog*hit.x)) * (emiss > 0.5 ? 0.16 : 1.0);
     col = mix(col, uSkyLo, fogAmt);                      // opaque distance haze: horizon tint, NOT skyColor (no sun/stars/clouds bleed through geometry)
+#ifdef AUTHORED
+    // GAS HAZE (CONTAINMENT P3): sickly green wash at the HIT POINT inside the gas —
+    // hazed POIs · the outskirts past uRadBounds · the brute's aura. Rides the distance-
+    // fog seam (no per-step volumetrics, no scene-SDF growth — 5-iter fixed loop over
+    // pure shading math); gassed ground/props read green from OUTSIDE, so the zone
+    // telegraphs before it bites. TWIN: radAt() in JS — same centers/radii/edge (6m,
+    // bounds lip ±3m), so the green you see is exactly the burn you eat. Faintly
+    // luminous at night (it IS radioactive).
+    if(uRadOn>0.5){
+      float gz=clamp((max(max(uRadBounds.x-p.x,p.x-uRadBounds.z),max(uRadBounds.y-p.z,p.z-uRadBounds.w))+3.0)/6.0,0.0,1.0);
+      for(int i=0;i<5;i++){ vec4 rz=uRadZone[i]; if(rz.z>0.5) gz=max(gz,clamp((rz.z-length(p.xz-rz.xy))/6.0,0.0,1.0)); }
+      col=mix(col,vec3(0.30,0.44,0.16)*(0.35+0.65*max(uAmbient,0.18)),gz*0.55);
+    }
+#endif
   }else{
     col = skyColor(rayDir);   // a true miss is sky; the ground march owns the land
   }
@@ -1931,7 +1951,7 @@ function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUn
 function cacheUniforms(prog){
   ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
-   'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount']
+   'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   U.edits    = locArray(prog,'uEdits', 16);
   U.uGlobs   = locArray(prog,'uGlobs', 10);
@@ -1948,6 +1968,7 @@ function cacheUniforms(prog){
   U.decN     = locArray(prog,'decalNorm',    RLIM.DECALS);
   U.dynP     = locArray(prog,'dynPos',       RLIM.DYN);
   U.dynC     = locArray(prog,'dynCol',       RLIM.DYN);
+  U.uRadZ    = locArray(prog,'uRadZone',     5);        // GAS HAZE zones (P3) — AUTHORED-only; null locations elsewhere no-op
 }
 function rebindProgram(prog){ gl.useProgram(prog); cacheUniforms(prog); setupAttrib(prog); }
 
@@ -9070,6 +9091,19 @@ function frame(){
   gl.uniform3f(U.uSkyHi,dayNight.skyHi[0],dayNight.skyHi[1],dayNight.skyHi[2]);
   gl.uniform3f(U.uSkyLo,dayNight.skyLo[0],dayNight.skyLo[1],dayNight.skyLo[2]);
   gl.uniform1f(U.uFog, dayNight.fogE*P('hazeMul'));   // weather density × goggles HAZE dial
+  // GAS HAZE zones (P3) — twin of radAt(): same centers/radii/edge, the green fog IS the burn field
+  const _rOn=!!(activeLevel&&activeLevel.spawn.pois);
+  gl.uniform1f(U.uRadOn,_rOn?1:0);
+  if(_rOn){
+    const rb=activeLevel.bounds;
+    gl.uniform4f(U.uRadBounds,rb.x0,rb.z0,rb.x1,rb.z1);
+    let zi=0;
+    const rPOI=activeLevel.spawn.pois;
+    for(const hi of _hazedPOIs){ const hp=rPOI[hi]; if(hp&&zi<4){ _radZBuf[zi*4]=hp.c[0]; _radZBuf[zi*4+1]=hp.c[1]; _radZBuf[zi*4+2]=RAD.poiR; _radZBuf[zi*4+3]=0; zi++; } }   // 4 POI slots — 6 POIs / 2 hot splits exactly; the 5th slot is the brute's
+    if(_radBrute){ _radZBuf[zi*4]=_radBrute.position.x; _radZBuf[zi*4+1]=_radBrute.position.z; _radZBuf[zi*4+2]=RAD.bruteR; _radZBuf[zi*4+3]=0; zi++; }
+    for(;zi<5;zi++) _radZBuf[zi*4+2]=0;               // empty slots read radius 0 (<0.5 skips)
+    gl.uniform4fv(U.uRadZ[0],_radZBuf);               // one flat upload at [0] — the proven _colsBuf idiom
+  }
   { // world ceiling: static per world, raised by anything airborne this frame
     let _top = (activeLevel&&activeLevel.kind==='authored') ? (activeLevel.worldTop||18.0) : 81.0;
     for(const b of beamSegs) _top=Math.max(_top, b.a.y, b.b.y);
