@@ -6515,7 +6515,7 @@ class Zealot{
     if(this.health<=0 && enemies.filter(e=>e.health>0).length>=P('maxEnemies')) { this.respawnT=10; return; }   // cap gates DEAD respawns only — resetLevel fills to maxEnemies exactly, so a live-count gate blocked EVERY valley >70m far-yank and nobody ever closed in
     const _poiLvl=activeLevel&&activeLevel.spawn&&activeLevel.spawn.pois;   // Area-1 (POI level): respawn AT the enemy's OWN spawn — no teleporting into a ring around the player. Open valley (no POIs): the endless horde still closes on you.
     let _rx,_rz;
-    if(_poiLvl){ _rx=this.startPos.x; _rz=this.startPos.z; }
+    if(_poiLvl){ if(this._home){ this.startPos=this._home; this._home=null; } _rx=this.startPos.x; _rz=this.startPos.z; }   // a gauntlet-stolen interior body comes back at its REAL spawn — _home undoes wakeUndead's startPos overwrite
     else { const a=runRng()*Math.PI*2, r=45+runRng()*15; _rx=playerPos.x+Math.cos(a)*r; _rz=playerPos.z+Math.sin(a)*r; this.startPos=new Vec3(_rx,0,_rz); }
     const _gy=activeLevel ? levelGroundJS(_rx,_rz) : terrainHJS(_rx,_rz);   // valley has NO authored level → procedural terrain height (mirrors the constructor). levelGroundJS reads activeLevel.bounds and would NPE in the valley — that throw was aborting the whole enemy loop (frozen mid-air enemies).
     this.position.set(_rx, restOnSurface(_rx, _gy+2.5, _rz), _rz);
@@ -6553,7 +6553,7 @@ function reviveBrute(){                          // BRUTE mini-boss returns on t
 // render band safe at any roster size). NOT the way
 // home — the interior exfil is; this is chaos with a clock.
 // ============================================================
-let _outskDwell=0, _outskSpawnT=3;               // continuous linger (drives the ramp) + spawn cadence; both re-arm when the player steps back inside
+let _outskDwell=0, _outskSpawnT=3, _outskReapT=0;   // continuous linger (drives the ramp) + spawn cadence, both re-armed back inside; reap clock stands the swarm down ~30s after re-entry
 const OUTSK_MAX=16;                               // concurrent LIVE outskirts undead — the gauntlet pool rides ON TOP of the sealed arena roster (full & dormant behind the wall). nearest-N render+dormancy caps active work, so this never overflows the material band
 function _outOfBounds(x,z){ const b=activeLevel.bounds; return x<b.x0||x>b.x1||z<b.z0||z>b.z1; }   // past the perimeter in ANY direction (square distance-from-center; a circle would false-trigger in the corners)
 function inOutskirts(){                           // the player is OUT past the perimeter, ANY direction — HOWEVER they got there (gate, PICK-carved hole, WARP). Leave the bounds anywhere → suicide-run zone.
@@ -6571,6 +6571,7 @@ function outskirtsSpawnPoint(){                   // a clear ground spot 10–24
   return null;
 }
 function wakeUndead(en,x,z){                       // recycle a DOWNED undead body in place → a fresh 100-HP shambler at (x,z); no new object, faction already sticks
+  if(!en._home && !_outOfBounds(en.startPos.x,en.startPos.z)) en._home=en.startPos.clone();   // a stolen INTERIOR body remembers its real spot — the wake overwrites startPos, and the arena law (respawn at their OWN spawn) must win back home; minted gauntlet bodies (born out there) keep no home
   en.position.set(x, restOnSurface(x, levelGroundJS(x,z)+2.5, z), z);
   en.startPos=en.position.clone();
   en.health=100; en.respawnT=0; en.stagger=0; en._dormant=false;
@@ -6582,12 +6583,24 @@ function spawnOutskirtsZombie(){
   let live=0; for(const e of enemies) if(e.health>0&&e._faction==='zombie'&&!e._brute&&_outOfBounds(e.position.x,e.position.z)) live++;   // concurrency = undead ALREADY out past the perimeter
   if(live>=OUTSK_MAX) return;                                                 // swarm ceiling hit — the ramp still shortens the interval, but don't pile past the cap
   const p=outskirtsSpawnPoint(); if(!p) return;
-  const dz=enemies.find(e=>e.health<=0&&e._faction==='zombie'&&!e._brute);   // reuse a downed shambler first — zero roster growth
+  const dz=enemies.find(e=>e.health<=0&&e._faction==='zombie'&&!e._brute&&_outOfBounds(e.position.x,e.position.z));   // reuse a downed shambler first — zero roster growth. Wake bait is ONLY a corpse already out past the perimeter (owner call): the interior arena is never thinned to feed the gauntlet; retired gauntlet bodies recycle first
   if(dz){ wakeUndead(dz,p[0],p[1]); return; }
   if(enemies.length<RLIM.ENEMIES+OUTSK_MAX) enemies.push(new Zealot(p[0],p[1],'zombie'));   // else MINT on top of the (full, dormant-behind-you) arena roster — nearest-N upload + dormancy keep render + material band safe
 }
 function updateOutskirts(dt){
-  if(!inOutskirts()){ _outskDwell=0; _outskSpawnT=3; return; }   // back inside → the ramp cools, re-arming the ~3s grace
+  if(!inOutskirts()){
+    _outskDwell=0; _outskSpawnT=3;                               // back inside → the ramp cools, re-arming the ~3s grace
+    if(activeLevel&&activeLevel.id==='area1'&&_outskReapT<=30&&(_outskReapT+=dt)>30){   // 30s home → the gauntlet stands down, ONCE (the clock parks past 30 until the next trip out)
+      for(const e of enemies){
+        if(e._faction!=='zombie'||e._brute||!_outOfBounds(e.position.x,e.position.z)) continue;
+        const home=e._home||(!_outOfBounds(e.startPos.x,e.startPos.z)?e.startPos:null);   // an interior body out there — gauntlet-woken (stash) or a chaser that followed you out — belongs inside
+        if(home){ if(e.health>0){ e.health=0; e.respawnT=6+runRng()*8; } }   // down it on a short clock — reinforce respawns it at its OWN spot (_home restore / untouched startPos)
+        else { e.health=0; e.respawnT=Infinity; }   // minted gauntlet body: inert for good (the brute's dead-branch idiom) — it stops counting live against interior reinforcement and stops self-respawning out there; still wake bait next trip
+      }
+    }
+    return;
+  }
+  _outskReapT=0;
   _outskDwell+=dt; outskirtsTime+=dt;                            // dwell drives the escalation; outskirtsTime is the persistent PR
   const ramp=Math.min(1,_outskDwell/45);                        // 0→1 over 45s of lingering
   _outskSpawnT-=dt;
