@@ -6549,7 +6549,8 @@ function reviveBrute(){                          // BRUTE mini-boss returns on t
 // JS, no geometry/twin change — reuses the Zealot 'zombie' body.
 // SPAWN never overflows the render band: WAKE a downed shambler
 // first (zero roster growth), else MINT only while the roster is
-// under RLIM.ENEMIES (= the nearest-N upload cap). NOT the way
+// under RLIM.ENEMIES+OUTSK_MAX (the nearest-N upload cap keeps the
+// render band safe at any roster size). NOT the way
 // home — the interior exfil is; this is chaos with a clock.
 // ============================================================
 let _outskDwell=0, _outskSpawnT=3;               // continuous linger (drives the ramp) + spawn cadence; both re-arm when the player steps back inside
@@ -6563,7 +6564,8 @@ function outskirtsSpawnPoint(){                   // a clear ground spot 10–24
     const a=runRng()*6.2832, r=10+runRng()*14;
     const x=playerPos.x+Math.cos(a)*r, z=playerPos.z+Math.sin(a)*r;
     if(!_outOfBounds(x,z)) continue;              // never spawn back INSIDE the arena — keep the horde out on the outskirts
-    if(levelSdfJS(x,1.0,z)<0.4) continue;         // not inside a wall/prop
+    const gy=levelGroundJS(x,z);                  // outskirts terrain rides the rim hills 6–38m up — probe at LOCAL ground; an absolute y=1 probe reads "inside the hill" out here and rejected ~every candidate (the gauntlet never fired)
+    if(levelSdfJS(x,gy+1.0,z)<0.4) continue;      // not inside a wall/prop
     return [x,z];
   }
   return null;
