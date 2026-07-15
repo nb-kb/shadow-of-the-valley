@@ -5142,12 +5142,12 @@ function runContinuousBeams(dt){
             const tt=rx*dx+ry*dy+rz*dz;
             if(tt>0.05&&tt<ts){
               const d=Math.hypot(en.position.x-(P.x+dx*tt),(en.position.y+0.95)-(P.y+dy*tt),en.position.z-(P.z+dz*tt));
-              const hp=enemyHeadPos(en,_hpV);
+              const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
               const hd=Math.hypot(hp.x-(P.x+dx*tt),hp.y-(P.y+dy*tt),hp.z-(P.z+dz*tt));
-              if(d<0.55||hd<0.24){
+              if(d<0.55||hd<hr){
                 bit.add(en);
                 let bdmg=(((sh.kind==='saw'?8:24)+sh.pend.dmg)*0.55*mul)*dt*chaosMul(sh.pend.chaos);
-                const hh=hd<0.24;
+                const hh=hd<hr;
                 if(hh){
                   if(en.helm){ en._helmT=(en._helmT||0)+dt; if(en._helmT>=0.4){ en._helmT-=0.4; crackHelm(en); } }
                   else bdmg*=2;
@@ -5176,9 +5176,9 @@ function runContinuousBeams(dt){
         const tt=rx*dir.x+ry*dir.y+rz*dir.z;
         if(tt>0.3&&tt<t){
           const d=Math.hypot(en.position.x-(o.x+dir.x*tt),(en.position.y+0.95)-(o.y+dir.y*tt),en.position.z-(o.z+dir.z*tt));
-          const hp=enemyHeadPos(en,_hpV);
+          const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
           const hd=Math.hypot(hp.x-(o.x+dir.x*tt),hp.y-(o.y+dir.y*tt),hp.z-(o.z+dir.z*tt));
-          if(d<0.55||hd<0.24){ t=tt; hitEn=en; hitHead=hd<0.24; }
+          if(d<0.55||hd<hr){ t=tt; hitEn=en; hitHead=hd<hr; }
         }
       }
       const end=arc?arcApex:pts?pathEnd:new Vec3(o.x+dir.x*t,o.y+dir.y*t,o.z+dir.z*t);   // arc: spark/boom pulses fire at the (sagged) APEX · drooped thread: at its terminus — the dirt hit at range
@@ -5335,9 +5335,9 @@ function runContinuousBeams(dt){
                 const tt=rx*ds.x+ry*ds.y+rz*ds.z;
                 if(tt>0.05&&tt<ts){
                   const d=Math.hypot(en.position.x-(sO.x+ds.x*tt),(en.position.y+0.95)-(sO.y+ds.y*tt),en.position.z-(sO.z+ds.z*tt));
-                  const hp=enemyHeadPos(en,_hpV);
+                  const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
                   const hd=Math.hypot(hp.x-(sO.x+ds.x*tt),hp.y-(sO.y+ds.y*tt),hp.z-(sO.z+ds.z*tt));
-                  if(d<0.55||hd<0.24){ ts=tt; sEn=en; sHead=hd<0.24; }
+                  if(d<0.55||hd<hr){ ts=tt; sEn=en; sHead=hd<hr; }
                 }
               }
               if(sEn){
@@ -5396,9 +5396,9 @@ function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
     const tt=rx*f.x+ry*f.y+rz*f.z;
     if(tt>0.3&&tt<t){
       const d=Math.hypot(en.position.x-(o.x+f.x*tt),(en.position.y+0.95)-(o.y+f.y*tt),en.position.z-(o.z+f.z*tt));
-      const hp=enemyHeadPos(en,_hpV);
+      const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
       const hd=Math.hypot(hp.x-(o.x+f.x*tt),hp.y-(o.y+f.y*tt),hp.z-(o.z+f.z*tt));
-      if(d<0.55||hd<0.24) hits.push({en,tt,head:hd<0.24});
+      if(d<0.55||hd<hr) hits.push({en,tt,head:hd<hr});
     }
   }
   hits.sort((a,b)=>a.tt-b.tt);
@@ -5525,6 +5525,7 @@ function enemyHeadPos(en,out){
                  en.position.y+1.63+br-(en.state===2?0.04:0),
                  en.position.z+Math.cos(hy)*0.07);
 }
+const enemyHeadR=en=>en._brute?0.30:0.24;             // KNOWN_BUGS #4: GLSL inflates the whole brute d-=0.12 (drawn head ~0.285) — the hit sphere must cover the drawn flesh or grazes pass through it; rank-and-file keep 0.24
 function crackHelm(en){
   if(!en.helm) return;
   if(--en.helm.dur>0){ playSound('click'); return; }
@@ -5715,9 +5716,9 @@ function updateProjectiles(dt){
         if(!dead) for(const en of enemies){
           if(en.health<=0||en._dormant) continue;        // dormant: bullets pass through
           const d=Math.hypot(pr.pos.x-en.position.x,pr.pos.y-(en.position.y+0.95),pr.pos.z-en.position.z);
-          const hp=enemyHeadPos(en,_hpV);
+          const hp=enemyHeadPos(en,_hpV), hr=enemyHeadR(en);
           const hd=Math.hypot(pr.pos.x-hp.x,pr.pos.y-hp.y,pr.pos.z-hp.z);
-          if(d<(pr.kind==='slug'?0.9:0.55)||hd<0.24){
+          if(d<(pr.kind==='slug'?0.9:0.55)||hd<hr){
             if(pr.kind==='grip'){ addGlobOnEnemy(en); dead=true; break; }   // glue takes flesh: it sticks, it does not cut
             if(pr.kind==='hope'&&en._faction==='soldier'){                  // HOPE — mercy for the faithful: mend (cap at their spawn max), the mote spends itself. The undead (zombie/brute) FALL THROUGH to the wound path below → recoil dmg, pierce/headshot/status for free.
               en.health=Math.min(en._believer?100:200,en.health+(pr.heal||25));   // no en.maxHealth exists — soldier max is believer 100 / line zealot 200 (mirrors the constructor)
@@ -5728,14 +5729,14 @@ function updateProjectiles(dt){
               const last=pr._dHit.get(en);
               if(last===undefined||last-pr.life>=0.1){
                 pr._dHit.set(en,pr.life);
-                const head=hd<0.24;
+                const head=hd<hr;
                 en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');   // spark/boom dose rides the explosion — once
                 if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
                 if(pr.contact&&!(pr.fuse>0)) castRelay(pr,false,en.position.x,en.position.y+0.95,en.position.z);   // DRILL+CONTACT: the payload delivers every tick in-body — extras billed
               }
               break;                                     // keep flying
             }
-            const head=hd<0.24;
+            const head=hd<hr;
             en.hurt(headshotDmg(en,pr.dmg,head),'player',head?'head':undefined); if(pr.kind!=='spark'&&pr.kind!=='boom') applyStatus(en,pr); playSound('hit');   // spark/boom dose rides the explosion — once
             if(pr.push){ en.velocity.addScaledVector(pr.vel.clone().normalize(),8); en.stagger=0.35; }
             dead=impactOrPierce(pr,en.position.x,en.position.y+0.95,en.position.z); break; }
