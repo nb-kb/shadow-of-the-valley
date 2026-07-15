@@ -3902,7 +3902,7 @@ function activateAtCursor(){
   if(f.locked && cell && cell.widget){ adjustWidget(cell,-1); refreshInvUI(); return; }   // SECONDARY (RMB · ✕/pad0 · X) steps the dial DOWN; interact (LMB · □/pad2 · E) steps it UP
   if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
     if(!cell && !heldWorld){ closeInspect(); return; }
-    if(f.locked){ if(cell&&cell.widget){ adjustWidget(cell,1); refreshInvUI(); } else playSound('click'); return; }
+    if(f.locked){ playSound('click'); return; }   // a locked WIDGET cell already returned above (secondary = DOWN-step) — only the dead click can land here
     if(!f.inspectGrid){ playSound('click'); return; }   // tool pockets keep their old manners
   }
   if(!cell){ if(inspectItem) closeInspect(); return; }
@@ -7576,16 +7576,6 @@ function positionTipAtMouse(){
 document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;
   tipMouseT=performance.now();
   if(tooltipEl.style.display==='block') positionTipAtMouse();});
-function showTooltip_DEAD(item){
-  const cat=item instanceof ToolMod?('MOD · '+item.cat.toUpperCase()):
-            item instanceof Tool?'TOOL':item instanceof Magazine?'MAGAZINE':
-            item instanceof Ammunition?'AMMUNITION':item instanceof Gadget?'GADGET · SETTING':'ITEM';
-  let extra='';
-  if(item instanceof Magazine) extra=' · '+item.loaded+'/'+item.maxCapacity;
-  if(item instanceof Ammunition) extra=' · ×'+item.count;
-  tooltipEl.innerHTML='<div class="tt-name">'+item.name+'</div><div class="tt-cat">'+cat+extra+'</div><div>'+item.desc()+'</div>';
-  tooltipEl.style.display='block'; positionTooltip();
-}
 function hideTooltip(){ }   // superseded by syncTip's open-state gate
 
 // ---- item thumbnails: little canvas paintings, cached by kind ----
