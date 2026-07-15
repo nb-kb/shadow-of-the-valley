@@ -8439,10 +8439,13 @@ function updatePlayer(dt){
         const _land=!playerPos.onGround;       // the TOUCHDOWN EDGE — was airborne, now planted
         playerPos.onGround=true; playerPos.velY=0;
         if(_land){                             // MOMENTUM CHAIN resolves on the touchdown edge
-          // horizontal speed we're landing with: a slide-hop keeps it in velX/velZ; a plain
-          // jump's air step is positional (input×speed), so read that instead.
-          const _hvx=playerPos.launched?playerPos.velX:(rx*mx+fx*mz)*speed;
-          const _hvz=playerPos.launched?playerPos.velZ:(rz*mx+fz*mz)*speed;
+          // horizontal speed we're landing with: a slide-hop keeps it in velX/velZ — and so does
+          // FREE-ROPE flight (hook released mid-air): a rope landing cashes out like a launch
+          // (owner call 7). A plain jump's air step is positional (input×speed), read that instead.
+          const _fly=playerPos.launched||(playerPos.swinging&&!_swing);
+          if(playerPos.swinging&&!_swing) playerPos.swinging=false;   // free flight ends on THIS edge — left up, the rope's "a hook ends the slide" kill would eat a fresh cash-in next frame
+          const _hvx=_fly?playerPos.velX:(rx*mx+fx*mz)*speed;
+          const _hvz=_fly?playerPos.velZ:(rz*mx+fz*mz)*speed;
           const _hsp=Math.hypot(_hvx,_hvz), _slideMin=0.8*P('playerSpeed')*P('sprintMult');
           if(airSlideArmed&&_hsp>=_slideMin){   // MID-AIR CROUCH cashed in — land straight into a slide carrying the momentum (a jump-out then hops at THAT speed: the loop closes)
             slideDX=_hvx/_hsp; slideDZ=_hvz/_hsp;
@@ -8451,7 +8454,7 @@ function updatePlayer(dt){
             playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0;
             sprintOn=false; playerPos.isSprinting=false; playSound('step');
           }else{
-            if(playerPos.launched){ playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0; }   // slide-hop momentum spends on landing
+            if(_fly){ playerPos.launched=false; playerPos.velX=0; playerPos.velZ=0; slideHopSpd=0; }   // slide-hop / free-rope momentum spends on landing
             if(sprintLatch){ sprintOn=true; sprintLatch=false; if(moving&&!playerPos.isCrouching&&!playerPos.isAiming) playerPos.isSprinting=true; }   // land the slide/hop chain STILL SPRINTING — ready to slide again
             if(airSlideArmed) playerPos.isCrouching=true;   // armed but too slow: just a crouch, no slide
           }
