@@ -7153,6 +7153,20 @@ function closeTerminal(spend=true){ isTerminalOpen=false;
 function terminalFrame(){
   const ui=document.getElementById('terminalUI');
   const t=activeLevel&&activeLevel.terminal;
+  // READ PHASE FIRST, on LAST frame's layout — the row hit-test used to run AFTER the
+  // style writes below, forcing a synchronous reflow every frame at the desk (an fpsEma
+  // sink the auto-res ratchet then paid for). One frame of hover latency is invisible;
+  // a hidden panel reads rects of 0 and simply lands on "no row".
+  // The fixed center crosshair picks a row. _termOverRow (checked EVERY frame) gates the click-confirm;
+  // the termSel *update* still fires only while the MOUSE MOVES, so the stick/dpad (termNav) can nav
+  // without the hit-test snapping the selection back to the centered row each frame.
+  _termOverRow=false;
+  if(_termPlaced&&!ui.classList.contains('hidden')){
+    const rows=document.getElementById('termRows').children, cx=innerWidth/2, cy=innerHeight/2;
+    for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect();
+      if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ _termOverRow=true; if((INPUT.mdx||INPUT.mdy)&&i!==termSel){ termSel=i; renderTerminal(); } break; } }
+  }
+  // WRITE PHASE — place the panel for THIS frame
   let placed=false;
   if(t){
     const ca=Math.cos(t.yaw), sa=Math.sin(t.yaw);            // phosphor-center anchor: slab-local (r2.x 0, r2.y .03), y 1.025
@@ -7174,15 +7188,6 @@ function terminalFrame(){
   ui.classList.toggle('hidden', !placed);   // AUTO-ON: the panel lives ON the monitor — hidden when the screen is off-camera (look away → gone), shown when you face it
   document.getElementById('termCursor').classList.toggle('on', placed);   // the cursor glyph rides the panel — no floating pointer over an off-camera slab
   _termPlaced=placed;
-  // the fixed center crosshair picks a row. _termOverRow (checked EVERY frame) gates the click-confirm;
-  // the termSel *update* still fires only while the MOUSE MOVES, so the stick/dpad (termNav) can nav
-  // without the hit-test snapping the selection back to the centered row each frame.
-  _termOverRow=false;
-  if(placed){
-    const rows=document.getElementById('termRows').children, cx=innerWidth/2, cy=innerHeight/2;
-    for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect();
-      if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ _termOverRow=true; if((INPUT.mdx||INPUT.mdy)&&i!==termSel){ termSel=i; renderTerminal(); } break; } }
-  }
 }
 function renderTerminal(){
   const sc=TERM_SCREENS[termScreen]();
