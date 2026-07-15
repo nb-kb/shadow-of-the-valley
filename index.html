@@ -6505,7 +6505,8 @@ class Zealot{
     let _rx,_rz;
     if(_poiLvl){ _rx=this.startPos.x; _rz=this.startPos.z; }
     else { const a=runRng()*Math.PI*2, r=45+runRng()*15; _rx=playerPos.x+Math.cos(a)*r; _rz=playerPos.z+Math.sin(a)*r; this.startPos=new Vec3(_rx,0,_rz); }
-    this.position.set(_rx, restOnSurface(_rx, levelGroundJS(_rx,_rz)+2.5, _rz), _rz);
+    const _gy=activeLevel ? levelGroundJS(_rx,_rz) : terrainHJS(_rx,_rz);   // valley has NO authored level → procedural terrain height (mirrors the constructor). levelGroundJS reads activeLevel.bounds and would NPE in the valley — that throw was aborting the whole enemy loop (frozen mid-air enemies).
+    this.position.set(_rx, restOnSurface(_rx, _gy+2.5, _rz), _rz);
     if(this._faction==='zombie'){                         // faction persists across respawn — undead come back undead (brute keeps its 300), no gear, no bomber roll
       this._believer=false; this._selfBoom=false;
       this.health=this._brute?800:100;
