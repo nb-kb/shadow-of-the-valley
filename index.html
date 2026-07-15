@@ -6542,15 +6542,15 @@ function reviveBrute(){                          // BRUTE mini-boss returns on t
 // ============================================================
 let _outskDwell=0, _outskSpawnT=3;               // continuous linger (drives the ramp) + spawn cadence; both re-arm when the player steps back inside
 const OUTSK_MAX=16;                               // concurrent LIVE outskirts undead — the gauntlet pool rides ON TOP of the sealed arena roster (full & dormant behind the wall). nearest-N render+dormancy caps active work, so this never overflows the material band
-function inOutskirts(){                           // the player is out past the north wall (z>z1) — HOWEVER they got there: open gate, PICK-carved hole, or WARP. The wall physics gates ACCESS; the horde just spawns whenever you're out there (no door trigger).
-  return !!activeLevel && activeLevel.id==='area1' && playerPos.z>activeLevel.bounds.z1;
+function _outOfBounds(x,z){ const b=activeLevel.bounds; return x<b.x0||x>b.x1||z<b.z0||z>b.z1; }   // past the perimeter in ANY direction (square distance-from-center; a circle would false-trigger in the corners)
+function inOutskirts(){                           // the player is OUT past the perimeter, ANY direction — HOWEVER they got there (gate, PICK-carved hole, WARP). Leave the bounds anywhere → suicide-run zone.
+  return !!activeLevel && activeLevel.id==='area1' && _outOfBounds(playerPos.x, playerPos.z);
 }
-function outskirtsSpawnPoint(){                   // a clear ground spot 10–24m from the player, kept OUT past the wall
-  const z1=activeLevel.bounds.z1;
+function outskirtsSpawnPoint(){                   // a clear ground spot 10–24m from the player, kept OUT past the perimeter (whichever side they left)
   for(let t=0;t<12;t++){
     const a=runRng()*6.2832, r=10+runRng()*14;
     const x=playerPos.x+Math.cos(a)*r, z=playerPos.z+Math.sin(a)*r;
-    if(z<=z1+1) continue;                         // never spawn back through the gate / inside the arena
+    if(!_outOfBounds(x,z)) continue;              // never spawn back INSIDE the arena — keep the horde out on the outskirts
     if(levelSdfJS(x,1.0,z)<0.4) continue;         // not inside a wall/prop
     return [x,z];
   }
@@ -6565,8 +6565,7 @@ function wakeUndead(en,x,z){                       // recycle a DOWNED undead bo
   en.status.burn=0; en.status.bleedT=0; en.status.bleedN=0;
 }
 function spawnOutskirtsZombie(){
-  const z1=activeLevel.bounds.z1;
-  let live=0; for(const e of enemies) if(e.health>0&&e._faction==='zombie'&&!e._brute&&e.position.z>z1) live++;   // concurrency = undead ALREADY out past the wall
+  let live=0; for(const e of enemies) if(e.health>0&&e._faction==='zombie'&&!e._brute&&_outOfBounds(e.position.x,e.position.z)) live++;   // concurrency = undead ALREADY out past the perimeter
   if(live>=OUTSK_MAX) return;                                                 // swarm ceiling hit — the ramp still shortens the interval, but don't pile past the cap
   const p=outskirtsSpawnPoint(); if(!p) return;
   const dz=enemies.find(e=>e.health<=0&&e._faction==='zombie'&&!e._brute);   // reuse a downed shambler first — zero roster growth
