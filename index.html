@@ -6356,9 +6356,7 @@ class Zealot{
         this.dwellT-=dt;
         this.yaw+=Math.sin(gameTime*1.7+this.startPos.x)*dt*1.5;
         if(this.dwellT<=0) this.patrolDir=(this._reDir!=null)?this._reDir:runRng()*6.28;
-      }else if(this.patrolBlocked(fx,fz)){               // wall/steep ahead — pause briefly, pick a turn away
-        this.dwellT=1.5+runRng(); this._reDir=this.patrolAvoidDir(fx,fz);
-      }else{                                             // clear — walk the line, but DRAW TOWARD nearby allies so a POI cluster patrols together instead of idling apart
+      }else{                                             // walk the line, but DRAW TOWARD nearby allies so a POI cluster patrols together instead of idling apart
         let gx=0,gz=0,gn=0, nx=0,nz=0,nd=99;
         for(const o of enemies){ if(o!==this&&o.health>0&&o._faction==='soldier'&&o.state<2){ const dd=o.position.distanceTo(this.position); if(dd<16){ gx+=o.position.x; gz+=o.position.z; gn++; if(dd<nd){ nd=dd; nx=o.position.x; nz=o.position.z; } } } }
         let tx=this.position.x+fx*3, tz=this.position.z+fz*3;
@@ -6367,7 +6365,9 @@ class Zealot{
           if(nd<2.2){ tx+=this.position.x-nx; tz+=this.position.z-nz; }
           speed*=1.5; }                                   // moving with the group — no dawdling at patrol pace
         if(Math.hypot(this.position.x-this.startPos.x,this.position.z-this.startPos.z)>28){ tx=this.startPos.x; tz=this.startPos.z; }   // LEASH: hold the POI — turn back before drifting far from the spawn, so the camp stays put instead of wandering the map
-        moveTo=new Vec3(tx,0,tz); faceTo=moveTo;
+        const ix=tx-this.position.x, iz=tz-this.position.z, il=Math.hypot(ix,iz);   // BLOCKED test rides the FINAL intent: cohesion/leash steer up to 180° off patrolDir, and testing the raw heading let the steered walk grind walls
+        if(il>0.001&&this.patrolBlocked(ix/il,iz/il)){ this.dwellT=1.5+runRng(); this._reDir=this.patrolAvoidDir(ix/il,iz/il); }   // wall/steep along the actual path — pause briefly, pick a turn away
+        else{ moveTo=new Vec3(tx,0,tz); faceTo=moveTo; }
       }
     }
 
