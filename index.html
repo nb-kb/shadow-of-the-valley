@@ -1942,9 +1942,23 @@ function rebindProgram(prog){ gl.useProgram(prog); cacheUniforms(prog); setupAtt
 // --- FULL-variant swap: bind the current level's full program once it links; stay on the level-agnostic preview until then ---
 let _valleyLinked=false, _authoredLinked=false, _curProg=previewProgram;
 function _progDone(pr){ return parallelExt ? gl.getProgramParameter(pr,parallelExt.COMPLETION_STATUS_KHR) : true; }
+function _prewarmDraw(pr){
+  // ANGLE defers the real D3D compile/pipeline build to a program's FIRST draw. Pay it
+  // HERE — one 2x2-viewport draw the moment the variant links, behind the boot screen —
+  // so neither the preview->authored swap nor the first hideout<->valley deploy eats the
+  // stall as a brief black frame (KNOWN_BUGS #2 suspect). All uniforms are defaults
+  // (uMaxSteps 0, counts 0 — every loop is bounded) and the frame's own full-screen draw
+  // overwrites the 4 pixels the same frame. NO uniform writes here, so U stays valid for
+  // the bound program; restore useProgram before returning per the U invariant above.
+  gl.useProgram(pr); setupAttrib(pr);
+  gl.viewport(0,0,2,2);
+  gl.drawArrays(gl.TRIANGLES,0,6);
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.useProgram(_curProg);
+}
 function ensureFullProgram(){
-  if(!_valleyLinked   && _progDone(valleyProgram)){   _valleyLinked=true;   if(!gl.getProgramParameter(valleyProgram,gl.LINK_STATUS))   fatal('valley program link:\n'+gl.getProgramInfoLog(valleyProgram)); if(isTerminalOpen) renderTerminal(); }
-  if(!_authoredLinked && _progDone(authoredProgram)){ _authoredLinked=true; if(!gl.getProgramParameter(authoredProgram,gl.LINK_STATUS)) fatal('authored program link:\n'+gl.getProgramInfoLog(authoredProgram)); if(isTerminalOpen) renderTerminal(); }
+  if(!_valleyLinked   && _progDone(valleyProgram)){   _valleyLinked=true;   if(!gl.getProgramParameter(valleyProgram,gl.LINK_STATUS))   fatal('valley program link:\n'+gl.getProgramInfoLog(valleyProgram));   else _prewarmDraw(valleyProgram);   if(isTerminalOpen) renderTerminal(); }
+  if(!_authoredLinked && _progDone(authoredProgram)){ _authoredLinked=true; if(!gl.getProgramParameter(authoredProgram,gl.LINK_STATUS)) fatal('authored program link:\n'+gl.getProgramInfoLog(authoredProgram)); else _prewarmDraw(authoredProgram); if(isTerminalOpen) renderTerminal(); }
   const wantAuthored = !!(activeLevel && activeLevel.kind==='authored');
   const want = wantAuthored ? (_authoredLinked && authoredProgram) : (_valleyLinked && valleyProgram);
   const target = want || previewProgram;     // stay on preview until the needed variant links
