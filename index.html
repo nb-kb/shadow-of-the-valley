@@ -4401,13 +4401,13 @@ function foldFrame(out,m){
 // non-sequence items are cargo (skipped), the column's muzzle folds per-lane,
 // and a lane-final BEAM becomes the tactical laser instead of venting.
 function resolveLane(col,out){
-  const lane={shots:[],vented:[],flow:[],seq:[],tacLaser:false,isPowder:false,
+  const lane={shots:[],vented:[],flow:[],seq:[],tacLaser:false,isPowder:false,hasMag:false,
               spreadAdd:col.spreadAdd,silenced:false,spreadMul:1,mountIdx:col.mountIdx};
   let pend=freshPend(), feeders=[];
   for(const ref of col.refs){
     const m=readRef(ref);
     if(!m) continue;
-    if(m instanceof Magazine && m.powder) lane.isPowder=true;   // a Powder Mag rides this lane → C3 refund frees the housed payload; the bare fallback must keep the synth round
+    if(m instanceof Magazine){ lane.hasMag=true; if(m.powder) lane.isPowder=true; }   // a mag rides this lane's OWN reserve (→ it can fire plain lead in parallel); a Powder Mag also → C3 refund frees the housed payload; the bare fallback keeps the synth round
     if(ref.muzzle){                                 // active muzzle: per-COLUMN stats
       if(m instanceof ToolMod && m.cat==='muzzle'){
         if(m.effect.silenced) lane.silenced=true;
@@ -4516,7 +4516,12 @@ function resolveTool(tool){
   // empty mag instead. Powder mags keep their own synth round (free relay mods want a bolt
   // core); a mag-only / empty tool still falls to the bare lane below.
   if(tool) for(const c of out.columns){
-    if(!c.shots.length) continue;                                    // no core here → mag-only; the bare lane fires it
+    // PARALLEL COLUMNS (MODS.md rule C — mags in series pass their sequence but fire
+    // SIMULTANEOUSLY with the cores): a MAG-ONLY column (e.g. a new platform-wing lane
+    // holding just a magazine) fires its OWN plain lead alongside the cores. Own mag only —
+    // else an empty micro-lane would phantom-fire the shared base reserve. Core-less AND
+    // mag-less → nothing here; the bare lane still covers a wholly empty tool.
+    if(!c.shots.length && !c.hasMag) continue;
     if(c.shots.some(s=>s.kind==='bolt'||s.kind==='slug')) continue;  // already ballistic → don't double the lead
     const mg=columnMag(tool,c.mountIdx,false);
     if(!mg||mg.powder) continue;                                     // needs a non-powder mag; a powder mag makes its own round
