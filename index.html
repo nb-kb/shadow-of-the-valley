@@ -2169,9 +2169,16 @@ const STEP_MAX=0.45;   // STEP-OVER cap: the tallest ledge an actor rolls onto. 
 // restOnSurface snap plant the feet exact next; a sheer face (still solid a STEP up)
 // is refused. headY>0 also refuses an overhang the raised body would clip.
 function stepOver(pos,r,headY){
-  if(mapWorldJS(pos.x,pos.y,pos.z)>=r) return false;                      // not blocked -> nothing to step
-  worldNormalJS(pos.x,pos.y,pos.z,_n);                                    // WHAT blocks? the terrain SDF is scaled ×0.62 so a PLANTED foot ALWAYS reads "penetrating" with n≈straight up —
-  if(_n.y>0.7) return false;                                              // ground/walkable slope, the snap owns Y here, NEVER lift. A real ledge/wall faces SIDEWAYS (n.y low): only those get stepped
+  const d0=mapWorldJS(pos.x,pos.y,pos.z);
+  if(d0>=r) return false;                                                 // not blocked -> nothing to step
+  // WHAT blocks? VERTICAL-GRADIENT test: terrain is a column field ((y-h)×0.62), so it grows
+  // 0.62/m straight up at EVERY slope angle — refuse it: ground is the snap's job, NEVER lift
+  // (a planted foot always reads "penetrating"; the old n.y>0.7 guard missed slopes >46° and
+  // the 72m valley walls walked). A ledge/wall FACE grows ~0/m up — a step candidate. Probe
+  // SHORT (0.15m): both samples stay inside the blocking face's field, so a deep substep
+  // penetration against a low lip still reads "face", not "terrain". 0.55 is the tunable —
+  // it must stay below the 0.62 terrain scale, with margin both ways.
+  if(mapWorldJS(pos.x,pos.y+0.15,pos.z)-d0>0.15*0.55) return false;
   if(mapWorldJS(pos.x,pos.y+STEP_MAX,pos.z)<r) return false;              // solid a STEP up -> sheer wall/crate/containment
   if(headY>0 && mapWorldJS(pos.x,headY+STEP_MAX,pos.z)<r) return false;   // raised head clips an overhang
   pos.y+=STEP_MAX; return true;                                           // low ledge -> lift; ground-snap settles exact
