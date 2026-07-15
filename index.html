@@ -3174,7 +3174,7 @@ function writeRef(r,v){ if(r.k) r.a[r.k]=v; else r.a[r.i]=v; }
 
 // which magazine feeds column ci: its own slots first (bottom-up), then the base
 // segment as the shared reserve. Rucksack mags never auto-feed.
-function columnMag(tool,ci,needRounds){
+function columnMag(tool,ci,needRounds,ownOnly){
   const cols=toolColumns(tool);
   const scan=(refs)=>{
     let empty=null;
@@ -3184,7 +3184,7 @@ function columnMag(tool,ci,needRounds){
   };
   const own=scan(cols[ci]?cols[ci].refs:[]);
   if(own) return own;
-  if(ci!==0) return scan(cols[0]?cols[0].refs.filter(r=>r.a===tool.base.slots):[]);
+  if(ci!==0&&!ownOnly) return scan(cols[0]?cols[0].refs.filter(r=>r.a===tool.base.slots):[]);   // ownOnly: a wing that CARRIES its own mag never siphons the shared base reserve (empty → dry-click)
   return null;
 }
 function toolMagazine(tool){                      // any mag, base first — reload + pour verbs
@@ -4798,7 +4798,7 @@ function tryFirePlayer(dt){
   for(let ci=0;ci<cols.length;ci++){
     const lane=cols[ci];
     const cyc=res.bare?0:lane.cycleRef.get();
-    const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true);   // bare bolt still drinks from the rack's mag
+    const mag=columnMag(activeTool,res.bare?0:lane.mountIdx,true,!res.bare&&!!lane.hasMag);   // bare bolt still drinks from the rack's mag; a wing with its OWN mag bills ONLY that mag (empty → dry-click, no base-reserve siphon)
     const _pw=!!(mag&&mag.powder);                        // C13: a Powder Mag powders whatever's loaded → this lane PULSES hitscan & feeders cost no ⚡ (retired powderCore trait)
     const shots=lane.shots;                              // no core-less powder synth (corrected beta 1.1.x): a lane fires only its real cores + the parallel plain-lead bolt resolveTool folded in
     const n=shots.length; if(!n) continue;
@@ -4814,7 +4814,7 @@ function tryFirePlayer(dt){
       if(sh.pend.laser&&!bl&&!sh.powder) continue;       // continuous shots belong to the held-fire path — powder pulls, hitscan
       if(bl&&_laserBursts.some(q=>q.lane===lane)) continue;   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
-      const _ec=_pw?((sh.cost||0)-(sh.pend.surcharge||0)):(sh.cost||0);   // C14: a Powder Mag makes EVERY mod's ⚡ free across the whole barrel (base/core cost only) — for every shot in the lane, not just the bolt
+      const _ec=_pw?((sh.cost||0)-((sh.pend.surcharge||0)-(sh.pend.surchargeHard||0))):(sh.cost||0);   // C14: a Powder Mag frees the mods' ⚡ — but NEVER surchargeHard (REFUND's own price: "the one no core forgives, POWDER included", MODS.md), mirroring the retired powder-core formula
       const okCharge=activeTool.charge>=(bl?Math.ceil(_ec/3):_ec);
       const okAmmo=rds===0||(mag&&mag.loaded>=rds);
       if(!okCharge) continue;                            // browned out — expected, silent; siblings may still fire
