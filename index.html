@@ -6971,13 +6971,21 @@ function seedLevelSpawns(L){
     }
   }
   // guaranteed: the level promises these regardless of the roll — a promise KEPT,
-  // not re-given: one already in a crate, the stash, or on the rig satisfies it
+  // not re-given: one ANYWHERE keeps it — any crate/stash (two-deep: a bagged card
+  // in a box counts), the worn rig itself, or on the player (invArmWalk: pockets,
+  // container insides, racked cells). Placement rolls rng() over eligible crates
+  // so the hunt varies raid to raid (first-fit parked the card in the same box).
   for(const k of (L.spawn.guaranteed||[])){
     if(!ITEM_DEFS[k]) continue;
-    const owns=g=>!!g&&g.flat().some(x=>x&&x.defKey===k);
-    if(crateRegistry.some(cr=>owns(cr.inv))||EQUIP_SLOTS.some(s=>equip[s]&&owns(equip[s].inv))) continue;
+    if(k==='gateCard'&&_gateOpen) continue;        // belt-and-braces: an OPEN gate wants no fresh card (the per-raid re-lock above keeps this moot today)
+    const owns=g=>!!g&&g.flat().some(x=>x&&(x.defKey===k||(x.inv&&x.inv.flat().some(y=>y&&y.defKey===k))));
+    let has=crateRegistry.some(cr=>owns(cr.inv))
+         || EQUIP_SLOTS.some(s=>equip[s]&&(equip[s].defKey===k||owns(equip[s].inv)));
+    if(!has) invArmWalk(x=>{ if(x.defKey===k) has=true; });
+    if(has) continue;
     const it=ITEM_DEFS[k]();
-    for(const cr of crateRegistry){ if(cr.stash) continue; if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break; }
+    const elig=crateRegistry.filter(cr=>!cr.stash);
+    while(elig.length){ const cr=elig.splice(Math.floor(rng()*elig.length),1)[0]; if(autoPlace(it,cr.inv,cr.invCols,cr.invRows)) break; }
   }
 }
 // exfiltration: stand in the circle, hold the verb, go home with the bag
