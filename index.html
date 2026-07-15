@@ -8993,15 +8993,9 @@ function frame(){
   gl.uniform1i(U.uEnemyCount,ei);
   gl.uniform2f(U.uEnemyEye, Math.cos(P('enemyFovDeg')*Math.PI/360), Math.min(spotDistance(),16));
 
-  // tracers = live projectiles + beam segments
+  // tracers: live projectiles FIRST, beam segments take the remainder — a full
+  // pin-needle board must starve needles, never render bullets invisible
   let ti=0;
-  for(const b of beamSegs){
-    if(ti>=RLIM.TRACERS) break;
-    gl.uniform3f(U.trA[ti],b.a.x,b.a.y,b.a.z);
-    gl.uniform3f(U.trB[ti],b.b.x,b.b.y,b.b.z);
-    gl.uniform3f(U.trC[ti],b.col[0],b.col[1],b.col[2]);
-    ti++;
-  }
   for(const pr of projectiles){
     if(ti>=RLIM.TRACERS) break;
     const vl=pr.vel.length()||1;
@@ -9015,6 +9009,13 @@ function frame(){
     else gl.uniform3f(U.trB[ti],pr.pos.x-pr.vel.x/vl*0.8,pr.pos.y-pr.vel.y/vl*0.8,pr.pos.z-pr.vel.z/vl*0.8);
     }
     gl.uniform3f(U.trC[ti],pr.col[0],pr.col[1],pr.col[2]);
+    ti++;
+  }
+  for(const b of beamSegs){
+    if(ti>=RLIM.TRACERS) break;
+    gl.uniform3f(U.trA[ti],b.a.x,b.a.y,b.a.z);
+    gl.uniform3f(U.trB[ti],b.b.x,b.b.y,b.b.z);
+    gl.uniform3f(U.trC[ti],b.col[0],b.col[1],b.col[2]);
     ti++;
   }
   gl.uniform1i(U.tracerCount,ti);
