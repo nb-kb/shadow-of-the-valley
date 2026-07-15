@@ -6299,8 +6299,8 @@ class Zealot{
     // --- state machine ---
     if(this.detection>=1&&this.state<2){
       this.state=2; playSound('alert', this.position);   // spatial: a guard alerted across the map no longer blares in your face
-      const _hasSup=enemies.some(o=>o!==this&&o.health>0&&o._faction===this._faction&&o.state===2&&o.alarmRole==='suppress');   // guarantee >=1 suppressor per alarmed squad so a small all-cover squad never freezes (the fire-gate always has covering fire)
-      this.alarmRole = _hasSup ? (runRng()<0.5?'cover':'suppress') : 'suppress';   // COVER/SUPPRESS role as it wakes — the first waker always suppresses
+      const _hasSup=enemies.some(o=>o!==this&&!o._believer&&o.health>0&&o._faction===this._faction&&o.state===2&&o.alarmRole==='suppress');   // guarantee >=1 suppressor per alarmed squad so a small all-cover squad never freezes (the fire-gate always has covering fire). Believers never count: state-2 routes them to tryBoom, they never fire, so one holding 'suppress' is covering fire that does not exist
+      this.alarmRole = this._believer ? null : (_hasSup ? (runRng()<0.5?'cover':'suppress') : 'suppress');   // COVER/SUPPRESS role as it wakes — the first REAL shooter always suppresses; a Believer takes no role (it only walks in and blows)
       this.coverPoint=null; this._coverT=0;
       if(tgt.isPlayer){ document.getElementById('alertFlash').style.opacity=1;   // the red ALERT flash is PLAYER feedback only — spotting a zombie must not fake it
         setTimeout(()=>document.getElementById('alertFlash').style.opacity=0,400); }
