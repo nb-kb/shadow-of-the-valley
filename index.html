@@ -2424,6 +2424,7 @@ LEVELS.area1={
       {id:'testing',  c:[140,-54], anchors:[[135,-40],[147,-62],[133,-78],[145,-30],[158,-44]]}, // SE · target-block field
       {id:'housing',  c:[6,-98],   anchors:[[-8,-88],[14,-104],[22,-84],[-2,-116]]} ],           // S  · tentsB
     zombieZones:[ [22,65],[-82,-64],[-150,-118],[92,-128],[150,118] ],   // forest · tentsA · NW/S/NE outskirts belts
+    yMax:3.0,          // P5 SPAWN Y-CAP (spec E): seed placements refuse ground above this — nobody starts on the rim embankment or the perimeter wall. The OUT-of-bounds gauntlet spawner never reads it (outskirts ride 6-38m high by design).
     lootN:48, minSpace:6,
     // LOOT BALANCE: every tier carries an EQUAL 4-slot share of each item CATEGORY —
     // BALLISTICS(ammo+mag) · ENERGY(cores+mods) · UTILITIES · ARMOR · CONSUMABLES — so
@@ -7233,6 +7234,7 @@ function seedLevelSpawns(L){
   const inBox=(r)=>{ const b=r.box; return [b[0]+2+rng()*(b[2]-b[0]-4), b[1]+2+rng()*(b[3]-b[1]-4)]; };
   const placed=[];
   const clear=(x,z,sp)=>placed.every(p=>Math.hypot(p[0]-x,p[1]-z)>=sp);
+  const _yCap=L.spawn.yMax!==undefined?L.spawn.yMax:1/0;   // P5 SPAWN Y-CAP (spec E): the floor law made EXPLICIT — the old fixed y=1.0 probes only rejected high ground by accident
   // ---- HORDE SPAWN (build 4) ----
   // AREA-1 raid: 2 rotating hot POIs get TIGHT soldier knots; the OTHER POIs + dedicated
   // zombie zones + outskirts get LOOSE undead loops; ONE brute roams. Everything stays in
@@ -7248,6 +7250,7 @@ function seedLevelSpawns(L){
         const a=rng()*6.2832, rr=rad*Math.sqrt(rng());   // uniform-in-disc
         const x=cx+Math.cos(a)*rr, z=cz+Math.sin(a)*rr;
         if(!inB(x,z)||!offDrop(x,z)||!clear(x,z,sp)) continue;
+        if(levelGroundJS(x,z)>_yCap) continue;           // P5: never seed on raised ground (rim/wall)
         if(levelSdfJS(x,1.0,z)<0.4) continue;            // not inside a wall/prop
         enemies.push(new Zealot(x,z,kind)); placed.push([x,z]); return true;
       }
@@ -7286,6 +7289,7 @@ function seedLevelSpawns(L){
           let [x,z]=inBox(r);
           if(spec.outside){ x=r.box[0]-4-rng()*6; }          // patrol the facility apron
           if(!clear(x,z,L.spawn.minSpace)) continue;
+          if(levelGroundJS(x,z)>_yCap) continue;              // P5: the same y-cap the POI path enforces
           if(levelSdfJS(x,1.0,z)<0.4) continue;               // not inside a wall
           enemies.push(new Zealot(x,z)); placed.push([x,z]); break;
         }
