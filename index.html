@@ -6398,6 +6398,11 @@ class Zealot{
     const tEyeY=tgt.isPlayer?playerPos.y+0.9:tgt.y+0.95;
     // SEES FINE AT NIGHT: plain range + sightline. No dayEye/fog/effVision, no FOV cone — that's the whole design distinction from a soldier.
     const sees = dist<22 && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz));
+    // HEARS TOO (owner call 12): noise pings pull a shamble — LURE works on the undead as described. Hearing stays MODEST: the ping's reach is capped at the 22m sense range, so a cross-map boom doesn't drag the whole horde. Live sight below overwrites the goal.
+    for(let i=noisePings.length-1;i>=0;i--){
+      const np=noisePings[i];
+      if(this.position.distanceTo(np.pos)<Math.min(np.r,22)){ this.investigate=np.pos.clone(); if(this.state===0) this.state=1; }
+    }
     let speed=P('enemySpeed')*globSlow(this.position,this)*(this._brute?0.55:1.2), moveTo=null, faceTo=null;
     if(sees){
       if(this.state!==2){                                  // fresh acquisition — rouse nearby undead (~18m) so the swarm converges
