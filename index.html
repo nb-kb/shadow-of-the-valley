@@ -6312,6 +6312,13 @@ class Zealot{
       this.hurtFlash=Math.max(this.hurtFlash,0.35);  // the body shows the fire — free telegraph
     }
     if(this.status.bleedT>0){ this.status.bleedT-=dt; this.health-=dt*(this.status.bleedN||1); if(this.status.bleedT<=0) this.status.bleedN=0; }   // 1 hp/s per stack · 15s
+    // RADIATION (P3): the haze burns the LIVING — an unmasked soldier (Believers too) doses
+    // like the player into its pool (the 2 hp/s tick above cooks it); a masked one breathes
+    // free; the faction gate keeps the undead immune — the brute IS a source, not a victim.
+    if(this._faction==='soldier'&&!this._mask){
+      const _rr=radAt(this.position.x,this.position.z);
+      if(_rr>0.02) this.status.burn+=P('radBurn')*_rr*dt;
+    }
     if(this.health<=0){ this.die(); return; }
     if(this.stagger>0){ this.stagger-=dt; this.position.addScaledVector(this.velocity,dt*0.4); this.settle(dt); return; }
 
@@ -6434,6 +6441,32 @@ class Zealot{
       }
     }
 
+    // GAS FEAR (P3): the haze terrifies bare lungs — an unmasked zealot INSIDE it drops
+    // everything and runs it out (4-point gradient descent; flat cloud-hearts flee the
+    // nearest source instead); one at the rim refuses to walk deeper, whatever the state
+    // machine wanted (it holds and keeps shooting). Masked soldiers HOLD the haze;
+    // Believers walk their bomb through anything (kamikaze); the undead never read this —
+    // the hazed POIs become their turf.
+    if(!this._mask&&!this._believer){
+      const rHere=radAt(this.position.x,this.position.z);
+      if(rHere>0.15){
+        let bx=this.position.x, bz=this.position.z, br=rHere;
+        for(let i=0;i<4;i++){ const a=i*1.5708, x2=this.position.x+Math.sin(a)*5, z2=this.position.z+Math.cos(a)*5;
+          const r2=radAt(x2,z2); if(r2<br){ br=r2; bx=x2; bz=z2; } }
+        if(br>=rHere){ let sx=this.startPos.x, sz=this.startPos.z, sd=1e9;   // flat heart: run from the nearest source center
+          for(const hi of _hazedPOIs){ const hp=activeLevel.spawn.pois[hi]; if(!hp) continue;
+            const d=Math.hypot(this.position.x-hp.c[0],this.position.z-hp.c[1]); if(d<sd){ sd=d; sx=hp.c[0]; sz=hp.c[1]; } }
+          if(_radBrute){ const d=Math.hypot(this.position.x-_radBrute.position.x,this.position.z-_radBrute.position.z); if(d<sd){ sd=d; sx=_radBrute.position.x; sz=_radBrute.position.z; } }
+          const vx=this.position.x-sx, vz=this.position.z-sz, vl=Math.hypot(vx,vz)||1;
+          bx=this.position.x+vx/vl*6; bz=this.position.z+vz/vl*6;
+        }
+        moveTo=(this._gasMv||(this._gasMv=new Vec3())).set(bx,0,bz); faceTo=faceTo||moveTo;
+        speed=Math.max(speed,P('enemySpeed'));                             // fear cancels the patrol dawdle — it MOVES
+      }else if(moveTo){
+        const gx=moveTo.x-this.position.x, gz=moveTo.z-this.position.z, gl=Math.hypot(gx,gz);
+        if(gl>1.0&&radAt(this.position.x+gx/gl*3,this.position.z+gz/gl*3)>0.3) moveTo=null;   // the next stretch is gassed — balk at the rim
+      }
+    }
     if(moveTo){
       const mdx=moveTo.x-this.position.x, mdz=moveTo.z-this.position.z;
       const md=Math.hypot(mdx,mdz);
@@ -7088,6 +7121,7 @@ function seedLevelSpawns(L){
     // ZOMBIES — loose loops at the NON-hot POIs + the dedicated zombie zones/outskirts (wide radius, kept apart)
     const loops=[];
     for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) loops.push(POI[i].c);
+    loops.push(...loops.slice());                        // HAZE TURF (P3): the hazed (non-hot) POIs enter the round-robin TWICE — ~2 undead each there before a zone sees one (the spec's higher concentration; unmasked soldiers shun the same ground, so the faction map reinforces itself)
     for(const zz of ZZ) loops.push(zz);
     for(let n=0;n<N_ZOMB&&loops.length;n++){ const lc=loops[n%loops.length]; drop(lc[0],lc[1],14,5,'zombie'); }
   }else{
