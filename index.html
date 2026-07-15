@@ -6408,7 +6408,7 @@ class Zealot{
       moveTo=this.investigate; faceTo=this.investigate;
       if(dist<1.6){                                        // LUNGE: in reach — stop shambling, swipe. Routes cross-faction: soldiers get hurt(), the player gets damagePlayer().
         moveTo=null;
-        if(this.shootCooldown<=0){ const md=this._brute?24:12; if(tgt.isPlayer) damagePlayer(md); else tgt.ent.hurt(md,this); this.shootCooldown=1.0; }
+        if(this.shootCooldown<=0&&!this._dormant){ const md=this._brute?24:12; if(tgt.isPlayer) damagePlayer(md); else tgt.ent.hurt(md,this); this.shootCooldown=1.0; }   // !_dormant mirrors tryShoot/tryBoom: past the cap it is unrendered and unhittable — it must never bite from the void
       }
     }else if(this.state>=1&&this.investigate){            // ALERTED BUT BLIND (saw them, or got SHOT from out of sense range) — shamble to the last-known spot, then give up
       moveTo=this.investigate; faceTo=this.investigate;
