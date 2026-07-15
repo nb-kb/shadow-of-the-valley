@@ -7234,7 +7234,7 @@ function itemToJSON(it){
   if(it instanceof Barrel){ j.slots=it.slots.map(itemToJSON); j.muzzle=itemToJSON(it.muzzle); }
   if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
   if(it instanceof Tool){ j.slots=it.base.slots.map(itemToJSON); j.muzzle=itemToJSON(it.base.muzzle);
-    j.cycle=it.baseCycle; j.wielded=(it===activeTool); }
+    j.cycle=it.baseCycle; }
   if((it instanceof Armor && it.inv && !it.settingsDevice) || (it instanceof ToolMod && it.effect && it.effect.adapter && it.inv)){
     j.inv=[];
     const seen=new Set();
@@ -7262,7 +7262,7 @@ function itemFromJSON(j){
   if(it instanceof Platform){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } });   // same clamp as the Barrel — overlong saves salvage, never overrun
     if(j.cycles) it.cycles=j.cycles.slice(); }
   if(it instanceof Tool){ j.slots.forEach((c,i)=>it.base.slots[i]=itemFromJSON(c));
-    it.base.muzzle=itemFromJSON(j.muzzle); it.baseCycle=j.cycle||0; it._wield=!!j.wielded; }
+    it.base.muzzle=itemFromJSON(j.muzzle); it.baseCycle=j.cycle||0; }
   if(it instanceof Armor && j.inv && it.inv){
     for(const cj of j.inv){
       const ch=itemFromJSON(cj); if(!ch) continue;
