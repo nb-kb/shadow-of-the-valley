@@ -31,7 +31,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #freeAim.iron::before{content:'';position:absolute;left:-0.16vh;top:0;width:0.32vh;height:5.5vh;background:rgba(219,224,230,0.7);}  /* the post rises to center from below — shader twin: uv.y in [-0.055,0] */
 #freeAim.iron::after{content:'';position:absolute;left:-3.16vh;top:-1.2vh;width:0.32vh;height:2.4vh;background:rgba(219,224,230,0.7);box-shadow:6vh 0 rgba(219,224,230,0.7);}  /* notch shoulders at ±0.030·H, box-shadow paints the right one */
 #interactPrompt{position:absolute;left:50%;top:57%;transform:translateX(-50%);pointer-events:none;z-index:5;text-align:center;
-  font-size:15px;letter-spacing:.14em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9);opacity:0;transition:opacity .12s;}
+  font-size:15px;letter-spacing:.14em;color:var(--bone);mix-blend-mode:difference;opacity:0;transition:opacity .12s;}   /* DIFFERENCE blend (owner): the text INVERTS whatever it sits on — readable over snow and shadow alike */
 #interactPrompt.show{opacity:.95;}
 #interactPrompt b{color:var(--exposed);}
 /* world prompts wear the INVENTORY tooltip conventions (owner): bold name + one dim verb row, transparent */
@@ -306,8 +306,7 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
 
 /* floating item card */
 #tooltip{display:none;position:absolute;z-index:60;pointer-events:none;max-width:250px;padding:9px 11px;font-size:14px;
-  letter-spacing:.06em;line-height:1.5;background:transparent;color:var(--bone);display:none;
-  text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9),0 0 3px #000;}   /* TRANSPARENT (owner): the card floats — the shadow stack carries the contrast */
+  letter-spacing:.06em;line-height:1.5;background:var(--panel);border:1px solid var(--dust);color:var(--bone);display:none;}   /* the INVENTORY card keeps its panel — legibility over the busy grids (owner) */
 #tooltip .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;}
 #tooltip .tt-cat{color:var(--dust);font-size:12px;}
 
@@ -1468,6 +1467,7 @@ vec2 mapStatic(vec3 p){
 // ---- hero props: the Tool and the rucksack ----
 float sdGun(vec3 p, bool cfgd){
   float d=sdBox(p-vec3(0.0,0.045,0.02), vec3(0.035,0.045,0.17));                 // receiver
+  d=min(d, sdBox(p-vec3(0.0,0.100,0.05), vec3(0.007,0.005,0.13)));               // the top RAIL — thin, runs the receiver: bare ADS sights along it, the optics bolt to it (owner)
   d=min(d, sdCapsule(p, vec3(0.0,0.075,0.18), vec3(0.0,0.075,0.34), 0.021));     // barrel
   d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
   d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
@@ -1631,7 +1631,7 @@ vec2 map(vec3 p){
       float d=sdBackpack(bp/bsc)*bsc*min(1.0,min(uBagH,uBagW));   // conservative march under the stretch
       if(d<vmD){ vmD=d; vmM=22.0; }
     }else if(uHasTool>0.5 && uMenuMode!=1){            // the WORN gun — in play AND in the tool menu (owner: same gun, it just MOVES)
-      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.105)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.105 (lowered a touch: the eye rides the top RAIL)
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:(uReticle>=3?0.13:0.0));   // iron/red-dot/holo pull ~0.18 closer at full ADS; the scope pulls 0.13 so its aperture (~0.073 rad) fills the eye
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
       if(uMenuMode==0 && (uLead.x!=0.0||uLead.y!=0.0)){   // MUZZLE-PIVOT free-aim (owner): the lead swings the BUTT around the planted muzzle tip — natural fine aim, reads a corner
@@ -9269,6 +9269,7 @@ function updatePlayer(dt){
     if(Math.abs(aimYawOff)<1e-5) aimYawOff=0;
     if(Math.abs(aimPitchOff)<1e-5) aimPitchOff=0;    // settle to EXACT zero so aimForward() takes its free path
   }
+  if(isToolMenuOpen&&down('aim')) closeAllInv();                       // shouldering the gun LEAVES the inspection (owner) — ADS exits the tool rack
   playerPos.isAiming=down('aim')&&!menus&&!heldWorld&&!physgunRes();   // the physgun repurposes aim: it freezes
   playerPos.aimAmt+=((playerPos.isAiming?1:0)-playerPos.aimAmt)*Math.min(1,12*dt);
 
@@ -9820,7 +9821,7 @@ function bagFrame(){
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
     if(showTool){ const _swx=Math.sin(gameTime*0.41)*10, _swy=Math.sin(gameTime*0.27)*8;             // the rack UI SWAYS with its gun — mirrors the model's inspection drift + layered turns (owner)
       const _swr=Math.sin(gameTime*0.5)*1.6+Math.sin(gameTime*0.23)*0.8;
-      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+16*_dks).toFixed(1)+'%) scale('+(1-0.35*_dks).toFixed(3)+','+((1-0.35*_dks)*(1-0.10*_dks)).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)'; } }   // the rack UI ducks AS MUCH as the backpack (owner) — the gun itself never does
+      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+55*_dks).toFixed(1)+'%) scale('+(1-0.35*_dks).toFixed(3)+','+((1-0.35*_dks)*(1-0.10*_dks)).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)'; } }   // the rack UI ducks AS MUCH as the backpack — dragged to BOTTOM-CENTER, same convention (owner); the gun itself never does
   if(!showBag) return;
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
@@ -10151,7 +10152,7 @@ function frame(){
   // no housing prim, so the viewmodel holds its ADS raise). Glass optics (1/2/3/4) never enter:
   // their center glyph stays the aim, the optics render path untouched.
   const _faRetR=resT?(resT.reticle||0):0;
-  const _faShow=P('adsFree')>0.5&&playerPos.aimAmt>0.55&&!!activeTool&&(_faRetR===0||_faRetR===5)&&!pausedUI();
+  const _faShow=P('adsFree')>0.5&&playerPos.aimAmt>0.55&&!!activeTool&&_faRetR===5&&!pausedUI();   // IRON only — bare ADS has NO marker (owner): you sight along the top rail itself
   gl.uniform1i(U.uReticle,(_faShow&&_faRetR===5)?0:_faRetR);
   gl.uniform1f(U.uSights, resT&&resT.sights?1:0);
   // free-aim lead in reticle-uv space (QoL: glass glyphs + the 2x/3x lens ride it; bare/iron keep the DOM marker)
@@ -10162,16 +10163,9 @@ function frame(){
   { const fa=_faEl||(_faEl=document.getElementById('freeAim'));
     if(fa){ if(_faShow){
       const H=canvas.clientHeight||innerHeight;        // marker math inverts the ray build (uv*=fov, /iResolution.y)
-      let px,py;
-      if(_faRetR===0){                                 // BARE (owner): the dot rides the MUZZLE TIP itself — diegetic; the 50/50 blend slides it at half the old translate
-        const _tz=0.46+_mzTip-playerPos.viewKick*0.09; // tip view-space: seat(0,-0.09,0.46)+barrel(0,0.075,_mzTip)+bob+half-translate
-        px=(((playerPos.bobX+aimYawOff*0.225)/_tz)/playerPos.currentFov)*H;
-        py=(-((playerPos.bobY-0.015+aimPitchOff*0.225)/_tz)/playerPos.currentFov)*H;
-      }else{                                           // IRON: the post keeps darting with the lead — the aim's truth
-        px=(aimYawOff*Math.cos(cameraPitch+aimPitchOff)/playerPos.currentFov)*H;
-        py=(-aimPitchOff/playerPos.currentFov)*H;
-      }
-      const cls=_faRetR===5?'iron':'dot';
+      const px=(aimYawOff*Math.cos(cameraPitch+aimPitchOff)/playerPos.currentFov)*H;   // IRON: the post darts with the lead — the aim's truth
+      const py=(-aimPitchOff/playerPos.currentFov)*H;
+      const cls='iron';
       if(fa.className!==cls) fa.className=cls;
       if(fa.style.display!=='block') fa.style.display='block';
       const op=Math.min(1,(playerPos.aimAmt-0.55)*3.3).toFixed(2);           // fades in over the same uAim band the shader glyph used
