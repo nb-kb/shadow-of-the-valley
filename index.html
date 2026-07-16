@@ -10219,8 +10219,8 @@ function frame(){
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
-  { const _bhT=Math.max(0.38,Math.min(0.66,0.56*(0.55+0.45*((_uiH||560)/560))));   // TIED TO THE UI, scaled DOWN (owner): the model reads only a LITTLE bigger than the UI — full kit ~0.56
-    const _bwT=Math.max(0.55,Math.min(0.88,0.60+0.25*((_uiW||620)/620)));          // width down the same way — full kit ~0.85
+  { const _bhT=Math.max(0.42,Math.min(0.70,0.62*(0.55+0.45*((_uiH||560)/560))));   // TIED TO THE UI (owner-dialed): a touch TALLER — the pack reaches the UI's bottom, full kit ~0.62
+    const _bwT=Math.max(0.62,Math.min(1.05,0.72+0.28*((_uiW||620)/620)));          // and WIDER — full kit ~1.0, so the mouth shoulders the grid instead of hiding behind it
     _bagHS+=(_bhT-_bagHS)*Math.min(1,8*dt); _bagWS+=(_bwT-_bagWS)*Math.min(1,8*dt); }   // eased, so zone toggles breathe instead of snapping
   gl.uniform1f(U.uBagH,_bagHS);
   gl.uniform1f(U.uBagW,_bagWS);
