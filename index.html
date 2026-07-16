@@ -8950,15 +8950,15 @@ function updatePlayer(dt){
   let mz=(down('forward')?1:0)-(down('back')?1:0)-INPUT.padAxes[1];
   const ml=Math.hypot(mx,mz);
   if(ml>1){ mx/=ml; mz/=ml; }
-  const menuDamp=1-clamp(menuAnim,0,1)*0.85;         // rummaging: barely shuffle
+  const menuDamp=1-clamp(menuAnim,0,1)*0.25;         // rummaging: slowed, still walkable
   mx*=menuDamp; mz*=menuDamp;
   const moving=Math.hypot(mx,mz)>0.05;
 
-  // sprint is a toggle — crouching or aiming drops it
+  // sprint is a toggle — crouching or aiming drops it; menus just cap it to a walk
   if(pressed('sprint')&&!menus) sprintOn=!sprintOn;
   if(playerPos.isCrouching||playerPos.isAiming) sprintOn=false;
   const wasSprint=playerPos.isSprinting;
-  playerPos.isSprinting=sprintOn&&moving&&!playerPos.isCrouching&&!playerPos.isAiming;
+  playerPos.isSprinting=sprintOn&&moving&&!menus&&!playerPos.isCrouching&&!playerPos.isAiming;
   // ...and a run that STOPS lets the toggle go after a beat — walking again is a
   // walk, not a surprise sprint. An untouched toggle still waits for its first step.
   if(moving||!sprintOn||playerPos.launched||slideT>0) sprintIdleT=0;   // a slide-hop / slide is momentum, not an idle stop — the no-input cancel must not fire mid-chain
