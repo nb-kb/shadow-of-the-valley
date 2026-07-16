@@ -2384,7 +2384,7 @@ const playerPos={
   flashlightOn:false,
   noiseLevel:0.2, exposure:0.5, muzzleGlow:0,
   camYawOffset:0,camPitchOffset:0,
-  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, yawPend:0, wallPush:0, autoPeek:0, walkCycle:0,
+  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, yawPend:0, wallPush:0, walkCycle:0,
   velX:0, velZ:0, swinging:false, launched:false,   // velX/velZ = the ONLY horizontal velocity state (rope swing + slide-hop launch)
 };
 let cameraYaw=0.6, cameraPitch=0;
@@ -9428,9 +9428,10 @@ function updatePlayer(dt){
   }
 
   // stance & lean — leaning waits outside the menus
-  const targetH=playerPos.isCrouching?0.72:1.32;
+  const _pkR=(playerPos._peek&&playerPos._peek.on&&playerPos.isCrouching)?Math.min(playerPos._peek.rise,0.6):0;   // the peek's variable un-crouch — capped at standing
+  const targetH=playerPos.isCrouching?0.72+_pkR:1.32;
   playerPos.baseHeight+=(targetH-playerPos.baseHeight)*Math.min(1,(slideT>0?22:10)*dt);   // the slide ducks NOW
-  const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5+(playerPos.autoPeek||0)*0.4;   // auto-peek rides the lean channel
+  const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5;   // (the peek moves the BODY now — the lean channel is the player's alone)
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
   // aim fov
@@ -9444,16 +9445,37 @@ function updatePlayer(dt){
     const _wd=activeTool?mapWorldJS(_o.x+_f.x*0.5,_o.y+_f.y*0.5,_o.z+_f.z*0.5):1;
     const _wt=activeTool?clamp(1-_wd/0.4,0,1):0;
     playerPos.wallPush+=(_wt-playerPos.wallPush)*Math.min(1,14*dt);
-    // AUTO-PEEK (owner): aim HELD with the muzzle blocked → lean toward the open side of the
-    // cover automatically (rides the lean channel: camera shifts, tilts, and clears the edge)
-    let _pkT=0;
-    if(playerPos.isAiming&&playerPos.wallPush>0.5){
-      const _b=camBasis();
-      const _dl=mapWorldJS(_o.x-_b.right.x*0.4+_f.x*0.55,_o.y+_f.y*0.55,_o.z-_b.right.z*0.4+_f.z*0.55);
-      const _dr=mapWorldJS(_o.x+_b.right.x*0.4+_f.x*0.55,_o.y+_f.y*0.55,_o.z+_b.right.z*0.4+_f.z*0.55);
-      if(Math.max(_dl,_dr)>0.5) _pkT=(_dr>_dl?1:-1);
-    }
-    playerPos.autoPeek+=((_pkT)-playerPos.autoPeek)*Math.min(1,8*dt); }
+    // PHYSICAL PEEK (owner): aiming with the muzzle OBSTRUCTED moves the BODY — first rise out
+    // of the crouch (variable height, just enough), then STEP past the cover's open edge (left
+    // of a left edge, right of a right edge) until the gun clears. Releasing the aim — or any
+    // movement input — eases the body smoothly home to where it stood. The normal collision
+    // integrator resolves every nudge, so the peek can never clip.
+    const pk=playerPos._peek||(playerPos._peek={on:false,ax:0,az:0,rise:0});
+    const _aimHold=activeTool&&playerPos.isAiming&&!moving&&playerPos.onGround;
+    const _obstr=playerPos.wallPush>0.45;
+    if(_aimHold&&(pk.on||_obstr)){
+      if(!pk.on){ pk.on=true; pk.ax=playerPos.x; pk.az=playerPos.z; pk.rise=0; }
+      if(_obstr){                                       // still blocked → keep working the problem
+        if(playerPos.isCrouching&&pk.rise<0.6) pk.rise=Math.min(0.6,pk.rise+1.6*dt);   // 1) rise first
+        else{                                           // 2) then sidestep toward the open edge
+          const _b2=camBasis();
+          const _dl=mapWorldJS(playerPos.x-_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z-_b2.right.z*0.45+_f.z*0.55);
+          const _dr=mapWorldJS(playerPos.x+_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z+_b2.right.z*0.45+_f.z*0.55);
+          if(Math.max(_dl,_dr)>0.45&&Math.hypot(playerPos.x-pk.ax,playerPos.z-pk.az)<0.9){
+            const _sd=(_dr>_dl?1:-1);
+            playerPos.x+=_b2.right.x*_sd*0.9*dt; playerPos.z+=_b2.right.z*_sd*0.9*dt;
+          }
+        }
+      }                                                 // clear → HOLD here while the aim is held
+    } else if(pk.on){                                   // released → ease home
+      if(moving||!playerPos.onGround){ pk.on=false; pk.rise=0; }   // walking off breaks the tether
+      else{
+        pk.rise=Math.max(0,pk.rise-2.2*dt);
+        const _dx=pk.ax-playerPos.x, _dz=pk.az-playerPos.z, _d=Math.hypot(_dx,_dz);
+        if(_d<0.04&&pk.rise<=0){ pk.on=false; }
+        else if(_d>0.0005){ const _st=Math.min(_d,2.6*dt); playerPos.x+=_dx/_d*_st; playerPos.z+=_dz/_d*_st; }
+      }
+    } }
 
   // viewmodel sway/bob + recoil recovery
   if(moving&&playerPos.onGround) playerPos.walkCycle+=speed*dt*2.6;
