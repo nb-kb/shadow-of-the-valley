@@ -1354,9 +1354,9 @@ float sdGun(vec3 p, bool cfgd){
     if(uReticle==1){ vec3 hp=p-vec3(0.0,0.118,0.05); float rd=sdCapsule(hp, vec3(0.0,0.0,-0.008), vec3(0.0,0.0,0.008), 0.034); rd=max(rd, -sdCapsule(hp, vec3(0.0,0.0,-0.06), vec3(0.0,0.0,0.06), 0.026)); d=min(d, rd); } // red dot — SHALLOW cylindrical ring you sight through
     else if(uReticle==2){ vec3 hp=p-vec3(0.0,0.118,0.05); d=min(d, max(sdBox(hp,vec3(0.034,0.030,0.028)), -sdBox(hp,vec3(0.026,0.022,0.09)))); } // holo — box housing, HALF as deep
     if(uToolCfg.x>0.5) d=min(d, sdCapsule(p, vec3(0.0,0.075,0.34), vec3(0.0,0.075,0.45), 0.032)); // suppressor
-    if(uToolCfg.y>0.5){ float tb=sdCapsule(p, vec3(0.0,0.135,0.00), vec3(0.0,0.135,0.11), 0.032);   // scope TUBE — HOLLOW: you look THROUGH it,
-      tb=max(tb, -sdCapsule(p, vec3(0.0,0.135,-0.02), vec3(0.0,0.135,0.13), 0.024));               // the magnified render window lives inside;
-      d=min(d, tb); }                                                                              // the wall occludes the window's seam
+    if(uToolCfg.y>0.5){ float tb=sdCapsule(p, vec3(0.0,0.15,0.00), vec3(0.0,0.15,0.13), 0.046);    // scope TUBE — HOLLOW, beefy: outer wall (0.139 rad at the eye)
+      tb=max(tb, -sdCapsule(p, vec3(0.0,0.15,-0.02), vec3(0.0,0.15,0.15), 0.034));                 // fully brackets the render window (0.115) past the bore (0.103),
+      d=min(d, tb); }                                                                              // so the magnification reads INSIDE the glass; raised clear of the barrel
     if(uToolCfg.z>0.5) d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));        // magazine
   }else{
     d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));
@@ -1535,7 +1535,7 @@ vec2 map(vec3 p){
         if(d<res.x) res=vec2(d,20.0);
       }
     }else if(uMenuMode==0 && uHasTool>0.5){
-      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.135:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.135) — you sight THROUGH the hollow scope; BARE -0.09
+      vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:(uReticle>=3?0.13:0.0));   // iron/red-dot/holo pull ~0.18 closer at full ADS; the scope pulls 0.13 so its aperture (~0.073 rad) fills the eye
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
       float g=sdGun(vl,true);
@@ -1651,7 +1651,7 @@ void main(){
   vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
   if(uReticle>=3 && uAim>0.55){                      // 2x/3x RENDER WINDOW: the magnified world lives INSIDE the hollow tube —
     vec2 _ld=uv-uAimOff;                             // no overlay. Disc is aperture+margin so the drawn tube WALL occludes the
-    float _lr=0.10/fov;                              // seam; outside the scope the world stays 1:1 (ambient ADS fov only).
+    float _lr=0.115/fov;                             // seam; outside the scope the world stays 1:1. Window = bore(0.103)+margin, INSIDE the wall's outer edge (0.139) so the wall occludes it.
     if(dot(_ld,_ld)<_lr*_lr) uv=uAimOff+_ld/mix(1.0,(uReticle==3)?1.68:2.38,smoothstep(0.55,1.0,uAim));   // inside-fov lands at the classic full 2x/3x (0.31/0.21)
   }
   uv *= fov;
@@ -1885,7 +1885,7 @@ void main(){
       float notchR=smoothstep(0.0016,0.0,abs(uv.x-0.030))*step(abs(uv.y),0.012);                  // right shoulder
       col+=vec3(0.86,0.88,0.90)*a*(post+notchL+notchR)*0.7;
     }else{                                              // magnified: fine cross INSIDE the tube window — no vignette (the tube IS the frame)
-      float rad=0.073/fov;
+      float rad=0.103/fov;                            // the cross spans the (bigger) bore
       float cross=max(smoothstep(0.0012,0.0,abs(uv.x))*step(abs(uv.y),rad*0.8),
                       smoothstep(0.0012,0.0,abs(uv.y))*step(abs(uv.x),rad*0.8));
       col+=vec3(0.1,0.9,0.5)*a*cross*0.5;
