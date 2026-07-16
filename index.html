@@ -1607,8 +1607,9 @@ vec2 map(vec3 p){
     if(uMenu>0.001 && uMenuMode!=0){   // mode 0 (closed/crate) raises NO prop — the ease-out belongs to the worn tool (bug #7)
       float rise=(1.0-uMenu)*(1.0-uMenu)*0.45;   // ease-out: the prop settles, no lunge
       if(uMenuMode==1){
-        vec3 bp=vl-vec3(0.0,-0.04-rise,0.85);
-        bp=rotY(bp, sin(iTime*0.5)*0.08);
+        vec3 bp=vl-vec3(0.0,-0.08-rise,0.95);          // seated a touch lower + deeper so the tilted mouth crests the UI top (bagFrame mirrors these numbers)
+        bp=rotX(bp, 0.45);                             // OPENED TO THE PLAYER: the bag tips its mouth toward the camera (~26°)
+        bp=rotY(bp, sin(iTime*0.5)*0.025);             // sway calmed to a whisper — the UI is STATIC now, the model must not detach from it
         float d=sdBackpack(bp);
         if(d<res.x) res=vec2(d,22.0);
       }else{
@@ -9534,23 +9535,24 @@ const renderItemsBuf=[];
 const _liveEn=[];                            // reused live-enemy sort buffer (dormancy ranking) — no per-frame filter/sort alloc
 let _faEl=null;                              // #freeAim, same idiom (P7)
 let _bagEl=null;                             // #backpackUI, same idiom
-// DIEGETIC BAG: the inventory RIDES the raised backpack prop (uMenuMode 1) — the same project-to-
-// screen idiom as the terminal-on-the-slab. Mirrors the shader pose exactly: view-space anchor
-// (0, -0.04-rise, 0.85) with rise=(1-uMenu)^2*0.45 — so the UI climbs INTO place as the prop
-// settles, breathes with its yaw sway, and sits dead-center on the drawn bag. Analog by math.
+// DIEGETIC BAG: the inventory is pinned to the raised backpack prop's MOUTH — the same
+// project-to-screen idiom as the terminal-on-the-slab, but STATIC (owner: swaying slots were
+// unmanageable). Mirrors the shader pose: anchor (0, -0.08-rise, 0.95) tilted rotX 0.45, so the
+// mouth (local y +0.35) projects to (0, 0.242-rise, 0.798) view-space. The UI drops in with the
+// prop over the ~200ms open ease, then sits ROCK STILL with its top edge ON the bag's mouth line
+// (the model's flap crest peeks above it). Only resize/open move it; nothing sways.
 function bagFrame(){
   const ui=_bagEl||(_bagEl=document.getElementById('backpackUI'));
   if(!ui||ui.classList.contains('hidden')) return;
   const m=clamp(menuAnim,0,1), rise=(1-m)*(1-m)*0.45;
   const fovU=(playerPos.currentFov*(1-0.07*m))||1;                   // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  const py=H/2-((-0.04-rise)/0.85/fovU)*H;                           // x offset is 0 → dead-center horizontally
+  const py=H/2-(((0.242-rise)/0.798)/fovU)*H + H*0.02;               // the mouth line, +2%H overlap so the crest shows; x offset is 0 → dead-center
   const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
-  const rot=Math.sin(gameTime*0.5)*1.4;                              // the prop's rotY sway (±0.08 rad), echoed faintly in degrees
   ui.style.left=(innerWidth/2)+'px';
-  ui.style.top=py.toFixed(1)+'px';
-  ui.style.transformOrigin='50% 50%';                                // the media-query 0 0 origin must not swing the rotate around a corner
-  ui.style.transform='translate(-50%,-54%) scale('+sc+') rotate('+rot.toFixed(2)+'deg)';
+  ui.style.top=Math.max(8,py).toFixed(1)+'px';
+  ui.style.transformOrigin='50% 0';                                  // scale hangs from the pinned top edge — the mouth seam never drifts
+  ui.style.transform='translate(-50%,0) scale('+sc+')';
 }
 
 const FRAME_MS=1000/60;
