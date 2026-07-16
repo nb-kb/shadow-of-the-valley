@@ -565,7 +565,8 @@ const PARAMS = {
   radBurn:     {v:4,   min:0,   max:12,   step:0.5, label:'gas burn hp/s'},       // CONTAINMENT P3: full-strength haze dose into the burn pool (masks shave it)
   adsFree:     {v:1,   min:0,   max:1,    step:1,   label:'ADS free-aim'},        // CONTAINMENT P7 (spec H): while aiming, the gun leads and the camera trails — bare/iron only (glass optics stay center-locked). The goggles FREEAIM row fronts this
   adsTrail:    {v:10,  min:3,   max:30,   step:1,   label:'free-aim trail /s'},   // camera catch-up rate — higher = tighter leash (10 ≈ 100ms lag)
-  adsDev:      {v:0.11,min:0.03,max:0.25, step:0.01,label:'free-aim ring'},       // max lead, as a fraction of the screen height at any zoom (marker travel cap)
+  adsDev:      {v:0.14,min:0.03,max:0.25, step:0.01,label:'free-aim ring'},       // max lead, as a fraction of the screen height at any zoom (marker travel cap) — widened per playtest
+  adsAnchor:   {v:0.5, min:0,   max:1,    step:0.05,label:'free-aim anchor'},     // HOW the gun carries the lead: 0 = muzzle tipping (pivot at the butt) · 0.5 = side-to-side (the classic translate) · 1 = pushing the butt (pivot at the muzzle)
 };
 const P = k => PARAMS[k].v;
 const PARAM_DEFAULTS={}; for(const k in PARAMS) PARAM_DEFAULTS[k]=PARAMS[k].v;   // boot literals — NEW GAME and slots without a value land here
@@ -1651,7 +1652,7 @@ vec2 map(vec3 p){
       if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
         vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.47)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — the model NEVER ducks (owner): it rides the camera with its drift, only the rack UI dips
-        vl=rotX(vl, (1.56 + sin(iTime*0.31)*0.05)*mm);           // muzzle AIMED AWAY, a touch past vertical (owner) — looking down the top of the barrel; a slow breathing pitch
+        vl=rotX(vl, (1.38 + sin(iTime*0.31)*0.05)*mm);           // muzzle AWAY from the player, firmly short of vertical (owner: past it the breathing tipped it back AT you) — down-the-barrel view held
         vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
         vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
       }
@@ -8370,9 +8371,9 @@ function tipBrief(it){                                  // the info square's row
 // the floating item card: content from cursor state, position from the focused cell
 let _tipItem=null, _tipShown=false, _tipTmr=null;   // ONE card, both inputs: it shows only after the cursor RESTS ~0.3s on the same item (owner: exclusive + timed)
 function syncTip(){
-  if(_tipDucked){ tooltipEl.style.display='none'; return; }   // ducked: no card — a stray refresh must not resurface it mid-motion
   const open=uiMenusOpen();
-  tipPanelEl.classList.toggle('hidden',!open||menuMode!==2);
+  tipPanelEl.classList.toggle('hidden',!open||menuMode!==2);  // the LEGEND's visibility resolves FIRST — closing mid-duck must still hide it (the stuck-legend bug)
+  if(_tipDucked){ tooltipEl.style.display='none'; return; }   // ducked: no card — a stray refresh must not resurface it mid-motion
   if(!open){ tooltipEl.style.display='none'; _tipItem=null; _tipShown=false; return; }
   const f=focusGrid();
   if(menuMode===2) paintToolStats();
@@ -10010,8 +10011,8 @@ function bagFrame(){
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
     if(showTool){ const _swx=Math.sin(gameTime*0.41)*10, _swy=Math.sin(gameTime*0.27)*8;             // the rack UI SWAYS with its gun — mirrors the model's inspection drift + layered turns (owner)
       const _swr=Math.sin(gameTime*0.5)*1.6+Math.sin(gameTime*0.23)*0.8;
-      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+70*_dks).toFixed(1)+'%) scale('+(1-0.35*_dks).toFixed(3)+','+((1-0.35*_dks)*(1-0.10*_dks)).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)';   // the rack UI ducks AS MUCH as the backpack — dragged to BOTTOM-CENTER, same convention (owner); the gun itself never does
-      if(tipPanelEl) tipPanelEl.style.transform='translateY(-50%) translate('+(-110*_dks).toFixed(1)+'px,'+(innerHeight*0.24*_dks).toFixed(1)+'px) scale('+(1-0.35*_dks).toFixed(3)+')'; } }   // the LEGEND ducks too (owner) — pulled toward bottom-center with the rack
+      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+85*_dks).toFixed(1)+'%) scale('+(1-0.35*_dks).toFixed(3)+','+((1-0.35*_dks)*(1-0.10*_dks)).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)';   // the rack UI ducks AS MUCH as the backpack — dragged to BOTTOM-CENTER, same convention (owner); the gun itself never does
+      if(tipPanelEl) tipPanelEl.style.transform='translateY(-50%) translate('+(-130*_dks).toFixed(1)+'px,'+(innerHeight*0.30*_dks).toFixed(1)+'px) scale('+(1-0.35*_dks).toFixed(3)+')'; } }   // the LEGEND ducks too (owner) — pulled toward bottom-center with the rack
   if(!showBag) return;
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
@@ -10181,7 +10182,7 @@ function frame(){
     gl.uniform4fv(U.uCols,_colsBuf);
   }else gl.uniform1i(U.uColCount,0);
   gl.uniform1f(U.uAim,playerPos.aimAmt);
-  gl.uniform3f(U.uBob,playerPos.bobX+aimYawOff*0.225,playerPos.bobY+aimPitchOff*0.225,playerPos.viewKick*0.09);   // HALF the old translate (0.45) — the other half of the lead is the muzzle-pivot rotation (uLead); the 50/50 blend (owner)
+  // (uBob uploads beside uLead below — the free-aim ANCHOR dial owns both channels and needs the finished muzzle tip)
   gl.uniform1f(U.uWallPush,playerPos.wallPush);   // wall-ahead: the gun collides (stock back, muzzle up)
   gl.uniform3f(U.uLightDir,dayNight.lightDir.x,dayNight.lightDir.y,dayNight.lightDir.z);
   gl.uniform3f(U.uLightCol,dayNight.lightCol[0],dayNight.lightCol[1],dayNight.lightCol[2]);
@@ -10235,7 +10236,14 @@ function frame(){
   const magNow=activeTool?toolMagazine(activeTool):null;
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, (resT&&(resT.reticle===3||resT.reticle===4))?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.42):0);   // .y = the hollow scope TUBE, by reticle code; .w = the whip phase (0.42s clock)
   if(resT&&resT.silenced) _mzTip=Math.max(_mzTip,0.45);                                   // the can's tip wins
-  gl.uniform3f(U.uLead,aimYawOff*0.5,aimPitchOff*0.5,_mzTip);   // MUZZLE-PIVOT at HALF the lead (owner: 50/50 with the translate) — the butt swings around the tip; zero lead = byte-identical pose
+  // FREE-AIM ANCHOR (owner dial, PARAMS.adsAnchor): 0 = muzzle tipping (pivot at the BUTT — the
+  // tip sweeps hard) · 0.5 = side-to-side (the classic pure translate, the default) · 1 = pushing
+  // the butt (pivot at the MUZZLE). One law: tip-pivot rotation scaled by |2a-1|, plus exactly
+  // the translate that pivot implies — zero lead = byte-identical pose at any dial.
+  { const _aa=P('adsAnchor'), _ax=Math.abs(2*_aa-1);
+    const _tr=(1-_ax)*0.45+(_aa<0.5?(_mzTip+0.25)*_ax:0);
+    gl.uniform3f(U.uBob,playerPos.bobX+aimYawOff*_tr,playerPos.bobY+aimPitchOff*_tr,playerPos.viewKick*0.09);
+    gl.uniform3f(U.uLead,aimYawOff*_ax,aimPitchOff*_ax,_mzTip); }
   _expVis+=(playerPos.exposure-_expVis)*Math.min(1,dt*10);   // smooth the 0.12s exposure steps for the viewmodel dim only
   gl.uniform1f(U.uExposure, _expVis);
 
