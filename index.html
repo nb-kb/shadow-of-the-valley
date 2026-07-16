@@ -1651,8 +1651,8 @@ vec2 map(vec3 p){
       }
       if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
-        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.47)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — the model NEVER ducks (owner): it rides the camera with its drift, only the rack UI dips
-        vl=rotX(vl, (1.38 + sin(iTime*0.31)*0.05)*mm);           // muzzle AWAY from the player, firmly short of vertical (owner: past it the breathing tipped it back AT you) — down-the-barrel view held
+        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.60)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.60) — the TIP sits farther out (owner: not that close!); the model never ducks
+        vl=rotX(vl, (1.25 + sin(iTime*0.31)*0.05)*mm);           // muzzle AWAY — more forward lean carries the tip away from the face; down-the-barrel view held
         vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
         vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
       }
@@ -4314,6 +4314,14 @@ function interactInventory(){
             toast('ONE '+o.name.toUpperCase()+'-CLASS PART ONLY'); playSound('empty'); return;
           }
         }
+      }
+      // HARD CHAIN CAP (owner): 16 barrel slots per column — legendary(11) + uncommon(5) tops out.
+      // Covers place AND swap: the outgoing barrel's slots leave the count before the new one lands.
+      if(it instanceof Barrel){
+        const _col=f.colsData.find(c2=>c2.refs.indexOf(ref)>=0);
+        let _bl=it.length-(cell instanceof Barrel?cell.length:0);
+        if(_col) for(const r2 of _col.refs){ const o=readRef(r2); if(o instanceof Barrel) _bl+=o.length; }
+        if(_bl>16){ toast('CHAIN LIMIT — 16 BARREL SLOTS'); playSound('empty'); return; }
       }
       if(!cell){ writeRef(ref,it);
         consumeHeld();
@@ -8979,8 +8987,10 @@ function refreshInvUI(){
       activeTool._cols=null;                              // rack may have changed shape
       activeTool._res=resolveTool(activeTool);
       const sig=rackSig(activeTool);
-      if(activeTool._seqSig!==undefined && activeTool._seqSig!==sig)
+      if(activeTool._seqSig!==undefined && activeTool._seqSig!==sig){
         resetAllCycles(activeTool);                       // edited: every column back to shot 1
+        _propPhase=Math.min(_propPhase,0.55);             // the gun dips and EASES back in on a rack edit (owner) — same settle curve as the open
+      }
       activeTool._seqSig=sig;
     }
     renderRack('rackWrap',activeTool,1);
@@ -9000,7 +9010,8 @@ function renderRack(containerId,tool,focusIdx){
   const res=(focusIdx===1&&tool._res)?tool._res:resolveTool(tool);
   const z=rackZone(tool);
   const rows=z.maxY+1;
-  container.style.setProperty('--rc','36px');       // fixed — no jarring rescale as the tool grows
+  const _rc=clamp(Math.floor(innerHeight*0.84/19),22,44);   // SET size (owner): sized so the max 16-slot chain (+base+muzzle) always shows in the window — constant per viewport, NEVER per-tool
+  container.style.setProperty('--rc',_rc+'px');
   container.style.display='grid';
   container.style.gridTemplateColumns='repeat('+z.cols+',var(--rc))';
   container.style.gridAutoRows='var(--rc)';
@@ -9221,6 +9232,7 @@ let DBG_KEYS=[], dbgSel=0;
 // Mouse and keyboard handlers are untouched — the cursor only drives them.
 let dbgZone='grid', dbgBtnSel=0, dbgParSel=0, dbgFlagSel=0, dbgFocusedEl=null;
 let dbgSlewT=0, dbgSlewAcc=0, dbgSlewDir=0;   // hold-to-slew on PARAMS dials (held ◀▶ / analog-X ramp) — session-only, never serialized
+let dbgVT=0, dbgVAcc=0, dbgVDir=0;            // hold-to-WALK on the up/down axis (owner: about time) — held ▲▼ / d-pad / stick-Y repeats the step past a tap window
 let DBG_BTNS=[], DBG_PARAMS=[], DBG_FLAGS=[];   // buildDebugPanel fills these once
 function dbgSpawnToHand(key){
   if(heldWorld){ toast('HANDS FULL'); playSound('empty'); return; }
@@ -9260,6 +9272,21 @@ function dbgPaint(){
 function dbgNav(dt){
   if(INPUT.rawPad[1]){ toggleDebug(); return; }              // ○ backs out — Esc stays with frame()
   const nav=navEdges(), take=nav.confirm||INPUT.rawPad[2];   // E · □ — press what the cursor rides
+  // HOLD-TO-WALK (owner: about time) — held ▲▼ / d-pad 12·13 / stick-Y re-fires the up/down step
+  // past a tap window, so long lists tween by. Taps still step once through the edge above.
+  { const ay=INPUT.padAxes[1]||0;
+    const dUp=INPUT.keys['ArrowUp']||INPUT.padButtons[12];
+    const dDn=INPUT.keys['ArrowDown']||INPUT.padButtons[13];
+    let vdir=0, vmag=1;
+    if(dDn&&!dUp) vdir=1; else if(dUp&&!dDn) vdir=-1;
+    else if(Math.abs(ay)>0.35){ vdir=ay>0?1:-1; vmag=clamp((Math.abs(ay)-0.35)/0.65,0.15,1); }
+    if(vdir!==0){
+      if(vdir!==dbgVDir){ dbgVDir=vdir; dbgVT=0; dbgVAcc=0; }
+      else{ dbgVT+=dt;
+        if(dbgVT>0.32){ dbgVAcc+=dt*9*vmag;
+          while(dbgVAcc>=1){ dbgVAcc-=1; if(vdir>0) nav.down=true; else nav.up=true; } } }
+    } else { dbgVDir=0; dbgVT=0; dbgVAcc=0; }
+  }
   let moved=false;
   if(dbgZone==='grid'){
     const cols=8, last=DBG_KEYS.length-1;
@@ -10024,7 +10051,7 @@ function bagFrame(){
   const _vy=(0.105-0.20*dk)-rise;                                    // the pinned mouth line — the duck digs deeper (owner), mirrors the model exactly
   const px=innerWidth/2;
   const py=Math.max(8,H/2-((_vy/0.276)/fovU)*H + H*0.045);
-  const sc=((innerWidth<=1100||innerHeight<=880)?0.86:1)*_bsc;
+  const sc=((innerWidth<=1100||innerHeight<=880)?0.86:Math.min(1.22,Math.max(1,innerHeight/920)))*_bsc;   // big windows: the kit scales UP to fit (owner: readability)
   const scy=sc*(1-0.10*dk);                                          // the squash — a touch flatter as it tucks away
   const rot=Math.sin(gameTime*0.5)*1.4*(1-dk);                       // the sway calms while ducked
   if(ui.style.left!=='0px'){ ui.style.left='0px'; ui.style.top='0px'; ui.style.transformOrigin='50% 0'; }   // position rides the TRANSFORM — zero per-frame layout writes (the menu lag fix)
