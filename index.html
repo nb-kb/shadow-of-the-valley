@@ -7078,11 +7078,18 @@ function seedStashKit(){                       // the kit waits in the STASH now
     autoPlace(m,rk.inv,rk.invCols,rk.invRows); }   // two more mags ride INSIDE the bag — grab it, find them
   const kit=[rk];
   for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.customName='FOUNDLING TOOL'; kit.push(t); }   // bare frames — no rack
-  const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // ONE mag flat is all 6x4 affords: the fixed kit takes 22 of 24 cells
+  const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // one 9mm mag flat beside the bagged pair
   kit.push(ITEM_DEFS.goggles(),ITEM_DEFS.headphones(),        // every settings utility, exactly once
            ITEM_DEFS.watch(),ITEM_DEFS.compass(),ITEM_DEFS.photometer(),
            ITEM_DEFS.opticsDial(),ITEM_DEFS.volumeKnob(),ITEM_DEFS.manual());
-  for(const it of kit) autoPlace(it,stashInv,STASH_COLS,STASH_ROWS);   // this order packs 24/24 — reorder and it spills
+  // SYSTEM J (owner: BUILD NOW): the kit must FIGHT from raid one — cores so the frames fire,
+  // lead for the 9mm mags, heals, a lid + plates, a holster to draw from, one barrel to teach
+  // the rack. Balance-priced: one raid's find, not an armory. Big footprints lead — autoPlace
+  // is first-fit row-major: the fixed dozen packs rows 0-3 exactly 24/24, these fill rows 4-7.
+  kit.push(ITEM_DEFS.helmetCap(),ITEM_DEFS.platesL(),ITEM_DEFS.holster1(),ITEM_DEFS.barrelC());
+  kit.push(ITEM_DEFS.boltCore(),ITEM_DEFS.boltCore(),ITEM_DEFS.sparkCore(),ITEM_DEFS.battS(),ITEM_DEFS.dmgPlus());
+  kit.push(ITEM_DEFS.ammo9(),ITEM_DEFS.ammo9(),ITEM_DEFS.bandAid(),ITEM_DEFS.bandAid(),ITEM_DEFS.ration());
+  for(const it of kit) autoPlace(it,stashInv,STASH_COLS,STASH_ROWS);   // this order packs 44 of the 6x8=48 — reorder and it can spill
 }
 function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
