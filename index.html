@@ -2513,12 +2513,12 @@ LEVELS.area1={
     // pits/armory/facility/tentsB (armoryCache wires the once-orphaned armory entry from
     // the east apron — its own tile (8,12) is road+armory FULL, so the 'cores' tier now
     // drops UNLOCKED there). forest stays unconsumed until a forest cache is authored.
-    // lootRegions list still inert.
+    // (the old flat lootRegions list — the pre-P4 ground-scatter design — is DELETED: every
+    // id it named already routes through regionLoot above. Owner call 2, wire-or-delete.)
     regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
                  testing:['mods','common','rare'], tentsA:['common','gear','gear'],
                  tentsB:['common','gear','common'], lab:['gear','rare','cores'],
                  armory:['mods','cores','rare'], facility:['gear','mods','cores'] },
-    lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
     guaranteed:['gateCard','testCard','labCard'],   // CONTAINMENT: each missing keycard always seeds an UNLOCKED crate (elig skips lockedBy) — no lock can soft-lock a raid, and a card lost to the teeth re-seeds next raid
   },
 };
@@ -2542,7 +2542,7 @@ LEVELS.hideout={
              [0.75,-0.6,0.62,'lockE'],[-1.3,-0.4,0.8,'lockL']],   // P4 lockboxes in the sealed room — geometry+registry appear only once OWNED (crate count 10/10 of the GLSL cap)
      term:[-3.4,-0.6,0.4]},   // the stolen terminal's body — keep on LEVELS.hideout.terminal below
   ],
-  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,lootTable:[],lootRegions:[],
+  exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,   // (dead lootTable/lootRegions stubs deleted — the generic path reads lootTiers/lootN/guaranteed only)
     guaranteed:['photometer','compass','opticsDial','volumeKnob','manual']},   // the SETTINGS gadgets re-seed at home if lost to the teeth — a death carrying one must never permadeath settings/rebind/volume access (the promise-kept dedupe suppresses re-gifts)
   terminal:{x:-3.4,z:-0.6,yaw:0.4},   // interact point — keep x/z/yaw equal to clutter's `term`
 };
@@ -3411,7 +3411,7 @@ const ITEM_DEFS={
   // POWDER & SLUG cores retired (C13): slug is now the 'slug' round (×3 mult); powder is the
   // Powder Mag (anyCaliber + powder:true) — takes any round and rides the powder trait (hitscan/no-⚡).
   orbCore:    ()=>new ToolMod('ORB','#b0bec5','proj',{kind:'orb',base:8},'Core · a slow orb — weak alone · 8⚡'),
-  // HOPE: a mercy mote — HEALS you & soldiers (the faithful), BURNS the dead. Faction-read at impact. Player-only (kept out of MOD_KEYS + enemy CORES) so no foe ever fires it.
+  // HOPE: a mercy mote — HEALS you & soldiers (the faithful), BURNS the dead. Faction-read at impact. Player-only (absent from buildTool's enemy CORES/MODS rolls — the ONE place enemy kit is decided) so no foe ever fires it.
   hopeCore:   ()=>new ToolMod('HOPE','#f3e6c0','proj',{kind:'hope',base:20,heal:25},'Core · a warm mote — mends you & the faithful (25), burns the dead (45) · 20⚡'),
   // --- sequence: modifiers (charge the NEXT core after them) ---
   dmgPlus:    ()=>new ToolMod('HURT+','#b03a2e','mod',{dmg:10,surcharge:5},'Next core +10 hurt · +5⚡'),
@@ -3481,11 +3481,10 @@ const ITEM_DEFS={
 };
 for(const k in ITEM_DEFS){ const f=ITEM_DEFS[k];
   ITEM_DEFS[k]=()=>{ const it=f(); it.defKey=k; return it; }; }
-const MOD_KEYS=['reflex','scope','suppressor','heavyBarrel','compensator','autoSear','burstCam','hairTrigger',
-                'dmgPlus','velPlus','bounce','pierce','heavy','twin','silentMod','fuseMod','splinter','contactMod','slowFuse','boomerangMod','homingMod',
-                'gripField','pulse','lantern','boltCore','sparkCore','beamCore','pickCore',
-                'barrelC','barrelU','barrelR','platS','platM','battS','battM','scope2x','scope3x','waveCore','chaoticMod'];
-// boomCore stays OUT of MOD_KEYS and every zealot roll ON PURPOSE: an instant
+// MOD_KEYS deleted (owner call 2): a pre-horde loot list with ZERO consumers whose membership
+// had already drifted from the LIVE enemy allowlists — buildTool's MAGS/CORES/MODS rolls, which
+// roll emberCore/orbCore it never listed. What enemies may carry is decided THERE, one place.
+// boomCore stays OUT of every zealot roll (buildTool's CORES list) ON PURPOSE: an instant
 // blast bare-fired from tryShoot would be self-immolation at their own muzzle.
 
 // ============================================================
