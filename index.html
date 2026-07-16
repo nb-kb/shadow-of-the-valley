@@ -8370,6 +8370,7 @@ function tipBrief(it){                                  // the info square's row
 // the floating item card: content from cursor state, position from the focused cell
 let _tipItem=null, _tipShown=false, _tipTmr=null;   // ONE card, both inputs: it shows only after the cursor RESTS ~0.3s on the same item (owner: exclusive + timed)
 function syncTip(){
+  if(_tipDucked){ tooltipEl.style.display='none'; return; }   // ducked: no card — a stray refresh must not resurface it mid-motion
   const open=uiMenusOpen();
   tipPanelEl.classList.toggle('hidden',!open||menuMode!==2);
   if(!open){ tooltipEl.style.display='none'; _tipItem=null; _tipShown=false; return; }
@@ -8443,6 +8444,7 @@ function paintToolStats(){
 let mouseX=0,mouseY=0;
 let tipMouseT=1, tipPadT=0;
 let _uiW=0, _uiH=0, _uiVw=0;                 // #backpackUI layout size cache — refreshInvUI dirties it; bagFrame re-measures only then (kills the per-frame reflow)
+let _tipDucked=false;                        // the hover card hides while the kit is DUCKED (owner) — back the moment it settles
 let _bagHS=0.75, _bagWS=1.0;                 // smoothed model scales — the model IS the UI: its size eases toward the measured kit box, they grow as ONE (owner)
 function positionTipAtMouse(){
   tooltipEl.style.left=Math.min(window.innerWidth-260,mouseX+16)+'px';
@@ -10003,6 +10005,8 @@ function bagFrame(){
   ui.style.opacity=showBag?_propPhase.toFixed(2):'';
   if(su){ su.classList.toggle('hidden',!showBag); su.style.opacity=showBag?_propPhase.toFixed(2):''; }
   const _dks=_mlDuck*_mlDuck*(3-2*_mlDuck);                          // smoothstepped duck — soft at BOTH ends (owner: smoother), shared by every consumer
+  if(_mlDuck>0.12&&!_tipDucked){ _tipDucked=true; tooltipEl.style.display='none'; }        // tooltips vanish while ducking (owner)...
+  else if(_mlDuck<=0.12&&_tipDucked){ _tipDucked=false; if(uiMenusOpen()) syncTip(); }     // ...and return as the kit settles
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
     if(showTool){ const _swx=Math.sin(gameTime*0.41)*10, _swy=Math.sin(gameTime*0.27)*8;             // the rack UI SWAYS with its gun — mirrors the model's inspection drift + layered turns (owner)
       const _swr=Math.sin(gameTime*0.5)*1.6+Math.sin(gameTime*0.23)*0.8;
