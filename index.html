@@ -8461,13 +8461,16 @@ if(window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundR
     this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath(); };
 }
 const iconCache=new Map();
-function iconKey(it){
-  if(it instanceof Tool) return 'tool';
-  if(it instanceof Magazine) return 'mag:'+(it.defKey||(it.maxCapacity>20?'drum':'std'));
+function iconKey(it){                                 // one key per DISTINCT look — defKey carries identity (owner: tell everything apart)
+  if(it instanceof Tool) return 'tool:'+(it.color||'');
+  if(it instanceof Magazine) return 'mag:'+(it.defKey||(it.maxCapacity>20?'drum':'std'))+':'+(it.color||'');
   if(it instanceof Ammunition) return 'ammo:'+it.ammoType;
-  if(it instanceof ToolMod) return 'mod:'+it.cat+':'+it.color+':'+it.name;
-  if(it instanceof Gadget) return 'gad:'+it.kind;
-  return 'box:'+(it.color||'');
+  if(it instanceof ToolMod) return 'mod:'+it.cat+':'+((it.effect&&it.effect.kind)||'')+':'+it.color+':'+it.name;
+  if(it instanceof Gadget) return 'gad:'+it.kind+':'+(it.color||'');
+  if(it instanceof Battery) return 'bat:'+it.size;
+  if(it instanceof Barrel) return 'brl:'+(it.rarity||'')+':'+(it.color||'');
+  if(it instanceof Platform) return 'plt:'+(it.rarity||'')+':'+(it.color||'');
+  return 'it:'+(it.defKey||it.name)+':'+(it.color||'');
 }
 function shade(hex,f){ // lighten/darken a #rrggbb
   const n=parseInt(hex.slice(1),16);
@@ -8484,99 +8487,263 @@ function makeIcon(it){
   const base=(it.color&&it.color[0]==='#')?it.color:'#7a828c';
   const lo=shade(base,0.55), hi=shade(base,1.5);
   const rr=(x,y,w,h,r)=>{ g.beginPath(); g.roundRect(x,y,w,h,r); };
+  // FLASH-ERA KIT (owner: newgrounds vibe): everything wears a thick warm-black OUTLINE, hard
+  // two-tone shading, and one glossy swipe. box/dot fill AND stroke; gloss() finishes the icon.
+  const OUT='#181408';
+  const st=()=>{ g.lineWidth=2.4; g.strokeStyle=OUT; g.stroke(); };
+  const box=(x,y,w,h,r,c)=>{ rr(x,y,w,h,r); g.fillStyle=c; g.fill(); st(); };
+  const dot=(x,y,r,c)=>{ g.beginPath(); g.arc(x,y,r,0,6.29); g.fillStyle=c; g.fill(); st(); };
+  const stamp=(ch,x,y,px,c)=>{ g.font='bold '+px+'px monospace'; g.textAlign='center'; g.textBaseline='middle';
+    g.lineWidth=3; g.strokeStyle=OUT; g.strokeText(ch,x,y); g.fillStyle=c; g.fillText(ch,x,y); };
+  const gloss=()=>{ g.save(); g.globalAlpha=0.15; g.fillStyle='#fff'; g.translate(W*0.32,H*0.24); g.rotate(-0.45);
+    g.beginPath(); g.roundRect(-W*0.30,-H*0.07,W*0.52,H*0.13,H*0.06); g.fill(); g.restore(); };
 
   if(it instanceof Tool){                                   // side profile, muzzle right
     g.save(); g.translate(0,H*0.06);
-    g.fillStyle=lo;   rr(W*0.30,H*0.44,W*0.10,H*0.30,3); g.fill();          // grip
-    g.fillStyle=base; rr(W*0.06,H*0.34,W*0.22,H*0.14,3); g.fill();          // stock
-    g.fillStyle=base; rr(W*0.24,H*0.30,W*0.40,H*0.16,3); g.fill();          // receiver
-    g.fillStyle=lo;   rr(W*0.46,H*0.44,W*0.09,H*0.24,2); g.fill();          // magazine
-    g.fillStyle=hi;   rr(W*0.62,H*0.345,W*0.30,H*0.075,3); g.fill();        // barrel
-    g.fillStyle=hi;   rr(W*0.52,H*0.24,W*0.03,H*0.07,1); g.fill();          // sight
+    box(W*0.30,H*0.44,W*0.10,H*0.30,3,lo);                                   // grip
+    box(W*0.06,H*0.34,W*0.22,H*0.14,3,base);                                 // stock
+    box(W*0.62,H*0.345,W*0.30,H*0.075,3,hi);                                 // barrel
+    box(W*0.46,H*0.44,W*0.09,H*0.24,2,lo);                                   // magazine
+    box(W*0.24,H*0.30,W*0.40,H*0.16,3,base);                                 // receiver
+    box(W*0.26,H*0.26,W*0.34,H*0.045,2,lo);                                  // the top rail
+    box(W*0.52,H*0.18,W*0.03,H*0.08,1,hi);                                   // sight
     g.restore();
   }else if(it instanceof Magazine && it.maxCapacity>20){    // drum
-    g.fillStyle=base; g.beginPath(); g.arc(W*0.5,H*0.62,W*0.34,0,6.29); g.fill();
-    g.fillStyle=hi;   g.beginPath(); g.arc(W*0.5,H*0.62,W*0.13,0,6.29); g.fill();
-    g.fillStyle=lo;   rr(W*0.40,H*0.14,W*0.20,H*0.24,3); g.fill();          // tower
-    g.fillStyle='#c9a24a'; rr(W*0.44,H*0.08,W*0.12,H*0.08,2); g.fill();     // brass lip
+    dot(W*0.5,H*0.62,W*0.34,base);
+    dot(W*0.5,H*0.62,W*0.13,hi);
+    box(W*0.40,H*0.14,W*0.20,H*0.24,3,lo);                                   // tower
+    box(W*0.44,H*0.08,W*0.12,H*0.08,2,'#c9a24a');                            // brass lip
   }else if(it instanceof Magazine && it.defKey && it.defKey.indexOf('barrelMag')===0){   // shotgun barrel: a two-wide pair of shotshells
     for(let i=0;i<2;i++){
       const cy=H*(0.30+i*0.40), bh=H*0.26;
-      g.fillStyle=base;      rr(W*0.05,cy-bh/2,W*0.90,bh,bh*0.45); g.fill();       // plastic hull
-      g.fillStyle=hi;        rr(W*0.10,cy-bh/2,W*0.55,bh*0.34,2); g.fill();        // hull sheen
-      g.fillStyle='#c9a24a'; rr(W*0.70,cy-bh/2,W*0.25,bh,bh*0.45); g.fill();       // brass head
-      g.fillStyle=lo;        g.beginPath(); g.arc(W*0.83,cy,bh*0.17,0,6.29); g.fill();   // primer
+      box(W*0.05,cy-bh/2,W*0.90,bh,bh*0.45,base);                                  // plastic hull
+      g.fillStyle=hi; rr(W*0.10,cy-bh/2+2,W*0.55,bh*0.30,2); g.fill();             // hull sheen
+      box(W*0.70,cy-bh/2,W*0.25,bh,bh*0.45,'#c9a24a');                             // brass head
+      dot(W*0.83,cy,bh*0.17,lo);                                                   // primer
     }
   }else if(it instanceof Magazine){                          // stick mag, slight curve
     g.save(); g.translate(W*0.5,H*0.5); g.rotate(0.10);
-    g.fillStyle=base; rr(-W*0.16,-H*0.34,W*0.32,H*0.68,4); g.fill();
-    g.fillStyle=hi;   rr(-W*0.16,-H*0.34,W*0.32,H*0.10,4); g.fill();        // feed lips
-    g.fillStyle='#c9a24a'; rr(-W*0.08,-H*0.42,W*0.16,H*0.10,2); g.fill();   // seated round
-    g.fillStyle=lo;   rr(-W*0.18,H*0.26,W*0.36,H*0.10,3); g.fill();         // baseplate
+    box(-W*0.16,-H*0.34,W*0.32,H*0.68,4,base);
+    g.fillStyle=hi; rr(-W*0.14,-H*0.32,W*0.28,H*0.09,4); g.fill();           // feed lips
+    box(-W*0.08,-H*0.42,W*0.16,H*0.10,2,'#c9a24a');                          // seated round
+    box(-W*0.18,H*0.26,W*0.36,H*0.10,3,lo);                                  // baseplate
     g.restore();
-  }else if(it instanceof Ammunition){                        // three cartridges, tinted per caliber
+  }else if(it instanceof Ammunition && (it.ammoType==='buckshot'||it.ammoType==='slug')){   // one FAT shotshell
+    g.save(); g.translate(W*0.5,H*0.52); g.rotate(-0.35);
+    box(-W*0.13,-H*0.34,W*0.26,H*0.50,5,base);                               // hull
+    box(-W*0.14,H*0.14,W*0.28,H*0.20,4,'#c9a24a');                           // brass head
+    dot(0,H*0.24,W*0.05,lo);                                                 // primer
+    if(it.ammoType==='buckshot'){ dot(-W*0.05,-H*0.22,W*0.035,hi); dot(W*0.05,-H*0.16,W*0.035,hi); dot(-W*0.02,-H*0.08,W*0.035,hi); }
+    else dot(0,-H*0.26,W*0.075,lo);                                          // the single slug nose
+    g.restore();
+  }else if(it instanceof Ammunition && it.ammoType==='flechette'){           // three darts
     for(let i=0;i<3;i++){
-      g.save(); g.translate(W*(0.28+i*0.22),H*0.56); g.rotate(-0.12);
-      g.fillStyle=hi; rr(-W*0.055,-H*0.20,W*0.11,H*0.34,2); g.fill();
-      g.fillStyle=lo; g.beginPath();
-      g.moveTo(-W*0.055,-H*0.20); g.lineTo(0,-H*0.32); g.lineTo(W*0.055,-H*0.20); g.closePath(); g.fill();
+      g.save(); g.translate(W*(0.28+i*0.22),H*0.54); g.rotate(-0.10);
+      g.beginPath(); g.moveTo(0,-H*0.30); g.lineTo(W*0.035,H*0.10); g.lineTo(-W*0.035,H*0.10); g.closePath();
+      g.fillStyle=hi; g.fill(); st();
+      g.beginPath(); g.moveTo(-W*0.06,H*0.26); g.lineTo(0,H*0.10); g.lineTo(W*0.06,H*0.26); g.closePath();
+      g.fillStyle=lo; g.fill(); st();                                        // fins
       g.restore();
     }
-  }else if(it instanceof ToolMod){                           // tinted chip + cat glyph
-    g.fillStyle=lo; rr(W*0.10,H*0.10,W*0.80,H*0.80,7); g.fill();
-    g.fillStyle=base; rr(W*0.14,H*0.14,W*0.72,H*0.72,6); g.fill();
-    g.strokeStyle='#0b0d10'; g.fillStyle=hi; g.lineWidth=2;
-    if(it.cat==='proj'){                                     // diamond core
-      g.beginPath(); g.moveTo(W*0.5,H*0.20); g.lineTo(W*0.78,H*0.5); g.lineTo(W*0.5,H*0.80); g.lineTo(W*0.22,H*0.5);
-      g.closePath(); g.fill(); g.stroke();
-      g.fillStyle='#fff'; g.beginPath(); g.arc(W*0.5,H*0.5,W*0.07,0,6.29); g.fill();
-    }else if(it.cat==='mod'){                                // chevrons »
-      g.strokeStyle=hi; g.lineWidth=5;
-      for(let i=0;i<2;i++){ g.beginPath();
-        g.moveTo(W*(0.30+i*0.20),H*0.28); g.lineTo(W*(0.48+i*0.20),H*0.5); g.lineTo(W*(0.30+i*0.20),H*0.72); g.stroke(); }
-    }else if(it.cat==='util'){                               // ring emitter
-      g.strokeStyle=hi; g.lineWidth=4;
-      g.beginPath(); g.arc(W*0.5,H*0.5,W*0.22,0,6.29); g.stroke();
-      g.beginPath(); g.arc(W*0.5,H*0.5,W*0.09,0,6.29); g.fillStyle=hi; g.fill();
+  }else if(it instanceof Ammunition){                        // three cartridges — 7.62 stands tall, 9mm squat
+    const tall=it.ammoType==='7.62'?1.25:0.9;
+    for(let i=0;i<3;i++){
+      g.save(); g.translate(W*(0.28+i*0.22),H*0.56); g.rotate(-0.12);
+      box(-W*0.055,-H*0.20*tall,W*0.11,H*0.34*tall,2,'#c9a24a');
+      g.beginPath(); g.moveTo(-W*0.055,-H*0.20*tall); g.lineTo(0,-H*0.32*tall); g.lineTo(W*0.055,-H*0.20*tall); g.closePath();
+      g.fillStyle=base; g.fill(); st();                                      // the caliber-tinted head
+      g.restore();
+    }
+  }else if(it instanceof ToolMod){                           // tinted chip; CORES wear a per-kind glyph, MODS their stamped initial (owner: tell them apart)
+    box(W*0.10,H*0.10,W*0.80,H*0.80,7,lo);
+    g.fillStyle=base; rr(W*0.15,H*0.15,W*0.70,H*0.70,6); g.fill();
+    const kk=(it.effect&&it.effect.kind)||'';
+    g.strokeStyle=OUT; g.lineWidth=2.4;
+    if(it.cat==='proj'){
+      if(kk==='bolt'){        g.beginPath(); g.moveTo(W*0.30,H*0.70); g.lineTo(W*0.70,H*0.30); g.moveTo(W*0.70,H*0.30); g.lineTo(W*0.48,H*0.32); g.moveTo(W*0.70,H*0.30); g.lineTo(W*0.68,H*0.52);
+                              g.strokeStyle=hi; g.lineWidth=5; g.stroke(); }                                        // arrow
+      else if(kk==='spark'){  for(let a=0;a<4;a++){ const th=a*1.5708+0.785; g.beginPath(); g.moveTo(W*0.5,H*0.5);
+                              g.lineTo(W*0.5+Math.cos(th)*W*0.26,H*0.5+Math.sin(th)*W*0.26); g.strokeStyle=hi; g.lineWidth=5; g.stroke(); }
+                              dot(W*0.5,H*0.5,W*0.10,'#fff'); }                                                     // starburst
+      else if(kk==='boom'){   dot(W*0.5,H*0.56,W*0.20,lo); g.beginPath(); g.moveTo(W*0.58,H*0.40); g.quadraticCurveTo(W*0.70,H*0.26,W*0.62,H*0.18);
+                              g.strokeStyle=hi; g.lineWidth=3.5; g.stroke(); dot(W*0.62,H*0.16,W*0.045,'#ffd94a'); } // bomb + lit fuse
+      else if(kk==='wave'){   g.strokeStyle=hi; g.lineWidth=4; for(let a=0;a<3;a++){ g.beginPath();
+                              g.arc(W*0.30,H*0.5,W*(0.12+a*0.12),-0.9,0.9); g.stroke(); } }                          // spreading arcs
+      else if(kk==='saw'){    dot(W*0.5,H*0.5,W*0.20,hi); for(let a=0;a<8;a++){ const th=a*0.785;
+                              g.beginPath(); g.arc(W*0.5+Math.cos(th)*W*0.24,H*0.5+Math.sin(th)*W*0.24,W*0.045,0,6.29);
+                              g.fillStyle=hi; g.fill(); } dot(W*0.5,H*0.5,W*0.06,lo); }                              // toothed disc
+      else if(kk==='warp'){   g.strokeStyle=hi; g.lineWidth=4; for(let a=0;a<3;a++){ g.beginPath();
+                              g.arc(W*0.5,H*0.5,W*(0.24-a*0.07),a*2.1,a*2.1+4.2); g.stroke(); } }                    // collapsing spiral
+      else if(kk==='pick'){   g.beginPath(); g.moveTo(W*0.30,H*0.5); g.lineTo(W*0.64,H*0.26); g.lineTo(W*0.56,H*0.5); g.lineTo(W*0.64,H*0.74); g.closePath();
+                              g.fillStyle=hi; g.fill(); st(); }                                                      // hungry jaws
+      else if(kk==='decoy'){  dot(W*0.5,H*0.5,W*0.17,hi); g.strokeStyle=hi; g.lineWidth=3;
+                              g.beginPath(); g.arc(W*0.5,H*0.5,W*0.27,-0.7,0.7); g.stroke();
+                              g.beginPath(); g.arc(W*0.5,H*0.5,W*0.27,2.44,3.84); g.stroke(); }                      // chirping puck
+      else if(kk==='grip'){   g.beginPath(); g.moveTo(W*0.5,H*0.22); g.quadraticCurveTo(W*0.74,H*0.52,W*0.5,H*0.74);
+                              g.quadraticCurveTo(W*0.26,H*0.52,W*0.5,H*0.22); g.closePath(); g.fillStyle=hi; g.fill(); st(); } // glue drop
+      else if(kk==='orb'){    g.strokeStyle=hi; g.lineWidth=4; g.beginPath(); g.arc(W*0.5,H*0.5,W*0.20,0,6.29); g.stroke();
+                              dot(W*0.5,H*0.5,W*0.08,'#fff'); }                                                      // slow orb
+      else if(kk==='hope'){   dot(W*0.5,H*0.5,W*0.13,'#fff'); g.strokeStyle=hi; g.lineWidth=3;
+                              for(let a=0;a<6;a++){ const th=a*1.047; g.beginPath();
+                              g.moveTo(W*0.5+Math.cos(th)*W*0.19,H*0.5+Math.sin(th)*W*0.19);
+                              g.lineTo(W*0.5+Math.cos(th)*W*0.29,H*0.5+Math.sin(th)*W*0.29); g.stroke(); } }         // the warm mote
+      else{                   g.beginPath(); g.moveTo(W*0.5,H*0.22); g.lineTo(W*0.76,H*0.5); g.lineTo(W*0.5,H*0.78); g.lineTo(W*0.24,H*0.5); g.closePath();
+                              g.fillStyle=hi; g.fill(); st(); dot(W*0.5,H*0.5,W*0.07,'#fff'); }                      // unknown core: the old diamond
+    }else if(it.cat==='mod'){ stamp((it.name||'?')[0],W*0.5,H*0.52,26,hi); }                                          // stamped initial — RICOCHET's R, DRILL's D
+    else if(it.cat==='util'){
+      const ef=it.effect||{};
+      if(ef.flashlight){ box(W*0.38,H*0.30,W*0.24,H*0.28,4,hi); g.beginPath(); g.moveTo(W*0.34,H*0.58); g.lineTo(W*0.66,H*0.58); g.lineTo(W*0.58,H*0.76); g.lineTo(W*0.42,H*0.76); g.closePath(); g.fillStyle='#ffd94a'; g.fill(); st(); }   // lantern
+      else if(ef.beltFeed){ for(let i=0;i<3;i++) box(W*(0.28+i*0.16),H*0.38,W*0.10,H*0.26,3,'#c9a24a'); }             // linked rounds
+      else if(ef.pulse){ g.strokeStyle=hi; g.lineWidth=4; for(let a=0;a<2;a++){ g.beginPath(); g.arc(W*0.5,H*0.5,W*(0.14+a*0.12),0,6.29); g.stroke(); } dot(W*0.5,H*0.5,W*0.07,hi); }   // shove rings
+      else{ g.strokeStyle=hi; g.lineWidth=4; g.beginPath(); g.arc(W*0.5,H*0.5,W*0.22,0,6.29); g.stroke(); dot(W*0.5,H*0.5,W*0.09,hi); }
     }else{                                                    // stat: slider bars
       g.strokeStyle=hi; g.lineWidth=4;
       for(let i=0;i<3;i++){ const y=H*(0.32+i*0.18);
         g.beginPath(); g.moveTo(W*0.24,y); g.lineTo(W*0.76,y); g.stroke();
         g.fillStyle='#fff'; g.beginPath(); g.arc(W*(0.34+i*0.16),y,3.4,0,6.29); g.fill(); }
     }
-  }else if(it instanceof Gadget){
-    g.fillStyle=lo; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.34,0,6.29); g.fill();
-    g.fillStyle=base; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.29,0,6.29); g.fill();
+  }else if(it instanceof Gadget && it.kind==='keycard'){     // access card: stripe + punched corner, color IS the lock
+    g.save(); g.translate(W*0.5,H*0.5); g.rotate(-0.18);
+    box(-W*0.36,-H*0.24,W*0.72,H*0.48,5,base);
+    g.fillStyle=lo; rr(-W*0.36,-H*0.10,W*0.72,H*0.10,0); g.fill();          // mag stripe
+    box(-W*0.28,H*0.04,W*0.30,H*0.09,2,'#e8e4d4');                          // signature strip
+    dot(W*0.26,-H*0.14,W*0.045,'#e8e4d4');                                  // the punch hole
+    g.restore();
+  }else if(it instanceof Gadget){                            // pocket pucks: watch / compass / light meter / manual
+    dot(W*0.5,H*0.52,W*0.34,lo);
+    dot(W*0.5,H*0.52,W*0.28,base);
     g.strokeStyle='#0d0f12'; g.fillStyle='#0d0f12'; g.lineWidth=3;
     if(it.kind==='watch'){
-      g.fillStyle=hi; rr(W*0.42,H*0.06,W*0.16,H*0.10,2); g.fill();          // crown
+      box(W*0.42,H*0.06,W*0.16,H*0.10,2,hi);                                // crown
       g.strokeStyle='#0d0f12';
       g.beginPath(); g.moveTo(W*0.5,H*0.52); g.lineTo(W*0.5,H*0.30); g.stroke();
       g.beginPath(); g.moveTo(W*0.5,H*0.52); g.lineTo(W*0.66,H*0.58); g.stroke();
     }else if(it.kind==='compass'){
       g.beginPath(); g.moveTo(W*0.5,H*0.28); g.lineTo(W*0.58,H*0.52); g.lineTo(W*0.5,H*0.76); g.lineTo(W*0.42,H*0.52);
-      g.closePath(); g.fillStyle='#b03a2e'; g.fill();
+      g.closePath(); g.fillStyle='#b03a2e'; g.fill(); st();
       g.fillStyle='#fff'; g.beginPath(); g.arc(W*0.5,H*0.52,3,0,6.29); g.fill();
-    }else if(it.kind==='optics'){
-      g.fillStyle=hi; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.17,0,6.29); g.fill();
-      g.fillStyle='#fff'; g.beginPath(); g.arc(W*0.44,H*0.46,W*0.05,0,6.29); g.fill();
-    }else if(it.kind==='volume'){
-      g.strokeStyle=hi; g.lineWidth=4;
-      g.beginPath(); g.moveTo(W*0.5,H*0.52); g.lineTo(W*0.36,H*0.34); g.stroke();
-      for(let a=0;a<5;a++){ const th=-2.4+a*1.2;
-        g.fillStyle='#0d0f12'; g.beginPath();
-        g.arc(W*0.5+Math.cos(th)*W*0.36,H*0.52+Math.sin(th)*W*0.36,1.8,0,6.29); g.fill(); }
+    }else if(it.kind==='photometer'){                        // light meter: half-sun dial + needle
+      g.fillStyle=hi; g.beginPath(); g.arc(W*0.5,H*0.58,W*0.17,3.14,6.29); g.closePath(); g.fill(); st();
+      g.strokeStyle='#0d0f12'; g.lineWidth=3;
+      g.beginPath(); g.moveTo(W*0.5,H*0.58); g.lineTo(W*0.62,H*0.38); g.stroke();
+      for(let a=0;a<3;a++){ const th=3.6+a*0.9; g.beginPath();
+        g.moveTo(W*0.5+Math.cos(th)*W*0.21,H*0.58+Math.sin(th)*W*0.21);
+        g.lineTo(W*0.5+Math.cos(th)*W*0.26,H*0.58+Math.sin(th)*W*0.26); g.stroke(); }
     }else{ // manual: little book
-      g.fillStyle=hi; rr(W*0.30,H*0.32,W*0.40,H*0.40,3); g.fill();
+      box(W*0.30,H*0.32,W*0.40,H*0.40,3,hi);
       g.strokeStyle='#0d0f12'; g.lineWidth=2;
       g.beginPath(); g.moveTo(W*0.5,H*0.34); g.lineTo(W*0.5,H*0.70); g.stroke();
       g.beginPath(); g.moveTo(W*0.36,H*0.44); g.lineTo(W*0.46,H*0.44); g.stroke();
       g.beginPath(); g.moveTo(W*0.36,H*0.52); g.lineTo(W*0.46,H*0.52); g.stroke();
     }
+  }else if(it instanceof Battery){                           // the cell: body, terminal, bolt
+    box(W*0.28,H*0.20,W*0.44,H*0.68,5,base);
+    box(W*0.40,H*0.10,W*0.20,H*0.12,2,hi);                                   // terminal
+    g.beginPath(); g.moveTo(W*0.56,H*0.34); g.lineTo(W*0.42,H*0.56); g.lineTo(W*0.52,H*0.56); g.lineTo(W*0.44,H*0.76);
+    g.lineTo(W*0.62,H*0.50); g.lineTo(W*0.52,H*0.50); g.closePath(); g.fillStyle='#ffd94a'; g.fill(); st();
+  }else if(it instanceof Barrel){                            // rack part: a long tube + socket collar
+    box(W*0.08,H*0.40,W*0.84,H*0.16,7,base);
+    box(W*0.10,H*0.34,W*0.16,H*0.28,4,lo);                                   // the socket end
+    box(W*0.78,H*0.36,W*0.10,H*0.24,3,hi);                                   // muzzle collar
+    g.fillStyle=hi; rr(W*0.30,H*0.43,W*0.40,H*0.04,2); g.fill();             // top sheen
+  }else if(it instanceof Platform){                          // mounting slab with side sockets
+    box(W*0.12,H*0.36,W*0.76,H*0.26,5,base);
+    for(let i=0;i<3;i++) box(W*(0.20+i*0.22),H*0.42,W*0.12,H*0.14,2,lo);     // sockets
+    box(W*0.42,H*0.24,W*0.16,H*0.14,2,hi);                                   // the root stud
+  }else if(it.armorType==='helmet'){                         // domes, told apart by their trim
+    const dome=()=>{ g.beginPath(); g.arc(W*0.5,H*0.58,W*0.34,3.14,6.29); g.closePath(); g.fillStyle=base; g.fill(); st(); };
+    if(it.defKey==='maskHelm'){ dome();
+      dot(W*0.5,H*0.62,W*0.13,lo);                                           // the snout can
+      dot(W*0.32,H*0.56,W*0.07,hi); dot(W*0.68,H*0.56,W*0.07,hi);            // cheek filters
+    }else if(it.defKey==='helmetSteel'){ dome();
+      box(W*0.10,H*0.56,W*0.80,H*0.09,4,lo);                                 // the pot's fat rim
+    }else if(it.defKey==='helmetRig'){ dome();
+      box(W*0.30,H*0.26,W*0.40,H*0.07,3,lo);                                 // crown rail
+      dot(W*0.24,H*0.50,W*0.05,hi); dot(W*0.76,H*0.50,W*0.05,hi);            // side studs
+    }else{ dome();                                                           // padded cap: soft visor
+      box(W*0.34,H*0.56,W*0.44,H*0.09,4,hi);
+    }
+  }else if(it.armorType==='face'){                           // respirator mask
+    g.beginPath(); g.moveTo(W*0.24,H*0.30); g.quadraticCurveTo(W*0.5,H*0.16,W*0.76,H*0.30);
+    g.quadraticCurveTo(W*0.80,H*0.62,W*0.5,H*0.80); g.quadraticCurveTo(W*0.20,H*0.62,W*0.24,H*0.30); g.closePath();
+    g.fillStyle=base; g.fill(); st();
+    dot(W*0.5,H*0.62,W*0.11,lo);                                             // the cartridge boss
+    dot(W*0.35,H*0.38,W*0.06,hi); dot(W*0.65,H*0.38,W*0.06,hi);              // eyes
+  }else if(it.armorType==='goggles'){                        // twin lenses on a band
+    box(W*0.08,H*0.38,W*0.84,H*0.24,8,base);
+    dot(W*0.34,H*0.5,W*0.11,lo); dot(W*0.66,H*0.5,W*0.11,lo);
+    dot(W*0.31,H*0.47,W*0.035,'#cfe4ea'); dot(W*0.63,H*0.47,W*0.035,'#cfe4ea');
+  }else if(it.armorType==='headphones'){                     // cans + band
+    g.strokeStyle=OUT; g.lineWidth=6; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.28,3.34,6.08); g.stroke();
+    g.strokeStyle=base; g.lineWidth=3.4; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.28,3.34,6.08); g.stroke();
+    box(W*0.14,H*0.42,W*0.16,H*0.26,5,base); box(W*0.70,H*0.42,W*0.16,H*0.26,5,base);
+    g.fillStyle=hi; rr(W*0.17,H*0.46,W*0.10,H*0.18,3); g.fill(); g.fillStyle=hi; rr(W*0.73,H*0.46,W*0.10,H*0.18,3); g.fill();
+  }else if(it.armorType==='harness'){                        // vest: straps + pouches by tier
+    box(W*0.22,H*0.10,W*0.14,H*0.34,4,lo); box(W*0.64,H*0.10,W*0.14,H*0.34,4,lo);   // shoulder straps
+    box(W*0.14,H*0.38,W*0.72,H*0.44,6,base);                                        // the belly band
+    const np=Math.min(3,Math.max(1,(it.invRows||1)-1));                              // 3x2→1 · 4x3→2 · 5x4→3 pouches
+    for(let i=0;i<np;i++) box(W*(0.5-np*0.11+i*0.22-0.08),H*0.48,W*0.16,H*0.22,3,hi);
+  }else if(it.armorType==='rucksack'){                       // the pack — taller with the tier
+    const tR=(it.invRows||3), th=0.30+tR*0.05;                                       // 3→0.45 · 5→0.55 · 6→0.60
+    box(W*0.20,H*(0.86-th),W*0.60,H*th,8,base);                                      // body
+    box(W*0.26,H*(0.80-th),W*0.48,H*0.16,6,hi);                                      // the flap
+    box(W*0.44,H*(0.94-th),W*0.12,H*0.10,2,lo);                                      // buckle
+    box(W*0.12,H*(0.90-th),W*0.07,H*(th-0.10),3,lo); box(W*0.81,H*(0.90-th),W*0.07,H*(th-0.10),3,lo);   // straps
+  }else if(it.armorType==='belt'){                           // webbing + buckle
+    box(W*0.06,H*0.40,W*0.88,H*0.20,4,base);
+    box(W*0.40,H*0.34,W*0.20,H*0.32,3,hi);
+    box(W*0.46,H*0.42,W*0.08,H*0.16,1,lo);
+  }else if(it.armorType==='holster'){                        // leather drop + grip; twins/chest stack them
+    const n=Math.min(3,it.invCols||1);
+    for(let i=0;i<n;i++){ const ox=W*(0.5-(n-1)*0.15+i*0.30-0.5);
+      g.save(); g.translate(ox,0);
+      box(W*0.36,H*0.20,W*0.16,H*0.14,3,lo);                                         // the grip poking out
+      g.beginPath(); g.moveTo(W*0.30,H*0.32); g.lineTo(W*0.66,H*0.32); g.lineTo(W*0.58,H*0.78); g.lineTo(W*0.38,H*0.78); g.closePath();
+      g.fillStyle=base; g.fill(); st();
+      g.fillStyle=hi; rr(W*0.34,H*0.36,W*0.26,H*0.08,3); g.fill();                    // the retention strap
+      g.restore(); }
+  }else if(it.armorType==='plates'){                         // two stacked slabs — ceramic reads lighter
+    box(W*0.16,H*0.34,W*0.68,H*0.42,7,lo);
+    box(W*0.22,H*0.22,W*0.56,H*0.42,7,base);
+    g.fillStyle=hi; rr(W*0.26,H*0.26,W*0.48,H*0.10,4); g.fill();
+  }else if(it.armorType==='lockbox'){                        // strongbox + padlock, rarity color
+    box(W*0.14,H*0.30,W*0.72,H*0.50,5,base);
+    box(W*0.14,H*0.30,W*0.72,H*0.14,5,hi);                                            // the lid line
+    g.strokeStyle=OUT; g.lineWidth=4; g.beginPath(); g.arc(W*0.5,H*0.52,W*0.09,3.14,6.29); g.stroke();
+    box(W*0.42,H*0.52,W*0.16,H*0.16,2,'#d8c56a');                                     // the padlock
+  }else if(it.pill){                                         // two-tone capsule
+    g.save(); g.translate(W*0.5,H*0.5); g.rotate(-0.6);
+    box(-W*0.24,-H*0.11,W*0.48,H*0.22,H*0.11,'#e8e4d4');
+    g.fillStyle=base; rr(0,-H*0.11,W*0.24,H*0.22,H*0.11); g.fill(); st();
+    g.restore();
+  }else if(it.ration){                                       // field tin with its label band
+    box(W*0.18,H*0.24,W*0.64,H*0.52,6,'#8a8a80');
+    g.fillStyle=base; rr(W*0.18,H*0.40,W*0.64,H*0.20,0); g.fill();
+    g.fillStyle=lo; rr(W*0.24,H*0.28,W*0.52,H*0.05,2); g.fill();
+  }else if(it.gummies){                                      // three chewy blobs
+    dot(W*0.34,H*0.42,W*0.12,base); dot(W*0.62,H*0.46,W*0.12,hi); dot(W*0.46,H*0.66,W*0.12,lo);
+  }else if(it.bandAid){                                      // the strip + its pad
+    g.save(); g.translate(W*0.5,H*0.5); g.rotate(0.5);
+    box(-W*0.34,-H*0.11,W*0.68,H*0.22,H*0.11,base);
+    box(-W*0.10,-H*0.08,W*0.20,H*0.16,2,'#e8e4d4');
+    g.restore();
+  }else if(it.aloe){                                         // the leaf fan
+    for(let i=0;i<3;i++){ const th=-0.5+i*0.5;
+      g.save(); g.translate(W*0.5,H*0.80); g.rotate(th);
+      g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(-W*0.09,-H*0.30,0,-H*0.52); g.quadraticCurveTo(W*0.09,-H*0.30,0,0); g.closePath();
+      g.fillStyle=i===1?hi:base; g.fill(); st();
+      g.restore(); }
+  }else if(it.filter){                                       // the gas cartridge: tin + grill
+    dot(W*0.5,H*0.5,W*0.32,base);
+    dot(W*0.5,H*0.5,W*0.24,lo);
+    for(let a=0;a<6;a++){ const th=a*1.047+0.5; g.fillStyle=hi;
+      g.beginPath(); g.arc(W*0.5+Math.cos(th)*W*0.13,H*0.5+Math.sin(th)*W*0.13,W*0.035,0,6.29); g.fill(); }
+    dot(W*0.5,H*0.5,W*0.04,hi);
   }else{ // generic crate-ish
-    g.fillStyle=base; rr(W*0.18,H*0.22,W*0.64,H*0.56,4); g.fill();
-    g.fillStyle=hi; rr(W*0.18,H*0.22,W*0.64,H*0.12,4); g.fill();
+    box(W*0.18,H*0.22,W*0.64,H*0.56,4,base);
+    g.fillStyle=hi; rr(W*0.20,H*0.24,W*0.60,H*0.11,4); g.fill();
   }
+  gloss();
   const url=cv.toDataURL();
   iconCache.set(key,url);
   return url;
