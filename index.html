@@ -2391,6 +2391,24 @@ LEVELS.area1={
      crates:[[-159,32,0.85],[-157.6,33.1,0.7],[-152,37,0.8],[-148,34,0.75]]},
     {id:'testCache', lootOf:'testing', lockedBy:'testing', kind:LVL.KIND.PROPS, box:[164,-64,176,-52],
      crates:[[166,-60,0.85],[167.4,-59,0.7],[172,-56,0.8],[168,-62,0.7]]},
+    // P6 POI CRATES — every POI carries a loot cluster (spec G: the crateless north half
+    // gets its supply layer; loot re-couples to POI risk). Same PROPS prim, pure DATA —
+    // zero new GLSL. Bake-checked (2-per-tile): pitsCache tiles (4-5,12) with pits only;
+    // armoryCache (9,12) road only (the armory tile (8,12) is road+armory FULL — the
+    // cluster sits on the east apron instead); facilityCache (13,13) facility only (the
+    // N-door back yard; tx12 is polluted by road seg2's bake bbox); labApron (3,9) lab
+    // only (outside the carded gate — street tier, the rich lab cache stays carded);
+    // housingCache (9,4) tentsB only.
+    {id:'pitsCache', lootOf:'pits', kind:LVL.KIND.PROPS, box:[-80,106,-64,120],
+     crates:[[-72,108,0.85],[-70.6,109.2,0.7],[-66,114,0.75],[-71,116,0.8]]},
+    {id:'armoryCache', lootOf:'armory', kind:LVL.KIND.PROPS, box:[26,102,40,114],
+     crates:[[28,104,0.85],[29.4,105.1,0.7],[33,110,0.8]]},
+    {id:'facilityCache', lootOf:'facility', kind:LVL.KIND.PROPS, box:[128,130,142,142],
+     crates:[[130,132,0.8],[131.4,133,0.7],[136,138,0.85],[139,133,0.75]]},
+    {id:'labApron', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-122,26,-110,38],
+     crates:[[-120,28,0.8],[-118.6,29.1,0.65],[-114,34,0.75]]},
+    {id:'housingCache', lootOf:'tentsB', kind:LVL.KIND.PROPS, box:[26,-98,40,-86],
+     crates:[[30,-90,0.8],[31.3,-91.1,0.7],[35,-94,0.85]]},
     // South: housing — tents scattered on the footpaths
     {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
     {id:'tentsB', kind:LVL.KIND.TENT, box:[-22,-132,34,-64],  tents:[[-8,-92,0.2],[14,-108,2.9],[26,-84,1.6],[-2,-120,5.1]]},
@@ -2465,13 +2483,15 @@ LEVELS.area1={
               'barrelE','barrelL','platL','tool','scope3x','autoSear','burstCam','scopeAdapter']
     },
     // regionLoot is LIVE (P4, owner call 2): a PROPS region with lootOf draws its tier
-    // character from here — the locked caches read lab/testing. armory stays unwired: an
-    // interior cache region would put 3 regions on tile (12,8) (road+armory) and break the
-    // 2-per-tile bake — P6's crate expansion owns that fight. lootRegions list still inert.
+    // character from here — the locked caches read lab/testing, the P6 POI clusters read
+    // pits/armory/facility/tentsB (armoryCache wires the once-orphaned armory entry from
+    // the east apron — its own tile (8,12) is road+armory FULL, so the 'cores' tier now
+    // drops UNLOCKED there). forest stays unconsumed until a forest cache is authored.
+    // lootRegions list still inert.
     regionLoot:{ pits:['common','common','mods'], forest:['common','common','gear'],
                  testing:['mods','common','rare'], tentsA:['common','gear','gear'],
                  tentsB:['common','gear','common'], lab:['gear','rare','cores'],
-                 armory:['mods','cores','rare'] },
+                 armory:['mods','cores','rare'], facility:['gear','mods','cores'] },
     lootRegions:['pits','forest','testing','tentsA','tentsB','lab','armory'],
     guaranteed:['gateCard','testCard','labCard'],   // CONTAINMENT: each missing keycard always seeds an UNLOCKED crate (elig skips lockedBy) — no lock can soft-lock a raid, and a card lost to the teeth re-seeds next raid
   },
