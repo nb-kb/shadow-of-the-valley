@@ -7086,7 +7086,7 @@ function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   _poiRot=Math.floor(Math.random()*3);             // fresh run: fresh POI rotation (loadGame overrides from the slot)
   _crateRot=Math.floor(Math.random()*12);          // fresh run: fresh crate phase (loadGame overrides from the slot)
-  _hazedPOIs=[]; _gateOpen=false;                  // fresh run: no haze mapped, gate LOCKED (loadGame overrides from the slot)
+  _hazedPOIs=[]; _gateOpen=false; _lockOpen={};    // fresh run: no haze mapped, gate + labs LOCKED (loadGame overrides from the slot)
   depth=1; kills=0; runClock=0; _lastReloadT=-9;   // reset the double-tap clock so the first reload of a run isn't read as a double-tap
   playerPos.health=playerPos.maxHealth;
   playerPos.status.burn=0; playerPos.status.bleedT=0; playerPos.status.bleedN=0; playerPos.burnedMax=0;
