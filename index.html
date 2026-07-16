@@ -3571,6 +3571,9 @@ const SETTINGS_REGISTRY=[
    options:['OFF','ON'], get:()=>P('shadowOn')>0.5?'ON':'OFF', set:v=>{ PARAMS.shadowOn.v=v==='ON'?1:0; }},
   {container:'goggles', id:'ao', label:'AO', kind:'enum', functional:true,
    options:['OFF','ON'], get:()=>P('aoOn')>0.5?'ON':'OFF', set:v=>{ PARAMS.aoOn.v=v==='ON'?1:0; }},
+  {container:'goggles', id:'freeAim', label:'FREEAIM', kind:'enum', functional:true,
+   options:['OFF','ON'], tip:'aiming drifts the gun free of the view — the camera trails it (bare + iron sights)',
+   get:()=>P('adsFree')>0.5?'ON':'OFF', set:v=>{ PARAMS.adsFree.v=v==='ON'?1:0; }},
   // headphones — the ears (per-category buses are a later seam: route each to its own gain node)
   {container:'headphones', id:'master', label:'MASTER', kind:'enum', functional:true,
    options:['0%','35%','70%','100%'],
