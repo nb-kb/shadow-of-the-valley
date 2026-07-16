@@ -201,6 +201,9 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
 .bagSettings .gridWrap,.bagSettings .zoneStub{margin:0;}
 .bagSettings .zoneStub{min-width:104px;height:22px;align-self:center;}
 .equipCell{position:relative;}
+.slotLab{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;font-size:11px;font-weight:bold;
+  letter-spacing:.16em;color:var(--bone);white-space:nowrap;pointer-events:none;}   /* the rig reads at a glance */
+.slotLab.dim{opacity:.35;}
 .slotGhost{font-size:11px;letter-spacing:.1em;color:#5a5644;}
 .lockedCell{border-style:solid;border-color:rgba(0,0,0,.5);   /* settings dials: flat plates, not fabric recesses — stay dimmed and distinct */
   background:linear-gradient(180deg,rgba(34,38,26,.5),rgba(24,27,17,.55));
@@ -893,6 +896,7 @@ uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uWallPush;    // 0..1 wall-ahead factor — the gun collides: stock back, muzzle up (no carve)
 uniform vec2  uMenuLook;    // menu free-look offsets (yaw,pitch) — the raised props counter-rotate to stay put in the world
+uniform float uBagH;        // the worn pack's Y-scale (rows-driven) — the bag model physically UPGRADES with capacity
 uniform float uHasTool;
 uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w melee whip phase 0→1
 uniform float uExposure;    // 0..1 player light exposure — dims the viewmodel in cover
@@ -1617,7 +1621,8 @@ vec2 map(vec3 p){
       vec3 bp=va-vec3(0.0,-0.03-rise,0.34);            // FORCED PERSPECTIVE (owner): tiny and CLOSE — nearer than any wall, it can never lose to the world (bagFrame mirrors these numbers)
       bp=rotX(bp, 0.45);                               // OPENED TO THE PLAYER
       bp=rotY(bp, sin(iTime*0.5)*0.08);                // the shared sway — the UI swings with it
-      float d=sdBackpack(bp/0.42)*0.42;                // scaled small — forced perspective does the rest
+      bp.y/=uBagH;                                     // taller pack = taller model (owner: watch it physically upgrade)
+      float d=sdBackpack(bp/0.42)*0.42*min(1.0,uBagH); // scaled small — forced perspective does the rest (conservative march under the stretch)
       if(d<vmD){ vmD=d; vmM=22.0; }
     }else if(uHasTool>0.5 && uMenuMode!=1){            // the WORN gun — in play AND in the tool menu (owner: same gun, it just MOVES)
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
@@ -2064,7 +2069,7 @@ function setupAttrib(prog){
 const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
-  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uBagH','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
@@ -4017,7 +4022,7 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 // ============================================================
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
 let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a sub-inventory cell = quick-swap it out)
-let _mlY=0,_mlP=0,_mlVy=0,_mlVp=0;   // menu free-look spring: offset + velocity per axis (bounces home on release)
+let _mlY=0,_mlP=0,_mlVy=0,_mlVp=0,_mlHold=false;   // menu free-look: direct-drive offsets while pushing, spring (velocity) home on release
 let _propMode=0,_propPhase=0;        // the raised prop's OWN eased life (1 bag · 2 tool): the leaving prop drains before the arriving one rises — real ease-out + crossfade
 let _whipSeed={cx:0.6,ov:0.5,lag:1};// per-swing whip character — rolled fresh every crack (random unfurl)
 const SLOT_KIN={face:['face','goggles'],holster:['holster','belt']};   // consolidated seats (owner): FACE takes masks+goggles, HOLSTER takes holsters+belts — the goggles/belt slots are retired
@@ -8565,6 +8570,7 @@ function renderZones(){
     const blk=document.createElement('div'); blk.className='zoneBlock'+(z.equipCol||z.id==='pockets'?'':' zonePanel');
     const g=document.createElement('div'); g.className='gridWrap';
     g.style.gridTemplateColumns='repeat('+(z.equipCol?z.rows:z.cols)+',44px)';   // the RIG transposes to ONE ROW across the mouth — purely visual; nav ids + cursorY stay slot-indexed
+    if(z.equipCol){ g.style.columnGap='14px'; g.style.paddingBottom='26px'; }    // SPACED slots + room for the bold labels beneath (owner)
     if(z.equipCol){
       for(let r=0;r<=EQUIP_SLOTS.length;r++){                      // +1: the PLATES home — a proxy over the worn harness's seat (owner)
         const proxy=r===EQUIP_SLOTS.length, slot=proxy?'plates':EQUIP_SLOTS[r];
@@ -8572,7 +8578,8 @@ function renderZones(){
         div.dataset.nv='0,'+zi+',0,'+r;                            // spatial-nav identity: focus,zone,x,y
         const it=proxy?wornPlates():equip[slot];
         if(currentFocus===0&&zoneIdx===zi&&cursorY===r) div.classList.add('cursor','cellFocus');
-        if(!it) div.innerHTML='<span class="slotGhost"'+(proxy&&!equip.harness?' style="opacity:.35"':'')+'>'+slot.slice(0,4).toUpperCase()+'</span>';   // grayed until a harness gives the plate a home
+        const _lab=document.createElement('div'); _lab.className='slotLab'+(proxy&&!equip.harness?' dim':'');
+        _lab.textContent=slot.slice(0,4).toUpperCase(); div.appendChild(_lab);   // BOLD label UNDER every slot — readability first (owner); empty cells read by the label alone
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen||tipPadT>tipMouseT) return;   // pad owns the cursor: hover doesn't steal (move the mouse to take it back)
           if(currentFocus===0&&zoneIdx===zi&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
@@ -9214,13 +9221,24 @@ function updatePlayer(dt){
         if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;
         if(ey<B) ely=-(1-ey/B); else if(ey>1-B) ely=(ey-(1-B))/B;
       } else { elx=INPUT.padAxes[2]||0; ely=INPUT.padAxes[3]||0; }
-      _mlVy+=elx*12*dt; _mlVp+=-ely*9*dt;                        // MUCH more freedom (owner)
+      // DIRECT DRIVE while pushing (owner: real freedom — the old spring capped the range at its
+      // equilibrium ~8°). Pushing pans the head at full rate to the clamps; the spring only owns
+      // the RELEASE, bouncing the head home.
+      if(elx||ely){
+        const _dY0=clamp(_mlY+elx*2.4*dt,-2.4,2.4)-_mlY;
+        const _dP0=clamp(_mlP-ely*1.8*dt,-1.2,1.2)-_mlP;
+        _mlY+=_dY0; _mlP+=_dP0; _mlVy=0; _mlVp=0;
+        cameraYaw+=_dY0; cameraPitch=clamp(cameraPitch+_dP0,-1.5,1.5);
+        _mlHold=true;                                            // this frame is handled — the spring stays out
+      } else _mlHold=false;
+    } else _mlHold=false;
+    if(!_mlHold){                                                // idle or menu closed: the spring owns the way home
+      const _w0=9, _zt=0.5;                                      // underdamped — the satisfying bounce
+      _mlVy+=(-2*_zt*_w0*_mlVy-_w0*_w0*_mlY)*dt; _mlVp+=(-2*_zt*_w0*_mlVp-_w0*_w0*_mlP)*dt;
+      const _dY=_mlVy*dt, _dP=_mlVp*dt;
+      _mlY+=_dY; _mlP+=_dP;
+      cameraYaw+=_dY; cameraPitch=clamp(cameraPitch+_dP,-1.5,1.5);
     }
-    const _w0=9, _zt=0.5;                                        // underdamped — the satisfying bounce home
-    _mlVy+=(-2*_zt*_w0*_mlVy-_w0*_w0*_mlY)*dt; _mlVp+=(-2*_zt*_w0*_mlVp-_w0*_w0*_mlP)*dt;
-    const _dY=_mlVy*dt, _dP=_mlVp*dt;
-    _mlY=clamp(_mlY+_dY,-2.4,2.4); _mlP=clamp(_mlP+_dP,-1.2,1.2);   // near-full look-around (owner)
-    cameraYaw+=_dY; cameraPitch=clamp(cameraPitch+_dP,-1.5,1.5);
   }
   // the TRAIL — the camera chases the aim on a small delay, eating the lead as it goes; the
   // aim (camera+lead) holds still in the world while the view glides on. Runs unconditionally:
@@ -9776,7 +9794,8 @@ function bagFrame(){
   // TRUE ANCHOR (owner): project the mouth point of the OPEN-time camera frame through the
   // CURRENT camera — exact at any free-look angle, so the bag is PLANTED, never head-following.
   const _oy=cameraYaw-_mlY, _op=cameraPitch-_mlP;                    // the frame the menu opened in (free-look is the only in-menu look)
-  const _vy=0.105-rise, _vz=0.276;
+  const _sy2=0.55+(equip.rucksack?equip.rucksack.invRows:1)*0.075;   // mirrors uBagH — the mouth line rides the pack's height
+  const _vy=(-0.03+0.135*_sy2)-rise, _vz=0.276;
   const _ofx=Math.sin(_oy)*Math.cos(_op), _ofy=Math.sin(_op), _ofz=Math.cos(_oy)*Math.cos(_op);
   const _oux=-Math.sin(_op)*Math.sin(_oy), _ouy=Math.cos(_op), _ouz=-Math.sin(_op)*Math.cos(_oy);
   const _wx=_oux*_vy+_ofx*_vz, _wy=_ouy*_vy+_ofy*_vz, _wz=_ouz*_vy+_ofz*_vz;
@@ -9924,6 +9943,7 @@ function frame(){
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlY,_mlP);                 // free-look offsets — the props COUNTER them to stay anchored where they opened
+  gl.uniform1f(U.uBagH,0.55+(equip.rucksack?equip.rucksack.invRows:1)*0.075);   // Day 3 rows→0.78 · Patrol 5→0.93 · Field 6→1.0 · bagless→0.62
   // rack presentation: menu prop AND the held viewmodel share this data
   if(activeTool){
     const cols=activeTool._cols||(activeTool._cols=toolColumns(activeTool));   // no per-frame churn
