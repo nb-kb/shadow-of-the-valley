@@ -7663,7 +7663,7 @@ function itemFromJSON(j){
   if(!j||!ITEM_DEFS[j.k]) return null;
   const it=ITEM_DEFS[j.k]();
   if(typeof j.cn==='string') it.customName=sanitizeName(j.cn)||null;
-  if(j.loaded!==undefined){ it.loaded=Math.max(0,Math.min(j.loaded|0,it.maxCapacity)); if(j.magType&&(it.anyCaliber?!!AMMO[j.magType]:it.acceptedTypes.indexOf(j.magType)>=0)) it.loadedType=j.magType; }   // caliber must be one this mag holds (anyCaliber: any REAL round) — garbage falls back to acceptedTypes[0]
+  if(j.loaded!==undefined){ it.loaded=Math.max(0,Math.min(j.loaded|0,it.maxCapacity)); if(j.magType&&it.acceptedTypes&&(it.anyCaliber?!!AMMO[j.magType]:it.acceptedTypes.indexOf(j.magType)>=0)) it.loadedType=j.magType; }   // caliber must be one this mag holds (anyCaliber: any REAL round) — garbage falls back to acceptedTypes[0]; a magType stranded on a non-mag def is ignored, not a throw
   if(j.count!==undefined) it.count=Math.max(0,Math.min(j.count|0,AMMO_STACK));   // clamp to the merge cap — a rotted count can't mint rounds or go negative
   if(j.cap!==undefined){ it.cap=Math.max(0,Math.min(+j.cap||0,it.capMax)); it.charge=Math.max(0,Math.min(+j.charge||0,it.cap)); }   // cap<=design, charge<=cap — and a capless-charge blob reads 0, not NaN
   if(j.on!==undefined) it.on=j.on;
@@ -7788,7 +7788,7 @@ function loadGame(slot){
     const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
-    for(const k of EQUIP_SLOTS){ if(!b.equip[k]) continue; const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }   // saveGame's own whitelist — a foreign blob key can't invent an equip slot
+    if(b.equip) for(const k of EQUIP_SLOTS){ if(!b.equip[k]) continue; const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }   // saveGame's own whitelist — a foreign blob key can't invent an equip slot; a null equip reads bare, not a throw
     syncBagAlias(); clampZone();
     if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
     for(const row of stashInv) row.fill(null);            // in place — the crate registry holds this array. v2 reads empty.
