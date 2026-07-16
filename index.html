@@ -3368,7 +3368,7 @@ const ITEM_DEFS={
   smgMagIII:   ()=>new Magazine('SMG iii','#2c3138',['9mm'],40,{adsTier:1,reloadMode:'mag'}),
   rifleMagI:   ()=>new Magazine('Rifle i','#2a2f26',['7.62'],15,{adsTier:2,reloadMode:'mag'}),
   rifleMagII:  ()=>new Magazine('Rifle ii','#323a2c',['7.62'],30,{adsTier:2,reloadMode:'mag'}),
-  sniperMagI:  ()=>new Magazine('Sniper i','#3a2f26',['7.62'],8,{adsTier:3,reloadMode:'single',spreadMul:0.6}),
+  sniperMagI:  ()=>new Magazine('Sniper i','#3a2f26',['7.62'],8,{adsTier:3,reloadMode:'single',spreadMul:0.6}),   // enemy-roll only (buildTool MAGS), no tier ON PURPOSE — a hunt-reward: loot it off a marksman (owner call 15)
   sniperMagII: ()=>new Magazine('Sniper ii','#4a3a2c',['7.62'],15,{adsTier:3,reloadMode:'mag',spreadMul:0.4}),
   shotMagI:    ()=>new Magazine('Shotgun i','#5a2f2c',['buckshot','slug','flechette'],5,{adsTier:3,reloadMode:'mag'}),
   shotMagII:   ()=>new Magazine('Shotgun ii','#6a3a30',['buckshot','slug','flechette'],10,{adsTier:3,reloadMode:'mag'}),
@@ -3421,7 +3421,7 @@ const ITEM_DEFS={
   heavy:      ()=>new ToolMod('MASS','#5c6b73','mod',{grav:1,dmg:15,surcharge:5},'Next core arcs and lands harder · +5⚡'),
   twin:       ()=>new ToolMod('TWIN','#7a4f8f','mod',{twin:2,surcharge:12},'Next core fires doubled · +12⚡'),
   silentMod:  ()=>new ToolMod('HUSH','#3f4f5f','mod',{silent:true,surcharge:3},'Next core barely whispers · +3⚡'),
-  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core causes Bleed · +5⚡'),
+  serrated:   ()=>new ToolMod('SERRATED','#8f2f3c','mod',{bleed:true,surcharge:5},'Next core causes Bleed · +5⚡'),   // enemy-roll only (buildTool MODS), no tier ON PURPOSE — hunt-reward (owner call 15)
   cyanide:    ()=>{ const it=new Item('Cyanide Pill',1,1,'#dfdacb'); it.pill=true; return it; },
   ration:     ()=>{ const it=new Item('Field Ration',1,1,'#8a7a4e'); it.ration=true; return it; },
   gummies:    ()=>{ const it=new Item('Gummies',1,1,'#a04a5e'); it.gummies=true; return it; },
@@ -3454,11 +3454,11 @@ const ITEM_DEFS={
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it · +4⚡'),
   contactMod: ()=>new ToolMod('CONTACT','#b0662f','mod',{contact:true,surcharge:5},'Next core fires the one after it · +5⚡'),
   slowFuse:   ()=>new ToolMod('TIMER','#8f7f3c','mod',{timer:1.5,surcharge:3},'Next core goes off at 1.5s or on first touch, whichever comes first — and fires the one after it · +3⚡'),
-  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),
+  splinter:   ()=>new ToolMod('SPLINTER','#8f3c5c','mod',{split:3,surcharge:7},'Next core shatters into 3 on impact · +7⚡'),   // enemy-roll only — hunt-reward (owner call 15)
   boomerangMod:()=>new ToolMod('RETURN','#3c6f8f','mod',{boomerang:true,surcharge:6},'Next core returns to the thrower · +6⚡'),
-  homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core steers toward the nearest warm target · +7⚡'),
+  homingMod:  ()=>new ToolMod('SEEKER','#6a9f3c','mod',{homing:1,surcharge:7},'Next core steers toward the nearest warm target · +7⚡'),   // enemy-roll only — hunt-reward (owner call 15)
   refundMod:  ()=>new ToolMod('REFUND','#2e7d32','mod',{refund:true,surcharge:1},'Next core: base ⚡ waived (lead still spent) · +1⚡'),
-  chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core flies wild and hits +45% harder — stacks twice. Beams arc like lightning · +6⚡'),
+  chaoticMod: ()=>new ToolMod('CHAOS','#7e57c2','mod',{chaos:1,surcharge:6},'Next core flies wild and hits +45% harder — stacks twice. Beams arc like lightning · +6⚡'),   // enemy-roll only — hunt-reward (owner call 15)
   // --- sequence: utilities (apply to the whole tool) ---
   gripField:  ()=>new ToolMod('GRIP','#2f8f9f','proj',{kind:'grip',base:6},'Core · a glue glob · 6⚡'),
   pulse:      ()=>new ToolMod('KINETIC','#9f7f2f','util',{pulse:true},'Shoves what it touches'),
