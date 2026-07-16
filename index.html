@@ -2613,7 +2613,7 @@ LEVELS.area1={
     // Every FINISHED item must appear in a tier or an enemy roll (buildTool) — an entry in
     // neither is unobtainable, the exact hole the audit found (contact/timer/return/refund).
     lootTiers:{
-      common:['ammo9','ammo9','magStd','powderMag',                 // BALLISTICS
+      common:['ammo9','ammo9','pistolMag','powderMag',              // BALLISTICS
               'boltCore','sparkCore','dmgPlus','velPlus',           // ENERGY
               'lantern','pulse','beltFeeder','lantern',             // UTILITIES
               'beltBasic','holster1','helmetCap','harnessL','ruckS', // ARMOR (pack tiers: S common · M gear · L rare)
@@ -2627,7 +2627,7 @@ LEVELS.area1={
               'gummies','bandAid','aloe','ration',
               'barrelU','battM','platS','reflex',
               'maskHelm','gasFilter'],                              // GAS KIT (P3): the respirator helm sits one shelf up
-      mods:  ['ammoFlch','magDrum','rifleMagI','shotMagI',
+      mods:  ['ammoFlch','smgMagII','rifleMagI','shotMagI',
               'silentMod','bounce','pierce','heavy',
               'pulse','beltFeeder','lantern','pulse',
               'holster3','helmetSteel','headphones','harnessL',
@@ -3496,8 +3496,7 @@ const ITEM_DEFS={
   ammoSlug:   ()=>new Ammunition('Slug','#7a5a3c','slug',6),
   ammoBuck:   ()=>new Ammunition('Buckshot','#5a5f55','buckshot',8),
   powderMag:  ()=>new Magazine('Powder Mag','#8d6e63',['9mm'],10,{adsTier:1,reloadMode:'mag',powder:true,anyCaliber:true}),   // takes ANY round and powders it — hitscan + feeders cost no ⚡ (retired powderCore trait); whole-mag swap reload
-  magStd:     ()=>new Magazine('Std Mag','#23262b','9mm',12,{reloadMode:'mag'}),
-  magDrum:    ()=>new Magazine('Drum','#2c3138','9mm',28,{reloadMode:'mag'}),
+  // (magStd/magDrum RETIRED — owner: the categorized tiers ARE those mags; itemFromJSON remaps old saves to pistolMag/smgMagII)
   // --- magazine lineup (feature 19): caliber + ADS tier + reload behaviour ---
   barrelMagI:  ()=>Object.assign(new Magazine('Barrel i','#5f6a3a',['buckshot','slug','flechette'],6,{adsTier:2,reloadMode:'single',reloadTime:0.6}),{w:2,h:1}),   // shotgun barrels: every shell, two-wide shell rack, slow feed
   barrelMagII: ()=>Object.assign(new Magazine('Barrel ii','#6a7040',['buckshot','slug','flechette'],10,{adsTier:2,reloadMode:'single',reloadTime:0.45}),{w:2,h:1}),
@@ -5493,7 +5492,7 @@ function drawWhip(dt){
   const rec=ph>0.55?(ph-0.55)/0.45:0, recS=rec*rec*(3-2*rec);    // ...then REEL smoothly home: the cord returns INTO the hand, it never shrinks in place (owner)
   const len=WHIP_REACH*ext*(1-recS);
   const over=Math.max(0,Math.sin((ph-0.30)*10))*_whipSeed.ov;    // the overshoot lives in the BELLY now — the tip stays honest
-  const tx=o.x+fw.x*len, ty=o.y+fw.y*len-(1-ext)*0.4, tz=o.z+fw.z*len;   // the TIP rides the aim line — the cord's end IS the reach gauge (owner)
+  const tx=o.x+fw.x*len+b.right.x*0.40*recS, ty=o.y+fw.y*len-(1-ext)*0.4-0.85*recS, tz=o.z+fw.z*len+b.right.z*0.40*recS;   // the TIP rides the aim line out (the reach gauge) — and reels home DOWN-AND-ASIDE, never straight into the viewport (owner)
   const _belly=0.34*Math.sin(ph*Math.PI);              // STEEPER parabola (owner): a deep belly through the whole swing
   const cx=(hx+tx)/2-b.right.x*1.25*(1-ph)*_whipSeed.cx, cy=(hy+ty)/2-0.70*(1-ext)*_whipSeed.lag-_belly+over*0.5, cz=(hz+tz)/2-b.right.z*1.25*(1-ph)*_whipSeed.cx;   // per-swing bow side + slack — every crack UNFURLS differently
   let px=hx,py=hy,pz=hz;
@@ -6786,7 +6785,7 @@ class Zealot{
   buildTool(){
     const t=ITEM_DEFS.tool(); t.customName='ZEALOT TOOL';   // customName (not .name) so the lore name survives save/load
     // --- MAG + a suitable round loaded, so the covenant tool actually feeds (enemy-tool rework) ---
-    const MAGS=['magStd','magDrum','pistolMag','smgMagI','smgMagII','rifleMagI','barrelMagI','shotMagI','sniperMagI'];
+    const MAGS=['pistolMag','smgMagI','smgMagII','rifleMagI','barrelMagI','shotMagI','sniperMagI'];
     const magKey=MAGS[Math.floor(runRng()*MAGS.length)];
     const mag=ITEM_DEFS[magKey]();
     const cal=mag.acceptedTypes[Math.floor(runRng()*mag.acceptedTypes.length)];       // a caliber this mag will actually hold
@@ -6844,7 +6843,7 @@ class Zealot{
     for(let i=0;i<n;i++){
       const r=runRng(); let it;
       if(r<0.40)      it=ITEM_DEFS[['ration','gummies','bandAid','aloe'][Math.floor(runRng()*4)]]();
-      else if(r<0.72) it=ITEM_DEFS[runRng()<0.7?'ammo9':'magStd']();
+      else if(r<0.72) it=ITEM_DEFS[runRng()<0.7?'ammo9':'pistolMag']();
       else{ const tn=runRng()<0.12+0.25*q?'cores':(runRng()<0.10*q?'rare':'mods');
             const list=TIERS[tn]||TIERS.mods;
             it=ITEM_DEFS[list[Math.floor(runRng()*list.length)]](); }
@@ -7533,11 +7532,11 @@ function resetLevel(){
 function seedStashKit(){                       // the kit waits in the STASH now, not on the body. NEW GAME and first
   if(stashInv.flat().some(Boolean)) return;    // boot seed it; a stash that still holds ANYTHING is never stomped
   const rk=ITEM_DEFS.ruckS();                  // (so a hard-death restart keeps whatever home kept)
-  for(let i=0;i<2;i++){ const m=ITEM_DEFS.magStd(); m.loaded=8;   // starter bag = the SMALL tier: its 3x3 seats both 1x2 mags (5 cells spare) — bigger packs are found, not given
+  for(let i=0;i<2;i++){ const m=ITEM_DEFS.pistolMag(); m.loaded=8;   // starter bag = the SMALL tier: its 3x3 seats both 1x2 mags (5 cells spare) — bigger packs are found, not given
     autoPlace(m,rk.inv,rk.invCols,rk.invRows); }   // two more mags ride INSIDE the bag — grab it, find them
   const kit=[rk];
   for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.customName='FOUNDLING TOOL'; kit.push(t); }   // bare frames — no rack
-  const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // one 9mm mag flat beside the bagged pair
+  const mag=ITEM_DEFS.pistolMag(); mag.loaded=8; kit.push(mag);   // one 9mm mag flat beside the bagged pair
   kit.push(ITEM_DEFS.goggles(),ITEM_DEFS.headphones(),        // every settings utility, exactly once
            ITEM_DEFS.watch(),ITEM_DEFS.compass(),ITEM_DEFS.photometer(),
            ITEM_DEFS.manual());
@@ -8102,6 +8101,8 @@ function itemToJSON(it){
   return j;
 }
 function itemFromJSON(j){
+  if(j&&j.k==='magStd') j.k='pistolMag';               // legacy defs RETIRED (owner: categorized twins exist) — old saves keep their mags
+  else if(j&&j.k==='magDrum') j.k='smgMagII';
   if(!j||!ITEM_DEFS[j.k]) return null;
   const it=ITEM_DEFS[j.k]();
   if(typeof j.cn==='string') it.customName=sanitizeName(j.cn)||null;
