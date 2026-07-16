@@ -5169,15 +5169,44 @@ function tryFirePlayer(dt){
 }
 
 // THE WHIP — bare fire snaps a 0.3s swing; the CRACK lands at phase 0.45.
+// THE WHIP CORD — a one-frame bezier lash re-drawn every frame of the swing (fluid), riding the
+// existing beam-segment pool + dyn-light flash: the whole effect is shader-RENDERED but adds ZERO
+// new GLSL on the Chrome-budget branch. The tip flings out fast, OVERSHOOTS the aim line at the
+// crack phase, then recoils to the hand; the crack itself is a warm light pop + a radial star burst.
+const WHIP_REACH=3.4;
+function drawWhip(dt){
+  const ph=Math.min(1,meleeT/0.3);
+  const o=camPos(), fw=aimForward(), b=camBasis();
+  const hx=o.x+b.right.x*0.22+fw.x*0.15, hy=o.y-0.24+fw.y*0.15, hz=o.z+b.right.z*0.22+fw.z*0.15;   // hand origin: low right, matching the GLSL hand arc
+  const ext=Math.sin(Math.min(1,ph/0.45)*Math.PI*0.5);           // fling out fast...
+  const rec=ph>0.55?(ph-0.55)/0.45:0;                            // ...then recoil home
+  const len=WHIP_REACH*ext*(1-rec*0.85);
+  const over=Math.max(0,Math.sin((ph-0.30)*10))*0.5;             // the tip whips PAST the line at the crack
+  const tx=o.x+fw.x*len, ty=o.y+fw.y*len+over*0.25-(1-ext)*0.4, tz=o.z+fw.z*len;
+  const cx=(hx+tx)/2-b.right.x*0.7*(1-ph), cy=(hy+ty)/2-0.35*(1-ext)+over*0.45, cz=(hz+tz)/2-b.right.z*0.7*(1-ph);   // control point lags the swing — the cord BOWS
+  let px=hx,py=hy,pz=hz;
+  for(let i=1;i<=6;i++){ const t=i/6, u=1-t;
+    const qx=u*u*hx+2*u*t*cx+t*t*tx, qy=u*u*hy+2*u*t*cy+t*t*ty, qz=u*u*hz+2*u*t*cz+t*t*tz;
+    beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(qx,qy,qz), col:[0.55,0.42,0.28], ttl:dt+0.001});
+    px=qx; py=qy; pz=qz;
+  }
+  if(!meleeHit&&meleeT+dt>=0.135){                               // the CRACK lands next tick — light pop + star burst at the tip
+    addDyn(px,py,pz,[1.0,0.85,0.55],2.6,0.09);
+    for(let k=0;k<5;k++){ const a2=k/5*6.2832, rr=0.30;
+      beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(px+Math.cos(a2)*rr,py+Math.sin(a2)*rr*0.7,pz+Math.sin(a2+2.1)*rr), col:[1.0,0.9,0.6], ttl:0.07});
+    }
+  }
+}
 function tickMelee(dt){
   if(meleeT<=0) return;
   meleeT+=dt;
+  drawWhip(dt);                                        // the world-space cord — the GLSL hand arc stays the close half
   if(!meleeHit && meleeT>=0.135){ meleeHit=true; meleeStrike(); }   // the CRACK lands mid-snap
   if(meleeT>=0.3) meleeT=0;
 }
 function meleeStrike(){
   const o=camPos(), f=aimForward();                       // P7: the whip follows the visible marker (degrades to camForward at zero lead)
-  let best=null, bd=2.2;
+  let best=null, bd=WHIP_REACH;                           // extended reach (owner) — the cord visibly spans it; the stealth takedown stays close-quarters (<1.6m)
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;
     const dx=en.position.x-o.x, dy=(en.position.y+0.95)-o.y, dz=en.position.z-o.z;
