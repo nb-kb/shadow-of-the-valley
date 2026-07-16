@@ -189,8 +189,9 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.85));}
 .itemSpan .lbl2{font-size:11px;letter-spacing:.05em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 4px #000;
   white-space:nowrap;overflow:hidden;max-width:100%;}
-#inspectUI{position:absolute;left:46%;top:58%;transform:none;z-index:45;width:250px;padding:14px;}   /* MIDDLE-aligned (owner sketch): opened lockboxes/mags/tool pockets dock by the middle group */
+#inspectUI{position:absolute;left:46%;top:58%;transform:none;z-index:45;min-width:250px;width:max-content;max-width:calc(100vw - 50px);padding:14px;}   /* MIDDLE-aligned (owner sketch): opened lockboxes/mags/tool pockets dock by the middle group; renderInspect clamps it on-screen */
 #inspectUI .gridWrap{margin:10px auto 0;}
+#inspectBody{max-height:calc(100vh - 130px);overflow-y:auto;}   /* last ditch: a monster rack scrolls inside the panel, never past the fold. NOT on .panel — its corner brackets live at -2px */
 .seqReadout{margin-top:14px;padding:10px;border:1px dashed var(--line);font-size:13px;letter-spacing:.1em;color:var(--dust);}
 .seqChip{display:inline-block;border:1px solid var(--line);padding:2px 6px;margin:2px 3px 2px 0;color:var(--bone);background:#000;}
 .seqArrow{color:var(--dust);margin:0 2px;}
@@ -4203,6 +4204,12 @@ function renderInspect(){
       +'grid-template-columns:repeat('+inspectItem.invCols+',44px);"></div>';
     renderGrid('inspectPockets', inspectItem.inv, inspectItem.invCols, inspectItem.invRows, 2);
   }else body.innerHTML='';
+  // viewport clamp — the middle-dock anchor holds unless the panel would spill
+  // (tall rack at 768p). Same guard #tooltip gets in syncTip; #inspectUI had none.
+  ui.style.left='';ui.style.top='';                    // re-seat on the CSS anchor, then measure
+  const r=ui.getBoundingClientRect(),M=10;
+  if(r.right>innerWidth-M)   ui.style.left=Math.max(M,innerWidth-M-r.width)+'px';
+  if(r.bottom>innerHeight-M) ui.style.top=Math.max(M,innerHeight-M-r.height)+'px';
 }
 
 // right-click / [F/△] — the analog "use" verb. Owner-approved precedence:
