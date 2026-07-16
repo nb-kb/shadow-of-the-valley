@@ -46,7 +46,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 
 /* ---------- HUD ---------- */
 #hud{position:absolute;top:14px;left:14px;z-index:41;pointer-events:none;padding:10px 12px;min-width:210px;}   /* above the bag chrome (z40): the HP meter stays readable when the centered bag reaches the corner */
-#stashUI{position:absolute;right:4vw;top:12%;z-index:40;text-align:center;pointer-events:none;}   /* THE OTHER CONTAINER: stash/loot crate live OUTSIDE the bag, anchored right — you're reaching into a different box */
+#stashUI{position:absolute;right:4vw;top:12%;z-index:40;text-align:center;pointer-events:none;will-change:transform;}   /* THE OTHER CONTAINER: stash/loot crate live OUTSIDE the bag, anchored right — you're reaching into a different box; will-change = own compositor layer, the per-frame sway never repaints */
 #hud .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0;font-size:14px;letter-spacing:.14em;}
 .meter{width:110px;height:7px;background:#000;border:1px solid var(--line);overflow:hidden;}
 .meter>div{height:100%;width:100%;transition:width .15s linear;}
@@ -108,7 +108,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- THE OPEN RUCKSACK — the whole kit menu sits inside the bag (owner sketch).
      Pure CSS canvas: flap folded up/back over the mouth · trapezoid gusset flare · olive body ·
      dark lining that the interior panels sit in. Decoration wraps the layout; it never repositions it. */
-#backpackUI{position:absolute;left:max(5vw,268px);top:11%;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves. 268px floor keeps the bag chrome clear of the HP HUD at its WIDEST row (BLEED tick showing); base transform stays none, small viewports scale from origin 0 0 below */
+#backpackUI{position:absolute;left:max(5vw,268px);top:11%;z-index:40;will-change:transform;   /* FIXED anchor — the kit grows right/down, the RIG never moves. 268px floor keeps the bag chrome clear of the HP HUD at its WIDEST row (BLEED tick showing); base transform stays none, small viewports scale from origin 0 0 below. will-change = own layer: the sway/duck ride the compositor, no per-frame repaint (the menu lag fix) */
   text-align:center;pointer-events:none;}
 #backpackUI:not(.hidden){animation:bagOpen .18s ease-out;}
 @keyframes bagOpen{from{opacity:0;}to{opacity:1;}}
@@ -249,7 +249,7 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
 #rackInspect .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;font-size:14px;}
 #rackInspect .tt-cat{color:var(--dust);font-size:12px;margin-bottom:8px;}
 #rackInspect .tt-body{font-size:13px;line-height:1.6;color:var(--bone);}
-#toolUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);z-index:40;
+#toolUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);z-index:40;will-change:transform;
   text-align:center;pointer-events:none;}
 .gridWrap{position:relative;display:grid;gap:3px;padding:6px;margin:12px auto 0;width:max-content;   /* gap+padding are the GRID_PAD/CELL_PITCH law — never touch */
   pointer-events:auto;background:rgba(4,5,2,.24);border:1px solid rgba(20,16,8,.55);border-radius:7px;
@@ -896,7 +896,8 @@ uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uWallPush;    // 0..1 wall-ahead factor — the gun collides: stock back, muzzle up (no carve)
 uniform vec2  uMenuLook;    // .x = the DUCK 0..1 (smoothstepped) — activity with the kit open tucks the props small toward bottom-center
-uniform float uBagH;        // the worn pack's Y-scale (rows-driven) — the bag model physically UPGRADES with capacity
+uniform float uBagH;        // the worn pack's Y-scale (rows-driven, half-rate, caps at 2x base) — the bag model physically UPGRADES with capacity
+uniform float uBagW;        // the worn pack's X-scale (columns-driven)
 uniform float uHasTool;
 uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w melee whip phase 0→1
 uniform float uExposure;    // 0..1 player light exposure — dims the viewmodel in cover
@@ -1617,13 +1618,13 @@ vec2 map(vec3 p){
     vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
     if(uMenu>0.001 && uMenuMode==1){   // the raised BAG (bag/crate/stash views) — mode 0 on close keeps the ease for the worn tool (bug #7)
       float rise=(1.0-uMenu)*(1.0-uMenu)*0.16;         // ease-out: the prop settles, no lunge
-      float dk=uMenuLook.x;                            // the DUCK: free-looking tucks the bag small toward the bottom, back on release (owner)
-      vec3 bp=vl-vec3(0.0,-0.03-rise-dk*0.14,0.34);    // FORCED PERSPECTIVE: tiny and CLOSE — camera-locked (stable), ducking below the eyeline under the look
+      float dk=uMenuLook.x;                            // the DUCK: activity tucks the bag small toward the bottom, back on settle (owner)
+      vec3 bp=vl-vec3(0.0,(0.105-dk*0.14-rise)-0.135*uBagH*(1.0-0.35*dk),0.34);   // PINNED MOUTH (owner): the seam holds a CONSTANT eyeline and the pack hangs DOWNWARD from it — swapping rucksacks never jumps the UI
       bp=rotX(bp, 0.45);                               // OPENED TO THE PLAYER
       bp=rotY(bp, sin(iTime*0.5)*0.08);                // the shared sway — the UI swings with it
-      bp.y/=uBagH;                                     // taller pack = taller model (owner: watch it physically upgrade)
+      bp.y/=uBagH; bp.x/=uBagW;                        // rows stretch Y, columns breathe X — watch the pack physically upgrade
       float bsc=0.42*(1.0-0.35*dk);                    // the duck shrinks it smoothly
-      float d=sdBackpack(bp/bsc)*bsc*min(1.0,uBagH);   // conservative march under the stretch
+      float d=sdBackpack(bp/bsc)*bsc*min(1.0,min(uBagH,uBagW));   // conservative march under the stretch
       if(d<vmD){ vmD=d; vmM=22.0; }
     }else if(uHasTool>0.5 && uMenuMode!=1){            // the WORN gun — in play AND in the tool menu (owner: same gun, it just MOVES)
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
@@ -2074,7 +2075,7 @@ function setupAttrib(prog){
 const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
-  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uBagH','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uLead','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uBagH','uBagW','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uLead','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
@@ -8406,12 +8407,13 @@ function paintToolStats(){
 }
 let mouseX=0,mouseY=0;
 let tipMouseT=1, tipPadT=0;
+let _uiW=0, _uiVw=0;                         // #backpackUI layout width cache — refreshInvUI dirties it; bagFrame re-measures only then (kills the per-frame reflow)
 function positionTipAtMouse(){
   tooltipEl.style.left=Math.min(window.innerWidth-260,mouseX+16)+'px';
   tooltipEl.style.top=Math.min(window.innerHeight-120,mouseY+14)+'px';
 }
 document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;
-  tipMouseT=performance.now();
+  if(pointerLocked()||Math.abs(e.movementX||0)+Math.abs(e.movementY||0)>1.5) tipMouseT=performance.now();   // unlocked (menus): 1px sensor jitter must NOT steal ownership from the pad — real motion claims it
   if(tooltipEl.style.display==='block') positionTipAtMouse();});
 document.addEventListener('mousedown',()=>{ tipMouseT=performance.now(); });   // clicks claim ownership too (exclusivity)
 function hideTooltip(){ }   // superseded by syncTip's open-state gate
@@ -8763,6 +8765,7 @@ function rackSig(tool){
   return sig.join('|');
 }
 function refreshInvUI(){
+  _uiW=0;                                                 // the DOM is about to change shape — bagFrame re-measures once
   if(isInventoryOpen||isCrateOpen) renderZones();
   if(isToolMenuOpen){
     if(activeTool){
@@ -9224,7 +9227,7 @@ function updatePlayer(dt){
   {
     const _on=menus&&(isInventoryOpen||isCrateOpen||isToolMenuOpen)&&!listeningBind;
     let _act=false;
-    if(_on&&tipMouseT>=tipPadT){                                 // the mouse owns the cells, so its LOOK lives on the screen edge
+    if(_on&&tipMouseT>=tipPadT&&performance.now()-tipMouseT<900){   // the mouse owns the cells, so its LOOK lives on the screen edge — but only while the HAND is alive: a parked cursor stops panning (and can never hijack pad play)
       const B=0.12, ex=mouseX/innerWidth, ey=mouseY/innerHeight;
       let elx=0, ely=0;
       if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;
@@ -9793,22 +9796,21 @@ function bagFrame(){
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  // THE DUCK (owner): the kit is camera-locked (dead stable), and free-looking smoothly SHRINKS,
-  // SQUASHES, and tucks it toward bottom-center, below the eyeline — released, it eases back up.
-  const _sy2=Math.max(0.4,(equip.rucksack?equip.rucksack.invRows:1)/6);   // mirrors uBagH — the mouth line rides the pack's height
+  // THE DUCK (owner) + PINNED MOUTH (owner): the anchor is bag-size INDEPENDENT — the model
+  // hangs DOWNWARD from the pinned seam, so swapping rucksacks never jumps the rig/pockets.
+  // Only the duck and the open-settle move it.
   const dk=_dks, _bsc=1-0.35*dk;                                     // mirrors the model's duck-shrink exactly
-  const _vy=(-0.03-0.14*dk+0.135*_sy2*_bsc)-rise;                    // the mouth line follows the ducked, shrunken model down
+  const _vy=(0.105-0.14*dk)-rise;                                    // the pinned mouth line
   const px=innerWidth/2;
-  const py=H/2-((_vy/0.276)/fovU)*H + H*0.045;
+  const py=Math.max(8,H/2-((_vy/0.276)/fovU)*H + H*0.045);
   const sc=((innerWidth<=1100||innerHeight<=880)?0.86:1)*_bsc;
   const scy=sc*(1-0.10*dk);                                          // the squash — a touch flatter as it tucks away
   const rot=Math.sin(gameTime*0.5)*1.4*(1-dk);                       // the sway calms while ducked
-  ui.style.left=px.toFixed(1)+'px';
-  ui.style.top=Math.max(8,py).toFixed(1)+'px';
-  ui.style.transformOrigin='50% 0';                                  // scale + sway hang from the pinned top edge — the mouth seam never drifts
-  ui.style.transform='translate(-50%,0) scale('+sc.toFixed(3)+','+scy.toFixed(3)+') rotate('+rot.toFixed(2)+'deg)';
-  const r=ui.getBoundingClientRect();                                // the OUTSIDE box rides flush with the bag: top edges level, hugging the bag's right
-  if(su&&showBag){ su.style.left=(r.right+34).toFixed(1)+'px'; su.style.top=Math.max(8,r.top).toFixed(1)+'px'; su.style.right='auto'; }
+  if(ui.style.left!=='0px'){ ui.style.left='0px'; ui.style.top='0px'; ui.style.transformOrigin='50% 0'; }   // position rides the TRANSFORM — zero per-frame layout writes (the menu lag fix)
+  ui.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px) translate(-50%,0) scale('+sc.toFixed(3)+','+scy.toFixed(3)+') rotate('+rot.toFixed(2)+'deg)';
+  if(su){ if(_uiW<=0||_uiVw!==innerWidth){ _uiW=ui.offsetWidth||1; _uiVw=innerWidth; }   // measured ONLY when the DOM (refreshInvUI) or the viewport changed — no per-frame getBoundingClientRect reflow
+    if(su.style.left!=='0px'){ su.style.left='0px'; su.style.top='0px'; su.style.right='auto'; }
+    su.style.transform='translate('+(px+_uiW*sc/2+34).toFixed(1)+'px,'+py.toFixed(1)+'px)'; }   // flush with the bag's right, top edges level
 }
 
 const FRAME_MS=1000/60;
@@ -9936,7 +9938,8 @@ function frame(){
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
-  gl.uniform1f(U.uBagH,Math.max(0.4,(equip.rucksack?equip.rucksack.invRows:1)/6));   // 1:1 with the rows (owner) — Day 3→0.50 · Patrol 5→0.83 · Field 6→1.0 · bagless→0.4
+  gl.uniform1f(U.uBagH,Math.min(1,0.5+((equip.rucksack?equip.rucksack.invRows:1)-1)*0.1));   // HALF-rate growth, the largest DOUBLES the base (owner) — Day 0.7 · Patrol 0.9 · Field 1.0 · bagless 0.5
+  gl.uniform1f(U.uBagW,Math.max(0.7,1-0.075*(5-(equip.rucksack?equip.rucksack.invCols:1))));  // columns breathe X — Day 0.85 · Patrol 0.925 · Field 1.0 · bagless 0.7
   // rack presentation: menu prop AND the held viewmodel share this data
   let _mzTip=0.34;                                     // the barrel's local tip z — the free-aim PIVOT + the bare dot's anchor (suppressor/column may push it out)
   if(activeTool){
@@ -9955,7 +9958,7 @@ function frame(){
     gl.uniform4fv(U.uCols,_colsBuf);
   }else gl.uniform1i(U.uColCount,0);
   gl.uniform1f(U.uAim,playerPos.aimAmt);
-  gl.uniform3f(U.uBob,playerPos.bobX,playerPos.bobY,playerPos.viewKick*0.09);   // pure sway/bob — the free-aim lead now ROTATES the gun about its muzzle (uLead), it no longer translates it
+  gl.uniform3f(U.uBob,playerPos.bobX+aimYawOff*0.225,playerPos.bobY+aimPitchOff*0.225,playerPos.viewKick*0.09);   // HALF the old translate (0.45) — the other half of the lead is the muzzle-pivot rotation (uLead); the 50/50 blend (owner)
   gl.uniform1f(U.uWallPush,playerPos.wallPush);   // wall-ahead: the gun collides (stock back, muzzle up)
   gl.uniform3f(U.uLightDir,dayNight.lightDir.x,dayNight.lightDir.y,dayNight.lightDir.z);
   gl.uniform3f(U.uLightCol,dayNight.lightCol[0],dayNight.lightCol[1],dayNight.lightCol[2]);
@@ -10009,7 +10012,7 @@ function frame(){
   const magNow=activeTool?toolMagazine(activeTool):null;
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, (resT&&(resT.reticle===3||resT.reticle===4))?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.42):0);   // .y = the hollow scope TUBE, by reticle code; .w = the whip phase (0.42s clock)
   if(resT&&resT.silenced) _mzTip=Math.max(_mzTip,0.45);                                   // the can's tip wins
-  gl.uniform3f(U.uLead,aimYawOff,aimPitchOff,_mzTip);   // MUZZLE-PIVOT (owner): the lead swings the BUTT around the planted tip — zero lead = byte-identical pose
+  gl.uniform3f(U.uLead,aimYawOff*0.5,aimPitchOff*0.5,_mzTip);   // MUZZLE-PIVOT at HALF the lead (owner: 50/50 with the translate) — the butt swings around the tip; zero lead = byte-identical pose
   _expVis+=(playerPos.exposure-_expVis)*Math.min(1,dt*10);   // smooth the 0.12s exposure steps for the viewmodel dim only
   gl.uniform1f(U.uExposure, _expVis);
 
@@ -10128,10 +10131,10 @@ function frame(){
     if(fa){ if(_faShow){
       const H=canvas.clientHeight||innerHeight;        // marker math inverts the ray build (uv*=fov, /iResolution.y)
       let px,py;
-      if(_faRetR===0){                                 // BARE (owner): the dot rides the MUZZLE TIP itself — the pivot holds it planted, diegetic
-        const _tz=0.46+_mzTip-playerPos.viewKick*0.09; // tip view-space: seat(0,-0.09,0.46)+barrel(0,0.075,_mzTip)+bob
-        px=((playerPos.bobX/_tz)/playerPos.currentFov)*H;
-        py=(-((playerPos.bobY-0.015)/_tz)/playerPos.currentFov)*H;
+      if(_faRetR===0){                                 // BARE (owner): the dot rides the MUZZLE TIP itself — diegetic; the 50/50 blend slides it at half the old translate
+        const _tz=0.46+_mzTip-playerPos.viewKick*0.09; // tip view-space: seat(0,-0.09,0.46)+barrel(0,0.075,_mzTip)+bob+half-translate
+        px=(((playerPos.bobX+aimYawOff*0.225)/_tz)/playerPos.currentFov)*H;
+        py=(-((playerPos.bobY-0.015+aimPitchOff*0.225)/_tz)/playerPos.currentFov)*H;
       }else{                                           // IRON: the post keeps darting with the lead — the aim's truth
         px=(aimYawOff*Math.cos(cameraPitch+aimPitchOff)/playerPos.currentFov)*H;
         py=(-aimPitchOff/playerPos.currentFov)*H;
