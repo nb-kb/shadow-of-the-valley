@@ -4434,6 +4434,10 @@ function activateAtCursor(){
   playSound('click');
 }
 function closeInspect(){ menuInspect(null); playSound('click'); }
+// BARE sub-inventories (owner): tiny seats — mags, helmet slots, holsters — are JUST their labeled
+// slots, docked beside the parent item. One predicate, shared by render + nav.
+function bareInspect(it){ return it instanceof Magazine || (!!it && !!it.inv && !it.settingsDevice && !(it instanceof Tool) && (it.invCols*it.invRows)<=3); }
+let _inspAnchor=null, _inspEl=null, _inspW=0, _inspH=0;   // the parent's span + cached panel size — bagFrame re-glues the slots to it every frame (sway-tight)
 function renderInspect(){
   const ui=document.getElementById('inspectUI');
   // menus open — or the carried item's own pockets, drawn over the world (△ tap)
@@ -4442,8 +4446,7 @@ function renderInspect(){
   if(window.__renameStale) window.__renameStale();          // if inspectItem changed while an editor was open, close it
   if(!inspectItem || !(uiMenusOpen()||carriedOpen)){ ui.classList.add('hidden'); rnBtn.classList.add('hidden'); rnInp.classList.add('hidden'); return; }
   ui.classList.remove('hidden');
-  // BARE mode (owner): tiny seats — mags, helmet slots, holsters — are JUST their labeled slots; a panel around 1-3 cells is noise
-  const _bare=inspectItem instanceof Magazine || (!!inspectItem.inv && !inspectItem.settingsDevice && !(inspectItem instanceof Tool) && (inspectItem.invCols*inspectItem.invRows)<=3);
+  const _bare=bareInspect(inspectItem);   // tiny seats: just the labeled slots, no panel noise (owner)
   ui.classList.toggle('bare',_bare);
   document.getElementById('inspectTitle').textContent=dispName(inspectItem).toUpperCase()+' — POCKETS';
   // rename control shows for Tools and any real container (not settings devices); input stays put — never rebuilt, or focus is lost
@@ -4464,10 +4467,15 @@ function renderInspect(){
     const _gh=(inspectItem instanceof Armor&&inspectItem.armorType==='helmet')?(inspectItem.mask?['FILT','FILT','PHON']:['PHON']):null;   // labeled helmet seats (owner)
     renderGrid('inspectPockets', inspectItem.inv, inspectItem.invCols, inspectItem.invRows, 2, _gh);
   }else body.innerHTML='';
-  // viewport clamp — the middle-dock anchor holds unless the panel would spill
-  // (tall rack at 768p). Same guard #tooltip gets in syncTip; #inspectUI had none.
-  ui.style.left='';ui.style.top='';                    // re-seat on the CSS anchor, then measure
+  // BARE panels dock BESIDE their parent item (owner) — mags/helmets that live in a visible grid;
+  // items whose sub-inventory already opens IN the bag (belt, holsters as zones) never route here.
+  _inspAnchor=_bare?document.querySelector('.itemSpan[data-iid="'+inspectItem.id+'"]'):null;
+  if(_inspAnchor){ const r2=_inspAnchor.getBoundingClientRect();
+    ui.style.left=(r2.right+10)+'px'; ui.style.top=(r2.top-6)+'px'; }
+  else { ui.style.left=''; ui.style.top=''; }          // re-seat on the CSS anchor, then measure
+  // viewport clamp — the anchor holds unless the panel would spill (tall rack at 768p)
   const r=ui.getBoundingClientRect(),M=10;
+  _inspW=r.width; _inspH=r.height;                     // cached for the per-frame glue — no reflow reads in the loop
   if(r.right>innerWidth-M)   ui.style.left=Math.max(M,innerWidth-M-r.width)+'px';
   if(r.bottom>innerHeight-M) ui.style.top=Math.max(M,innerHeight-M-r.height)+'px';
 }
@@ -8469,6 +8477,11 @@ document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;
   if(pointerLocked()||Math.abs(e.movementX||0)+Math.abs(e.movementY||0)>1.5) tipMouseT=performance.now();   // unlocked (menus): 1px sensor jitter must NOT steal ownership from the pad — real motion claims it
   if(tooltipEl.style.display==='block') positionTipAtMouse();});
 document.addEventListener('mousedown',()=>{ tipMouseT=performance.now(); });   // clicks claim ownership too (exclusivity)
+document.addEventListener('mousedown',e=>{                                     // clicking OFF the menus closes an open sub-inventory (owner)
+  if(!inspectItem||!uiMenusOpen()||listeningBind||isDebugOpen) return;
+  const t=e.target;
+  if(t&&t.closest&&t.closest('#inspectUI,#backpackUI,#stashUI,#toolUI,#tipPanel')) return;
+  closeInspect(); });
 function hideTooltip(){ }   // superseded by syncTip's open-state gate
 
 // ---- item thumbnails: little canvas paintings, cached by kind ----
@@ -8866,7 +8879,7 @@ function renderZones(){
         if(!z.slotMode && (item.x!==c||item.y!==r)) continue;
         seen.add(item);
         const span=document.createElement('div');
-        span.className='itemSpan';
+        span.className='itemSpan'; span.dataset.iid=item.id;   // the bare sub-inventory docks by this anchor
         const sw=z.slotMode?1:item.w, sh=z.slotMode?1:item.h;
         span.style.left=(GRID_PAD+c*CELL_PITCH)+'px';
         span.style.top =(GRID_PAD+r*CELL_PITCH)+'px';
@@ -8885,7 +8898,7 @@ function renderZones(){
     if(z.equipCol){
       for(let r=0;r<=EQUIP_SLOTS.length;r++){
         const it=r===EQUIP_SLOTS.length?wornPlates():equip[EQUIP_SLOTS[r]]; if(!it) continue;   // the proxy cell shows the seated plates
-        const span=document.createElement('div'); span.className='itemSpan';
+        const span=document.createElement('div'); span.className='itemSpan'; span.dataset.iid=it.id;
         span.style.left=(GRID_PAD+r*(CELL_PITCH+11))+'px'; span.style.top=GRID_PAD+'px';   // transposed with the strip: the slot index walks X at the SPACED pitch (44px cell + 14px columnGap)
         span.style.width=(CELL_PITCH-3)+'px'; span.style.height=(CELL_PITCH-3)+'px';
         const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false;
@@ -8959,7 +8972,7 @@ function renderGrid(containerId,grid,cols,rows,focusIdx,ghosts){
     const item=grid[r][c];
     if(!item||item.x!==c||item.y!==r) continue;
     const span=document.createElement('div');
-    span.className='itemSpan';
+    span.className='itemSpan'; span.dataset.iid=item.id;
     span.style.left=(GRID_PAD+item.x*CELL_PITCH)+'px';
     span.style.top =(GRID_PAD+item.y*CELL_PITCH)+'px';
     span.style.width =(item.w*CELL_PITCH-3)+'px';
@@ -9976,6 +9989,13 @@ function menuNav(){
       cursorX=nv[2]; cursorY=nv[3]; moved=true; return true;
     };
     const step=(dx,dy)=>{
+      // BARE sub-inventories exit on nav (owner): walk the little strip while there's room —
+      // any edge or vertical press CLOSES it and the focus falls home to the parent slot
+      if(currentFocus===2 && inspectItem && bareInspect(inspectItem)){
+        const nx2=cursorX+dx;
+        if(!dy && nx2>=0 && nx2<f.cols){ cursorX=nx2; moved=true; return; }
+        closeInspect(); moved=true; return;
+      }
       // the RIG draws as a HORIZONTAL strip (diegetic bag): sideways input walks the slot
       // index; vertical input LEAVES the strip via the spatial hop (down = into the columns)
       if(f.equipCol){
@@ -10041,6 +10061,11 @@ function bagFrame(){
   const _dks=_mlDuck*_mlDuck*(3-2*_mlDuck);                          // smoothstepped duck — soft at BOTH ends (owner: smoother), shared by every consumer
   if(_mlDuck>0.12&&!_tipDucked){ _tipDucked=true; tooltipEl.style.display='none'; }        // tooltips vanish while ducking (owner)...
   else if(_mlDuck<=0.12&&_tipDucked){ _tipDucked=false; if(uiMenusOpen()) syncTip(); }     // ...and return as the kit settles
+  if(_inspAnchor&&inspectItem&&_inspAnchor.isConnected){                                   // the BARE sub-inventory stays GLUED to its parent through the sway/duck
+    const _ie=_inspEl||(_inspEl=document.getElementById('inspectUI'));
+    if(_ie&&!_ie.classList.contains('hidden')){ const r2=_inspAnchor.getBoundingClientRect();
+      _ie.style.left=Math.max(8,Math.min(innerWidth-10-_inspW,r2.right+10)).toFixed(1)+'px';
+      _ie.style.top =Math.max(8,Math.min(innerHeight-10-_inspH,r2.top-6)).toFixed(1)+'px'; } }
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
     if(showTool){ const _swx=Math.sin(gameTime*0.41)*10, _swy=Math.sin(gameTime*0.27)*8;             // the rack UI SWAYS with its gun — mirrors the model's inspection drift + layered turns (owner)
       const _swr=Math.sin(gameTime*0.5)*1.6+Math.sin(gameTime*0.23)*0.8;
