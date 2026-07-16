@@ -200,6 +200,7 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
 .bagSettings .zoneBlock{margin-bottom:0;}
 .bagSettings .gridWrap,.bagSettings .zoneStub{margin:0;}
 .bagSettings .zoneStub{min-width:104px;height:22px;align-self:center;}
+.hbRow{display:flex;gap:12px;align-items:flex-start;}          /* holster+belt share one flush row in the left group */
 .equipCell{position:relative;}
 .slotGhost{font-size:11px;letter-spacing:.1em;color:#5a5644;}
 .lockedCell{border-style:solid;border-color:rgba(0,0,0,.5);   /* settings dials: flat plates, not fabric recesses — stay dimmed and distinct */
@@ -1490,6 +1491,16 @@ vec2 map(vec3 p){
   gBound=1e9;
 #ifndef PREVIEW
   vec3 fwd=normalize(rd);
+  // VIEWMODEL PRIORITY (owner): the STATIC world yields inside the viewmodel's pocket — one cheap
+  // capsule carve along the view axis, so the raised bag prop + first-person tool always draw in
+  // front (their bodies fill the hole; a hugged wall shows a thin cut collar at worst). Applied
+  // BEFORE any dynamic unions: enemies/items/tracers are never carved. ~8 ALU, branch-gated.
+  { vec3 _vpp=p-ro;
+    if((uHasTool>0.5||uMenu>0.001)&&dot(_vpp,_vpp)<3.5){
+      vec3 _vl=vec3(dot(_vpp,uRight),dot(_vpp,uUp),dot(_vpp,fwd));
+      float _pz=(uMenu>0.001)?1.05:0.60, _pr=(uMenu>0.001)?0.52:0.24;
+      res.x=max(res.x, -sdCapsule(_vl, vec3(0.0,-0.12,0.06), vec3(0.0,-0.02,_pz), _pr));
+    } }
 
   for(int i=0;i<${RLIM.ITEMS};i++){
     if(i>=worldItemCount) break;
@@ -1607,9 +1618,9 @@ vec2 map(vec3 p){
     if(uMenu>0.001 && uMenuMode!=0){   // mode 0 (closed/crate) raises NO prop — the ease-out belongs to the worn tool (bug #7)
       float rise=(1.0-uMenu)*(1.0-uMenu)*0.45;   // ease-out: the prop settles, no lunge
       if(uMenuMode==1){
-        vec3 bp=vl-vec3(0.0,-0.08-rise,0.95);          // seated a touch lower + deeper so the tilted mouth crests the UI top (bagFrame mirrors these numbers)
+        vec3 bp=vl-vec3(0.0,-0.02-rise,0.95);          // seated HIGHER (owner) + deep so the tilted mouth crests the UI top (bagFrame mirrors these numbers)
         bp=rotX(bp, 0.45);                             // OPENED TO THE PLAYER: the bag tips its mouth toward the camera (~26°)
-        bp=rotY(bp, sin(iTime*0.5)*0.025);             // sway calmed to a whisper — the UI is STATIC now, the model must not detach from it
+        bp=rotY(bp, sin(iTime*0.5)*0.08);              // the full sway is back — the UI swings WITH it (owner: together is nice; it was slot REFLOW that hurt)
         float d=sdBackpack(bp);
         if(d<res.x) res=vec2(d,22.0);
       }else{
@@ -3566,13 +3577,13 @@ const ITEM_DEFS={
   // 1 (2 shots end you), HEAVY/tier-2 eats 2 (3 end you), a bare head dies to ONE. Symmetric law:
   // crackHelm spends the enemy's, damagePlayer's head channel spends yours; dur stays body-wear.
   // The Rig reads heavy (cores-tier find, reduce beside the Pot) — owner may re-tier it light.
-  helmetCap:  ()=>new Armor('Padded Cap',2,1,'#6b5a3e','helmet',{reduce:0.94,dur:10,hs:1}),
-  helmetSteel:()=>new Armor('Steel Pot',2,1,'#61646a','helmet',{reduce:0.88,dur:18,hs:2}),
-  helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14,hs:2}),
+  helmetCap:  ()=>new Armor('Padded Cap',2,1,'#6b5a3e','helmet',{reduce:0.94,dur:10,hs:1,invCols:1,invRows:1}),   // every helmet carries ONE seat: the HEADPHONES ride the head, not the rig (owner)
+  helmetSteel:()=>new Armor('Steel Pot',2,1,'#61646a','helmet',{reduce:0.88,dur:18,hs:2,invCols:1,invRows:1}),
+  helmetRig:  ()=>new Armor('Rig Helmet',2,1,'#585f52','helmet',{reduce:0.90,medPort:true,dur:14,hs:2,invCols:1,invRows:1}),
   goggles:    ()=>{ const a=new Armor('Goggles',2,1,'#3a4a52','goggles',{settingsDevice:true}); buildDeviceInv(a,'goggles'); return a; },
   headphones: ()=>{ const a=new Armor('Headphones',2,1,'#40384e','headphones',{settingsDevice:true}); buildDeviceInv(a,'headphones'); return a; },
   // ---- gas kit (CONTAINMENT P3): two masks, one cartridge — the PROTECTION lives in LIVE filters (−45% each, −90% cap; radProtection reads the worn seats) ----
-  maskHelm:   ()=>new Armor('Respirator Helm',2,1,'#5f6b4e','helmet',{reduce:0.92,dur:12,hs:1,mask:true,invCols:2,invRows:1}),   // LIGHT/tier-1 head armor + gas: 2 filter seats — max gas safety forgoes the heavy helmet (hs:1 = the light headshot class, as promised)
+  maskHelm:   ()=>new Armor('Respirator Helm',2,1,'#5f6b4e','helmet',{reduce:0.92,dur:12,hs:1,mask:true,invCols:3,invRows:1}),   // LIGHT/tier-1 head armor + gas: 2 filter seats + the phones seat every helmet carries (hs:1 = the light headshot class, as promised)
   maskFace:   ()=>new Armor('Filter Mask',2,1,'#6a7258','face',{mask:true,invCols:1,invRows:1}),   // face-slot respirator: 1 seat, rides UNDER any helmet — max head armor costs a filter seat
   gasFilter:  ()=>{ const it=new Item('Gas Filter',1,1,'#8a8f6a'); it.filter=true; it.lifeMax=600; it.life=600; return it; },   // cartridge: breathes down ONLY in the gas (~1–2 casual runs), then spent
   fuseMod:    ()=>new ToolMod('FUSE','#9f6f2f','mod',{fuse:1.2,surcharge:4},'Next core sticks and blows 1.2s later — then fires the one after it · +4⚡'),
@@ -3744,8 +3755,8 @@ function adjustWidget(wd,dir){
   toast(wd.label+' · '+widgetValueText(wd)+(wd.functional?'':' · not wired'));
   playSound('click');
 }
-const EQUIP_SLOTS=['helmet','face','goggles','headphones','plates','harness','holster','belt','rucksack'];   // 'face' (P3): the respirator rides UNDER the helmet — the goggles-mask never costs head armor, only a filter seat. Additive: saves key equip by slot NAME, old blobs just lack 'face'.
-let equip={helmet:null,face:null,goggles:null,headphones:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
+const EQUIP_SLOTS=['helmet','face','goggles','plates','harness','holster','belt','rucksack'];   // 'face' (P3): the respirator rides UNDER the helmet. 'headphones' RETIRED from the rig (owner): the ears ride IN the helmet's seat now — loadGame re-homes an old save's worn pair.
+let equip={helmet:null,face:null,goggles:null,plates:null,harness:null,holster:null,belt:null,rucksack:null};
 let BAG_COLS=5,BAG_ROWS=6;
 const GUN_COLS=4,GUN_ROWS=4;
 let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
@@ -3790,7 +3801,11 @@ function playerZones(all){
     if(it&&it.inv&&it.invCols>0&&(all||!zoneShut(it)))
       z.push({id:slot,label:dispName(it).toUpperCase(),item:it,grid:it.inv,cols:it.invCols,rows:it.invRows,
               locked:!!it.settingsDevice,storage:!it.settingsDevice,slotMode:!!it.slotMode}); };
-  ['rucksack','harness','holster','belt','goggles','headphones'].forEach(push);
+  ['rucksack','harness','holster','belt','goggles'].forEach(push);
+  const hp=equip.helmet&&equip.helmet.inv?equip.helmet.inv.flat().find(x=>x&&x.armorType==='headphones'):null;   // the ears ride IN the helmet now — the settings zone follows them there
+  if(hp&&hp.inv&&hp.invCols>0&&(all||!zoneShut(hp)))
+    z.push({id:'headphones',label:dispName(hp).toUpperCase(),item:hp,grid:hp.inv,cols:hp.invCols,rows:hp.invRows,
+            locked:true,storage:false,slotMode:false});
   return z;
 }
 function storageZones(){ return playerZones(true).filter(z=>z.storage); }   // logic keeps folded pockets — only the eye loses them
@@ -3910,7 +3925,7 @@ function menuSet(view){
   isToolMenuOpen  = view==='tool';
   isCrateOpen     = view==='crate';
   inspectItem     = Menus.inspect;
-  menuMode        = view==='bag'?1:view==='tool'?2:0;
+  menuMode        = (view==='bag'||view==='crate')?1:view==='tool'?2:0;   // the bag prop rises for LOOT/STASH too (owner) — you're still digging through your kit
   if(view!=='crate') lootCrate=null;                      // leaving the crate ends the crate
   document.getElementById('backpackUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));
   document.getElementById('stashUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));   // the outside box shows with the bag; renderZones re-toggles if it's empty
@@ -3937,8 +3952,8 @@ function closeAllInv(){ menuSet('closed'); lootCrate=null; }
 function openCrate(cr){ lootCrate=cr; menuSet('crate'); zoneIdx=invZones().length-1; cursorX=0; cursorY=0; refreshInvUI(); toast(cr.stash?(cr.label||'THE STASH'):'SUPPLY CRATE'); }   // start on the crate zone (last), your kit sits above it
 function toolMenuVerb(){                                  // ○/Tab — one button, four rooms
   if(isManualOpen) closeManual();                         // circle closes the manual
+  else if(inspectItem) closeInspect();                    // ONE level at a time (owner): a sub-inventory closes BEFORE the room does — stash browsing keeps its floor
   else if(Menus.view==='crate') closeAllInv();            // a crate is a room you simply leave
-  else if(inspectItem) closeInspect();                    // then any open sub-inventory
   else if(isInventoryOpen) openToolMenu();                // circle: rucksack -> tool rack (by design)
   else if(isToolMenuOpen) closeAllInv();                  // tool rack -> back to the valley
   else openToolMenu();
@@ -4022,6 +4037,7 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 // Shift+LMB quick-moves, Shift+RMB / LT+□ splits stacks, hover names everything.
 // ============================================================
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
+let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a sub-inventory cell = quick-swap it out)
 function stackInto(it,grid){                       // pour a held pile onto same-caliber stacks in a grid (banking merges before it claims a cell)
   for(const row of grid) for(const ch of row){
     if(ch&&ch instanceof Ammunition&&ch.ammoType===it.ammoType&&ch.count<AMMO_STACK){
@@ -4104,8 +4120,9 @@ function interactInventory(){
     const slot=EQUIP_SLOTS[cursorY];
     if(heldWorld){
       const it=heldWorld.w.item;
-      if(!(it instanceof Armor) || it.armorType!==slot){
-        toast(slot.toUpperCase()+' SLOT — '+slot.toUpperCase()+'S ONLY'); playSound('empty'); return;
+      const KIN={face:['face','goggles'],goggles:['goggles','face'],holster:['holster','belt'],belt:['belt','holster']};   // kin slots (owner): face/goggles and holster/belt are ONE category — either seat takes either
+      if(!(it instanceof Armor) || !((KIN[slot]||[slot]).indexOf(it.armorType)>=0)){
+        toast(slot.toUpperCase()+' SLOT — '+(KIN[slot]?KIN[slot].join('/').toUpperCase():slot.toUpperCase())+' ONLY'); playSound('empty'); return;
       }
       const old=equip[slot];
       equip[slot]=it;
@@ -4160,12 +4177,28 @@ function interactInventory(){
       if(it.count<=0) consumeHeld();
       playSound('reload'); refreshInvUI(); return;
     }
-    if(it===inspectItem || (f.rack&&it===f.rack)){ playSound('empty'); return; }   // no nesting a tool in itself
+    if(it===inspectItem || (f.rack&&it===f.rack)){
+      // DOUBLE-TAP □ while PREVIEWING the held bag (owner): the second tap on the same cell
+      // quick-swaps that item OUT to your best home — browse-and-strip without setting the bag down
+      const _pc=currentFocus===2?cellAt(f):null;
+      if(_pc&&it===inspectItem&&_swTap&&runClock-_swTap.t<0.35&&_swTap.x===cursorX&&_swTap.y===cursorY){
+        _swTap=null;
+        const _ox=_pc.x,_oy=_pc.y;
+        removeFromGrid(_pc,f.grid);
+        if(autoPlaceAny(_pc)){ playSound('place'); refreshInvUI(); return; }
+        placeInGrid(_pc,_ox,_oy,f.grid); toast('NO ROOM'); playSound('empty'); return;
+      }
+      _swTap={t:runClock,x:cursorX,y:cursorY};
+      playSound('empty'); return;
+    }   // (no nesting a tool in itself — the dead tap doubles as the swap trigger)
     // Scope Adapter is a SIGHTS-ONLY 2-slot container — its grid takes reticles, nothing else
     if(f.inspectGrid && inspectItem && inspectItem.effect && inspectItem.effect.adapter && !isSight(it)){
       toast('SIGHTS ONLY'); playSound('empty'); return; }
-    // gas masks are FILTER-ONLY containers — their seats take cartridges, nothing else (P3)
-    if(f.inspectGrid && inspectItem && inspectItem.mask && !it.filter){
+    // helmet seats: filters (mask helms) + the HEADPHONES every helmet carries (owner); the face mask stays filters-only (P3)
+    if(f.inspectGrid && inspectItem instanceof Armor && inspectItem.armorType==='helmet'
+       && !((inspectItem.mask&&it.filter) || it.armorType==='headphones')){
+      toast(inspectItem.mask?'SEATS — FILTERS OR HEADPHONES':'A HEADPHONES SEAT'); playSound('empty'); return; }
+    if(f.inspectGrid && inspectItem && inspectItem.mask && inspectItem.armorType!=='helmet' && !it.filter){
       toast('FILTER SEATS — FILTERS ONLY'); playSound('empty'); return; }
 
     if(f.rack){
@@ -8018,6 +8051,7 @@ function loadGame(slot){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
     if(b.equip) for(const k of EQUIP_SLOTS){ if(!b.equip[k]) continue; const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }   // saveGame's own whitelist — a foreign blob key can't invent an equip slot; a null equip reads bare, not a throw
+    if(b.equip&&b.equip.headphones){ const _hp=itemFromJSON(b.equip.headphones); if(_hp) _retuneOrphans.push(_hp); }   // the RETIRED rig slot: an old save's worn phones re-home via the repack flow (seat them in a helmet)
     syncBagAlias(); clampZone();
     if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
     for(const row of stashInv) row.fill(null);            // in place — the crate registry holds this array. v2 reads empty.
@@ -8404,10 +8438,12 @@ function renderZones(){
   const stashHost=document.getElementById('stashUI');       // the OTHER container: stash/crate render OUTSIDE the bag, right-anchored (owner: "so it translates where we're interacting from")
   stashHost.innerHTML=''; stashHost.appendChild(colR);
   stashHost.classList.toggle('hidden', document.getElementById('backpackUI').classList.contains('hidden'));
-  const LEFT_DOCK=['belt','holster'], SET_DOCK=['goggles','headphones'], MID_DOCK=['rucksack','harness'];
+  const LEFT_DOCK=['harness','holster','belt'], SET_DOCK=['goggles','headphones'], MID_DOCK=['rucksack'];   // harness lives LEFT now (owner); rucksack owns the middle
   const dock={};                                       // one dock per armor slot — panel or stub, the order never shuffles
   const pkSlot=document.createElement('div'); colL.appendChild(pkSlot);   // pockets pin the top of the LEFT group
-  LEFT_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; colL.appendChild(d); });
+  const hbRow=document.createElement('div'); hbRow.className='hbRow';     // holster + belt: ONE category, docked SIDE BY SIDE (flush), never stacked
+  LEFT_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; (id==='harness'?colL:hbRow).appendChild(d); });
+  colL.appendChild(hbRow);
   SET_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; setRow.appendChild(d); });
   MID_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; colM.appendChild(d); });
   const zl=invZones();
@@ -8509,7 +8545,7 @@ function renderZones(){
     (z.equipCol?rig : z.id==='pockets'?pkSlot : (z.id==='stash'||z.id==='crate')?colR : (dock[z.id]||colM)).appendChild(blk);
   });
   // folded containers hold their dock as a slim stub — click = the same open verb as X on the item
-  [...LEFT_DOCK,...SET_DOCK,...MID_DOCK].forEach(id=>{ const it=equip[id];
+  [...LEFT_DOCK,...SET_DOCK,...MID_DOCK].forEach(id=>{ const it=id==='headphones'?(equip.helmet&&equip.helmet.inv?equip.helmet.inv.flat().find(x=>x&&x.armorType==='headphones'):null):equip[id];   // the phones stub resolves from the helmet seat
     if(it&&it.inv&&it.invCols>0&&zoneShut(it)){
       const st=document.createElement('div'); st.className='zoneStub';
       st.innerHTML='<span class="slotGhost">'+id.slice(0,4).toUpperCase()+'</span>';
@@ -9534,7 +9570,7 @@ let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
 const _liveEn=[];                            // reused live-enemy sort buffer (dormancy ranking) — no per-frame filter/sort alloc
 let _faEl=null;                              // #freeAim, same idiom (P7)
-let _bagEl=null;                             // #backpackUI, same idiom
+let _bagEl=null, _stashEl=null;              // #backpackUI / #stashUI, same idiom
 // DIEGETIC BAG: the inventory is pinned to the raised backpack prop's MOUTH — the same
 // project-to-screen idiom as the terminal-on-the-slab, but STATIC (owner: swaying slots were
 // unmanageable). Mirrors the shader pose: anchor (0, -0.08-rise, 0.95) tilted rotX 0.45, so the
@@ -9547,12 +9583,18 @@ function bagFrame(){
   const m=clamp(menuAnim,0,1), rise=(1-m)*(1-m)*0.45;
   const fovU=(playerPos.currentFov*(1-0.07*m))||1;                   // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  const py=H/2-(((0.242-rise)/0.798)/fovU)*H + H*0.02;               // the mouth line, +2%H overlap so the crest shows; x offset is 0 → dead-center
+  const py=H/2-(((0.302-rise)/0.798)/fovU)*H + H*0.02;               // the mouth line (anchor -0.02 + local crest 0.322), +2%H overlap; x is 0 → dead-center
   const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
+  const rot=Math.sin(gameTime*0.5)*1.4;                              // swing WITH the model's rotY sway (owner: together is nice) — hung from the pinned mouth seam
   ui.style.left=(innerWidth/2)+'px';
   ui.style.top=Math.max(8,py).toFixed(1)+'px';
-  ui.style.transformOrigin='50% 0';                                  // scale hangs from the pinned top edge — the mouth seam never drifts
-  ui.style.transform='translate(-50%,0) scale('+sc+')';
+  ui.style.transformOrigin='50% 0';                                  // scale + sway hang from the pinned top edge — the mouth seam never drifts
+  ui.style.transform='translate(-50%,0) scale('+sc+') rotate('+rot.toFixed(2)+'deg)';
+  const su=_stashEl||(_stashEl=document.getElementById('stashUI'));  // the OUTSIDE box rides flush with the bag: top edges level, left edge hugging the bag's right
+  if(su&&!su.classList.contains('hidden')){
+    const r=ui.getBoundingClientRect();
+    su.style.left=(r.right+14).toFixed(1)+'px'; su.style.top=Math.max(8,r.top).toFixed(1)+'px'; su.style.right='auto';
+  }
 }
 
 const FRAME_MS=1000/60;
