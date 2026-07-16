@@ -107,7 +107,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- THE OPEN RUCKSACK — the whole kit menu sits inside the bag (owner sketch).
      Pure CSS canvas: flap folded up/back over the mouth · trapezoid gusset flare · olive body ·
      dark lining that the interior panels sit in. Decoration wraps the layout; it never repositions it. */
-#backpackUI{position:absolute;left:max(5vw,244px);top:11%;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves. 244px floor keeps the bag chrome clear of the HP HUD (14+210px panel); base transform stays none, short viewports scale from origin 0 0 below */
+#backpackUI{position:absolute;left:max(5vw,268px);top:11%;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves. 268px floor keeps the bag chrome clear of the HP HUD at its WIDEST row (BLEED tick showing); base transform stays none, small viewports scale from origin 0 0 below */
   text-align:center;pointer-events:none;}
 #backpackUI:not(.hidden){animation:bagOpen .18s ease-out;}
 @keyframes bagOpen{from{opacity:0;}to{opacity:1;}}
@@ -151,6 +151,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
     linear-gradient(180deg,#181a0f 0%,#1d1f12 55%,#191a0e 100%);
   box-shadow:inset 0 10px 16px -6px rgba(0,0,0,.8), inset 0 -6px 12px -8px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.6);}
 @media (max-height:920px){ #backpackUI{top:8%;} }   /* short viewports: the anchor rises, then the whole bag scales from it — nothing inside re-flows, nothing scrolls */
+@media (max-width:1100px){ #backpackUI{transform:scale(.86);transform-origin:0 0;} }   /* narrow windows: the whole bag scales so the stash column never clips off the right edge */
+body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacity:0;transition:opacity .15s;}   /* the folded flap owns the top of the screen while the bag is open — the nav strips step aside (they return on close) */
 @media (max-height:880px){ #backpackUI{transform:scale(.86);transform-origin:0 0;} }
 .zoneCol{display:flex;flex-direction:column;align-items:flex-start;}
 .zoneCol .gridWrap{margin:12px 0 0;}                            /* left-aligned in the column — a neighbor folding never re-centers the rest */
@@ -3907,6 +3909,7 @@ function menuSet(view){
   menuMode        = view==='bag'?1:view==='tool'?2:0;
   if(view!=='crate') lootCrate=null;                      // leaving the crate ends the crate
   document.getElementById('backpackUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));
+  document.body.classList.toggle('bagOpen',view==='bag'||view==='crate');   // the folded flap owns the top strip zone — compass/eye/rad step aside while the bag is up
   document.getElementById('toolUI').classList.toggle('hidden',view!=='tool');
   if(view==='closed'){
     document.getElementById('inspectUI').classList.add('hidden');
@@ -9480,6 +9483,14 @@ function menuNav(){
       cursorX=nv[2]; cursorY=nv[3]; moved=true; return true;
     };
     const step=(dx,dy)=>{
+      // the RIG draws as a HORIZONTAL strip (diegetic bag): sideways input walks the slot
+      // index; vertical input LEAVES the strip via the spatial hop (down = into the columns)
+      if(f.equipCol){
+        if(dx){ const nyy=cursorY+dx;
+          if(nyy>=0&&nyy<f.rows){ cursorY=nyy; moved=true; return; }
+          if(spatialHop(dx,0)) return; moved=true; return; }
+        if(spatialHop(0,dy)) return; moved=true; return;
+      }
       // racks draw slot 0 at the BOTTOM: screen-down must move toward the grip (index 0)
       let nx=cursorX+dx, ny=cursorY+(f.rack?-dy:dy);
       if(f.rack && (nx>=0&&nx<f.cols)){
