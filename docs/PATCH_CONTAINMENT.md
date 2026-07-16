@@ -203,8 +203,9 @@ ones are cited in their commits). **FLAG-ONLY calls — no code was changed;
 these wait on the owner:**
 
 - **Ring depth persistence (call 4):** current semantics KEPT — depth is
-  run-state, resets on load; area1 deaths reset it. Persisting it in the blob
-  is save-shape churn and waits for an explicit owner call.
+  run-state, resets on load; a VALLEY death resets it to 1, an area-1 death
+  keeps it (onDeath only resets when there's no authored level). Persisting it
+  in the blob is save-shape churn and waits for an explicit owner call.
 - **Brute roam (call 10):** current mid-map waypoint roam KEPT. The flagged
   alternative if it reads samey in the playtest (PLAYTEST.md §10): true far
   treks via far-anchor bias + trip-scaled waypoint hold.

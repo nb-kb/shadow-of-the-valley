@@ -412,7 +412,7 @@ window.addEventListener('error', e=>{
   b.style.display='block';
   b.textContent='ENGINE FAULT ['+(typeof BUILD_TAG==='string'?BUILD_TAG:'?')+']: '+e.message+' @ '+(e.filename||'')+':'+(e.lineno||'');
 });
-const BUILD_TAG='beta 1.1.1';   // bumped each shipped build — shown in fault banners
+const BUILD_TAG='beta 1.2.0-wip1';   // bumped each shipped build — shown in fault banners (wip = the containment wave, strip for release)
 function fatal(msg){
   const b=document.getElementById('errBanner');
   b.style.display='block'; b.textContent='ENGINE FAULT ['+BUILD_TAG+']: '+msg;
@@ -4744,7 +4744,9 @@ function describeSequence(res){
   return res.columns.map((lane,ci)=>{
     const name=lane.mountIdx===0?'BASE':'M'+lane.mountIdx;
     if(lane.emptyMount) return '<span style="color:var(--dust)">'+name+': free mount</span>';
-    if(!lane.seq.length&&!lane.tacLaser) return '<span style="color:var(--dust)">'+name+': —</span>';
+    if(!lane.seq.length&&!lane.tacLaser) return lane.shots&&lane.shots.length
+      ? '<span style="color:var(--dust)">'+name+': BOLT ⚡0·1rd</span>'                      // mag-only lane: fires the implicit plain bolt — not inert
+      : '<span style="color:var(--dust)">'+name+': —</span>';
     let shotIdx=0;
     const chips=lane.seq.map(m=>{
       if(m.cat==='proj'){
@@ -5016,7 +5018,7 @@ function tryFirePlayer(dt){
       if(sh.pend.laser&&!bl&&!sh.powder) continue;       // continuous shots belong to the held-fire path — powder pulls, hitscan
       if(bl&&_laserBursts.some(q=>q.lane===lane)) continue;   // volley still walking: the lane holds
       const rds=bl?0:roundsFor(sh);                      // pulses are light, not lead
-      const _ec=_pw?((sh.cost||0)-((sh.pend.surcharge||0)-(sh.pend.surchargeHard||0))):(sh.cost||0);   // C14: a Powder Mag frees the mods' ⚡ — but NEVER surchargeHard (REFUND's own price: "the one no core forgives, POWDER included", MODS.md), mirroring the retired powder-core formula
+      const _ec=Math.max(0,_pw?((sh.cost||0)-((sh.pend.surcharge||0)-(sh.pend.surchargeHard||0))):(sh.cost||0));   // C14: a Powder Mag frees the mods' ⚡ — but NEVER surchargeHard (REFUND's own price: "the one no core forgives, POWDER included", MODS.md); floored at 0 so no future core class can mint charge
       const okCharge=activeTool.charge>=(bl?Math.ceil(_ec/3):_ec);
       const okAmmo=rds===0||(mag&&mag.loaded>=rds);
       if(!okCharge) continue;                            // browned out — expected, silent; siblings may still fire
@@ -5075,7 +5077,7 @@ function tickMelee(dt){
   if(meleeT>=0.3) meleeT=0;
 }
 function meleeStrike(){
-  const o=camPos(), f=camForward();
+  const o=camPos(), f=aimForward();                       // P7: the whip follows the visible marker (degrades to camForward at zero lead)
   let best=null, bd=2.2;
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;
@@ -5227,11 +5229,16 @@ function runContinuousBeams(dt){
   for(let li=0;li<res.columns.length;li++){
     const lane=res.columns[li];
     const n=lane.shots.length; if(!n) continue;
-    const hi=cycleShotIdx(lane,lane.cycleRef.get()%n);  // the cycle skips housed payloads here too — a pull can park cycleRef on one
-    if(hi<0) continue;
-    const sh=lane.shots[hi];
-    if(sh.kind==='bolt'){ const _pm=columnMag(activeTool,lane.mountIdx,true); sh.powder=!!(_pm&&_pm.powder); }   // C13: keep the powder flag consistent with the pull path each frame
-    if(!sh.pend.laser||sh.powder) continue;           // POWDER never threads — it pulses on the PULL path
+    // walk from the cycle head to the lane's first LIVE LASER shot — the head alone lied: the
+    // implicit two-pool bolt fires LAST, so cycleRef wraps to 0 every pull and a lane shaped
+    // [non-laser core, …, BEAM→core] parked its thread forever. One thread per lane still holds.
+    let sh=null; const cyc0=lane.cycleRef.get()%n;
+    for(let k=0;k<n;k++){ const cand=lane.shots[(cyc0+k)%n];
+      if(cand.housed) continue;                       // housed payloads never thread — they fire from their carrier's impact
+      if(cand.kind==='bolt'){ const _pm=columnMag(activeTool,lane.mountIdx,true,!!lane.hasMag); cand.powder=!!(_pm&&_pm.powder); }   // C13: powder flag stays consistent with the pull path (own-mag law included)
+      if(cand.pend.laser&&!cand.powder){ sh=cand; break; }   // POWDER never threads — it pulses on the PULL path
+    }
+    if(!sh) continue;
     if(burstLaser(res,sh)) continue;                  // burst cam owns that lane: pulses, not a thread
     const rate=(2+(sh.cost||0)*0.55);                 // ⚡ per second, cheaper than pulls
     if(activeTool.charge<rate*dt){ if(_swing&&_swing.li===li)_swing=null; continue; }   // a guttering grip lane drops its rope
@@ -5456,7 +5463,7 @@ function runContinuousBeams(dt){
         st.dAcc=(st.dAcc||0)+dt;
         if(st.dAcc>0.5){
           const pay=roundsFor(sh.relayNext);
-          const mag=pay>0?columnMag(activeTool,lane.mountIdx,true):null;
+          const mag=pay>0?columnMag(activeTool,lane.mountIdx,true,!!lane.hasMag):null;   // own-mag law: a wing with its own (empty) mag dry-clicks, never siphons base
           if(pay>0&&(!mag||mag.loaded<pay)){ /* drum holds with a full head — fires the beat the moment lead arrives; the thread keeps flowing */ }
           else{
             if(pay>0) mag.loaded-=pay;
@@ -6016,7 +6023,7 @@ function castRelay(pr,term,cx,cy,cz){
       const c=Math.ceil(chainCost(sh)/3);                // the law: extras draw ceil(CHAIN ⚡/3) — sh.cost alone is link-local (fold sits on the root), a 0-cost housed POWDER was casting its 26⚡ BOOM sub-chain free
       if(!tl||tl.charge<c) return;
       const rds=roundsFor(sh);
-      if(rds>0){ const mag=sh.lane?columnMag(tl,sh.lane.mountIdx,true):null; if(!mag||mag.loaded<rds) return; mag.loaded-=rds; }
+      if(rds>0){ const mag=sh.lane?columnMag(tl,sh.lane.mountIdx,true,!!sh.lane.hasMag):null; if(!mag||mag.loaded<rds) return; mag.loaded-=rds; }   // own-mag law here too
       spendCharge(tl,c);
     }else if((pr._exCasts=(pr._exCasts||0)+1)>3) return;
   }
@@ -6129,7 +6136,9 @@ function armorWear(slot){
   equip[slot]=null;
   if(a.inv){ const seen=new Set();                        // a broken container SPILLS its cargo at your feet — seated filters survive the mask (P3)
     for(let r=0;r<a.invRows;r++) for(let c=0;c<a.invCols;c++){ const ch=a.inv[r][c];
-      if(ch&&!ch.widget&&!seen.has(ch)){ seen.add(ch); spawnWorldItem(ch,playerPos.x,playerPos.y+1.0,playerPos.z,new Vec3((runRng()-0.5)*2,2.5,(runRng()-0.5)*2)); } } }
+      if(ch&&!ch.widget&&!seen.has(ch)){ seen.add(ch); spawnWorldItem(ch,playerPos.x,playerPos.y+1.0,playerPos.z,new Vec3((runRng()-0.5)*2,2.5,(runRng()-0.5)*2)); } }
+    for(let r=0;r<a.invRows;r++) for(let c=0;c<a.invCols;c++){ const ch=a.inv[r][c]; if(ch&&!ch.widget) a.inv[r][c]=null; }   // dead armor's grid lets go — its open panel must not offer twins of the spilled cargo
+    if(inspectItem===a) menuInspect(null); }
   syncBagAlias(); clampZone();
   toast(a.name.toUpperCase()+' BROKE'); playSound('empty'); refreshInvUI();
 }
@@ -6251,6 +6260,7 @@ function tryReload(){
     if(src&&slot){
       if(src.z.slotMode) src.z.grid[src.y][src.x]=null; else removeFromGrid(src.mag,src.z.grid);
       writeRef(slot.ref,src.mag);
+      activeTool._res=resolveTool(activeTool);   // menus-closed rack: rebuild NOW or the two-pool implicit bolt stays missing until the rack menu opens
       playSound('reload'); addNoise(playerPos.x,playerPos.y,playerPos.z,5); refreshInvUI(); return;
     }
     toast(src?'NO MAG SLOT':'NO SPARE MAG'); playSound('empty'); return;
@@ -6426,7 +6436,9 @@ class Zealot{
       if(this._brute){ bruteRespawnT=BRUTE_RESPAWN; this.respawnT=Infinity;   // the lone mini-boss returns on the 15-min session clock — NOT the 45s reinforce (dead-branch never auto-wakes it)
         // P4 — the stash-upgrade source (owner gap #6): the brute chance-drops the NEXT
         // unowned lockbox, epic before legendary. Both owned → back to dropping nothing.
-        const bx=!LOCKBOX.lockE.own ? (runRng()<0.35?'lockboxE':null)
+        const _loose=k=>worldItems.some(w=>w.item&&w.item.defKey===k)||!!findDefOnPlayer(k)||[stashInv,lockEpicInv,lockLegInv].some(g=>g.some(row=>row.some(it=>it&&it.defKey===k)));
+        const bx=(_loose('lockboxE')||_loose('lockboxL')) ? null   // ONE un-installed box in the world at a time — a second copy would be permanently inert dead weight
+               : !LOCKBOX.lockE.own ? (runRng()<0.35?'lockboxE':null)
                : !LOCKBOX.lockL.own ? (runRng()<0.20?'lockboxL':null) : null;
         if(bx) spawnWorldItem(ITEM_DEFS[bx](),this.position.x,this.position.y+0.8,this.position.z,new Vec3((runRng()-0.5)*2.5,3.2,(runRng()-0.5)*2.5));
       }
@@ -6581,7 +6593,7 @@ class Zealot{
           if(tgt.isPlayer&&dist<22) fo++;                      // the player counts among the guns pointed at it
           if(fo>=al+2) sc++;                                   // outnumbered where it stands
           if(ls+1<lz*0.6) sc++;                                // the war map reads lost (live line count, self included)
-          if(sc>=1&&!this.coverPoint&&!(this.coverPoint=this.findCover(tx,tz))) sc++;   // nothing to duck behind — probed only when already shaky (8 rays)
+          if(sc>=1&&!this.coverPoint&&!this.findCover(tx,tz)) sc++;   // nothing to duck behind — probe only (the cover ROLE commits coverPoint on its own cadence; a suppress body must not hold a stale probe)
           if(sc>=2){ this._brk=runRng()<0.6?'flee':'stand'; this._brkT=6+runRng()*3; this.coverPoint=null; }
         }
         if(this._believer){ moveTo=this.investigate; this.tryBoom(dt,dist); }   // a bomber only closes in — no retreat, no bullets
@@ -6704,9 +6716,9 @@ class Zealot{
     // SEES FINE AT NIGHT: plain range + sightline. No dayEye/fog/effVision, no FOV cone — that's the whole design distinction from a soldier.
     const sees = dist<22 && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz));
     // HEARS TOO (owner call 12): noise pings pull a shamble — LURE works on the undead as described. Hearing stays MODEST: the ping's reach is capped at the 22m sense range, so a cross-map boom doesn't drag the whole horde. Live sight below overwrites the goal.
-    for(let i=noisePings.length-1;i>=0;i--){
+    for(let i=noisePings.length-1;i>=0;i--){              // back-to-front = NEWEST ping first — take it and stop (the old walk let the OLDEST overwrite)
       const np=noisePings[i];
-      if(this.position.distanceTo(np.pos)<Math.min(np.r,22)){ this.investigate=np.pos.clone(); if(this.state===0) this.state=1; }
+      if(this.position.distanceTo(np.pos)<Math.min(np.r,22)){ this.investigate=(this.investigate||new Vec3()).set(np.pos.x,np.pos.y,np.pos.z); if(this.state===0) this.state=1; break; }   // reuse the Vec3 — no per-frame alloc
     }
     let speed=P('enemySpeed')*globSlow(this.position,this)*(this._brute?0.55:1.2), moveTo=null, faceTo=null;
     if(sees){
@@ -6859,7 +6871,7 @@ class Zealot{
     else { const a=runRng()*Math.PI*2, r=45+runRng()*15; _rx=playerPos.x+Math.cos(a)*r; _rz=playerPos.z+Math.sin(a)*r; this.startPos=new Vec3(_rx,0,_rz); }
     const _gy=activeLevel ? levelGroundJS(_rx,_rz) : terrainHJS(_rx,_rz);   // valley has NO authored level → procedural terrain height (mirrors the constructor). levelGroundJS reads activeLevel.bounds and would NPE in the valley — that throw was aborting the whole enemy loop (frozen mid-air enemies).
     this.position.set(_rx, restOnSurface(_rx, _gy+2.5, _rz), _rz);
-    if(this._faction==='zombie'){                         // faction persists across respawn — undead come back undead (brute keeps its 300), no gear, no bomber roll
+    if(this._faction==='zombie'){                         // faction persists across respawn — undead come back undead (brute keeps its 800), no gear, no bomber roll
       this._believer=false; this._selfBoom=false;
       this.health=this._brute?800:100;
       this.tool=null; this.helm=this.plates=this.pack=null;
@@ -7340,7 +7352,7 @@ function seedLevelSpawns(L){
   // AREA-1 raid: 2 rotating hot POIs get TIGHT soldier knots; the OTHER POIs + dedicated
   // zombie zones + outskirts get LOOSE undead loops; ONE brute roams. Everything stays in
   // bounds and off THIS deploy's insertion (deployTo set playerPos before us). Budget sits at
-  // RLIM.ENEMIES=16 so nothing is born dormant → the brute always renders/roams. Other levels
+  // RLIM.ENEMIES=20 so nothing is born dormant → the brute always renders/roams. Other levels
   // fall through to the old per-region table (valley/hideout carry no `pois` → generic path).
   if(L.spawn.pois){
     const POI=L.spawn.pois, ZZ=L.spawn.zombieZones||[], bnd=L.bounds;
@@ -7367,7 +7379,7 @@ function seedLevelSpawns(L){
     for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) _hazedPOIs.push(i);
     // (P6 crate rotation is NOT seeded here with the rest of the raid state — _crateRot advanced earlier this same deploy, in buildCrateRegistry: the registry is this function's input)
     const N_SOLD=10, N_ZOMB=9;                           // + 1 brute = 20 (RLIM.ENEMIES) — single-site dials
-    PARAMS.maxEnemies.v=N_SOLD+N_ZOMB+1;                 // the horde REVIVES to its full 16 (reinforce gate reads maxEnemies) instead of thinning to the leftover valley cap
+    PARAMS.maxEnemies.v=N_SOLD+N_ZOMB+1;                 // the horde REVIVES to its full 20 (reinforce gate reads maxEnemies) instead of thinning to the leftover valley cap
     // SOLDIERS — tight knot around ONE cover anchor per hot POI (~7m, minSpace 2: overrides the loose level minSpace)
     const perHot=Math.ceil(N_SOLD/hot.length);
     for(const hi of hot){
@@ -8460,7 +8472,7 @@ function updateToolReadout(){
   const kinds=res.shots.map(s=>{
     const tags=[]; const p=s.pend;
     if(p.silent)tags.push('HUSH'); if(p.dmg)tags.push('HURT'); if(p.twin>1)tags.push('TWIN'); if(p.chaos)tags.push('CHAOS');
-    if(p.refund&&!(s.relayNext&&s.relayNext.housed))tags.push('FREE');   // refund frees this core's base ⚡ when there's no housed chain still to bill (corrected beta 1.1.x — no powder-lane housed-lead waiver)
+    if(p.refund&&!(s.relayNext&&s.relayNext.housed)&&roundsFor(s)===0)tags.push('FREE');   // refund frees this core's base ⚡ when there's no housed chain still to bill — a bolt still pays lead + the hard surcharge, so it never reads FREE
     if(p.bounce)tags.push('RIC'); if(p.pierce)tags.push('DRILL'); if(p.grav)tags.push('MASS'); if(p.vel>1)tags.push('SWIFT');
     return (tags.length?tags.join('·')+' ':'')+(s.housed?'⌂':'')+s.kind.toUpperCase();
   }).join(' / ');
@@ -8935,7 +8947,9 @@ function updatePlayer(dt){
     // small idle displacement is creep, not a wall — a planted stance ignores it.
     // 0.12 covers the steepest standable slope's push (~0.09 a frame at 45°) so an
     // idle player HOLDS on 28-45° ground instead of skating off (owner call 8);
-    // guarded by !moving, so walk/sprint/slide/hop never pass through here.
+    // NB `moving` is WASD-input, so a no-input slide/hop landing frame DOES enter — harmless:
+    // _ix/_iz are captured AFTER the positional step, so the clamp only ever sees the two
+    // resolveCollision push-outs (resolver creep), never slide/launch flight itself.
     if(_wasGrounded && !moving){
       const _cd=Math.hypot(playerPos.x-_ix, playerPos.z-_iz);
       if(_cd>0 && _cd<0.12){ playerPos.x=_ix; playerPos.z=_iz; }

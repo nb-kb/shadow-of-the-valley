@@ -275,6 +275,18 @@ The sacred chain FIRST, on flat ground:
       feel; whip takedown reads.
 - [ ] Blast parity flavor (the #3 survivor): a point-blank CONTACT/TIMER
       delivery deals direct + splash — confirm it reads as flavor, not error.
+- [ ] BEAM + mag lane shapes (post-rework regression fix): a lane shaped
+      [non-laser core, …, BEAM→core] THREADS its beam (this was dead);
+      [BEAM→core] + mag threads too; the mag emptying dry-clicks the bolt
+      without touching the thread.
+- [ ] R-rack a mag into an empty slot mid-combat (menus closed): plain lead
+      resumes IMMEDIATELY — no rack-menu visit needed.
+- [ ] Wing mags: an emptied WING mag dry-clicks its lane (never siphons the
+      base reserve) — including relay extra-casts and CONTACT drum beats. NOTE
+      (owner call): wing mags have no hot-reload path while a base mag exists —
+      refill via the rack menu; flag if that feels bad mid-fight.
+- [ ] A REFUND bolt shows no FREE tag (it pays lead + the hard surcharge); a
+      mag-only wing lane's tooltip reads "BOLT ⚡0·1rd", not "—".
 
 ## §15. Firefox sanity lap
 
