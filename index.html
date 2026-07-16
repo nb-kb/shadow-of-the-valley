@@ -1608,52 +1608,22 @@ vec2 map(vec3 p){
   vec3 vp=p-ro;
   if(dot(vp,vp)<2.6){
     vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
-    if(uMenu>0.001 && uMenuMode!=0){   // mode 0 (closed/crate) raises NO prop — the ease-out belongs to the worn tool (bug #7)
-      float rise=(1.0-uMenu)*(1.0-uMenu)*0.45;   // ease-out: the prop settles, no lunge
-      if(uMenuMode==1){
-        vec3 bp=vl-vec3(0.0,-0.02-rise,0.95);          // seated HIGHER (owner) + deep so the tilted mouth crests the UI top (bagFrame mirrors these numbers)
-        bp=rotX(bp, 0.45);                             // OPENED TO THE PLAYER: the bag tips its mouth toward the camera (~26°)
-        bp=rotY(bp, sin(iTime*0.5)*0.08);              // the full sway is back — the UI swings WITH it (owner: together is nice; it was slot REFLOW that hurt)
-        float d=sdBackpack(bp);
-        if(d<vmD){ vmD=d; vmM=22.0; }
-      }else{
-        // the rack pose: gun points AWAY and up-screen — muzzles top, grip bottom,
-        // matching the vertical column layout floating over it
-        vec3 tp=vl-vec3(0.0,-0.22-rise,0.82);          // further back — more of the Tool in frame
-        tp=rotY(tp, sin(iTime*0.5)*0.05);              // gentle sway only
-        tp=rotX(tp, 1.05);                             // pitch the barrel up-and-away
-        float d=sdGun(tp/2.7,true)*2.7;                // smaller on screen = whole rack visible
-        // the columns share the body's scale: work in tp/2.7 space, *2.7 back out
-        vec3 cp=tp/2.7;
-        for(int ci=0;ci<8;ci++){
-          if(ci>=uColCount) break;
-          float side=uCols[ci].y*0.085;                          // real column x offset
-          float len=uCols[ci].x*0.055;
-          vec3 a=vec3(side,0.05,0.10), b=vec3(side,0.05,0.10+len);
-          float bd=sdCapsule(cp, a, b, ci==0?0.040:0.030)*2.7;
-          // chain joints: shallow ring notches along the column
-          float joints=uCols[ci].z;
-          if(joints>0.5){
-            float seg=len/(joints+1.0);
-            for(int j=1;j<4;j++){
-              if(float(j)>joints) break;
-              float ring=length(vec2(length(cp.xy-vec2(side,0.05))-(ci==0?0.046:0.036), cp.z-(0.10+seg*float(j))))-0.006;
-              bd=min(bd,ring*2.7);
-            }
-          }
-          if(uCols[ci].w>0.5){                         // fitted muzzle: a collar at the tip
-            float mz=sdCapsule(cp, vec3(side,0.05,0.10+len), vec3(side,0.05,0.13+len), ci==0?0.048:0.038)*2.7;
-            bd=min(bd,mz);
-          }
-          if(bd<d) d=bd;
-        }
-        if(d<vmD){ vmD=d; vmM=20.0; }
-      }
-    }else if(uMenuMode==0 && uHasTool>0.5){
+    if(uMenu>0.001 && uMenuMode==1){   // the raised BAG (bag/crate/stash views) — mode 0 on close keeps the ease for the worn tool (bug #7)
+      float rise=(1.0-uMenu)*(1.0-uMenu)*0.16;         // ease-out: the prop settles, no lunge
+      vec3 bp=vl-vec3(0.0,-0.03-rise,0.34);            // FORCED PERSPECTIVE (owner): tiny and CLOSE — nearer than any wall, it can never lose to the world (bagFrame mirrors these numbers)
+      bp=rotX(bp, 0.45);                               // OPENED TO THE PLAYER
+      bp=rotY(bp, sin(iTime*0.5)*0.08);                // the shared sway — the UI swings with it
+      float d=sdBackpack(bp/0.42)*0.42;                // scaled small — forced perspective does the rest
+      if(d<vmD){ vmD=d; vmM=22.0; }
+    }else if(uHasTool>0.5 && uMenuMode!=1){            // the WORN gun — in play AND in the tool menu (owner: same gun, it just MOVES)
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:(uReticle>=3?0.13:0.0));   // iron/red-dot/holo pull ~0.18 closer at full ADS; the scope pulls 0.13 so its aperture (~0.073 rad) fills the eye
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
-      if(uWallPush>0.001){ vl.z+=uWallPush*0.22; vl.y-=uWallPush*0.06; vl=rotX(vl, 0.8*uWallPush); }   // a wall ahead: the gun COLLIDES — stock back, muzzle up (the carve is retired for the tool)
+      if(uWallPush>0.001 && uMenuMode==0){ vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — pulled well back, muzzle STRAIGHT UP at full press (bullets fly the muzzle too)
+      if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases into a presented pose — closer, centered, a slight live turn — and eases back to rest on close
+        vl-=vec3(-0.16*mm, 0.10*mm, -0.14*mm);
+        vl=rotY(vl, (0.30+sin(iTime*0.5)*0.05)*mm);
+      }
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
       // lengths compressed and clamped so a legendary chain reads long without
@@ -3566,9 +3536,9 @@ const ITEM_DEFS={
   holster1:   ()=>new Armor('Hip Holster',1,2,'#4e4030','holster',{invCols:1,invRows:1,slotMode:true,zoneOpen:true}),
   holster2:   ()=>new Armor('Twin Holster',1,2,'#54432c','holster',{invCols:2,invRows:1,slotMode:true,zoneOpen:true}),
   holster3:   ()=>new Armor('Chest Holster',2,2,'#5a4628','holster',{invCols:3,invRows:1,slotMode:true,zoneOpen:true}),
-  harnessL:   ()=>new Armor('Light Harness',2,2,'#3f4a3a','harness',{invCols:3,invRows:2}),
-  harnessM:   ()=>new Armor('Field Harness',2,2,'#44503c','harness',{invCols:3,invRows:3}),
-  harnessH:   ()=>new Armor('Assault Harness',2,3,'#4a5640','harness',{invCols:4,invRows:4}),
+  harnessL:   ()=>new Armor('Light Harness',2,2,'#3f4a3a','harness',{invCols:3,invRows:3}),   // +a row (owner): PLATES ride IN the harness now — the rig slot is retired
+  harnessM:   ()=>new Armor('Field Harness',2,2,'#44503c','harness',{invCols:3,invRows:4}),
+  harnessH:   ()=>new Armor('Assault Harness',2,3,'#4a5640','harness',{invCols:4,invRows:5}),
   platesL:    ()=>new Armor('Scrap Plates',2,2,'#5c5c60','plates',{damageMult:0.75,dur:20}),
   platesH:    ()=>new Armor('Ceramic Plates',2,2,'#6a6a70','plates',{damageMult:0.6,dur:30}),
   // P5 HEADSHOT TIERS (spec F): hs = headSHOTS the dome eats before it shatters — LIGHT/tier-1 eats
@@ -3753,8 +3723,13 @@ function adjustWidget(wd,dir){
   toast(wd.label+' · '+widgetValueText(wd)+(wd.functional?'':' · not wired'));
   playSound('click');
 }
-const EQUIP_SLOTS=['helmet','face','plates','harness','holster','rucksack'];   // CONSOLIDATED (owner): 'face' seats masks AND goggles; 'holster' seats holsters AND belts; 'headphones' ride IN the helmet's seat. loadGame migrates the retired goggles/belt/headphones slots.
-let equip={helmet:null,face:null,plates:null,harness:null,holster:null,rucksack:null};
+const EQUIP_SLOTS=['helmet','face','harness','holster','rucksack'];   // CONSOLIDATED (owner): 'face' seats masks AND goggles; 'holster' seats holsters AND belts; headphones ride IN the helmet; PLATES ride IN the harness. loadGame migrates every retired slot.
+let equip={helmet:null,face:null,harness:null,holster:null,rucksack:null};
+function wornPlates(){                          // plates WORK worn-in-harness now: the first plates item seated in the worn harness is the live armor
+  const h=equip.harness; if(!h||!h.inv) return null;
+  for(const row of h.inv) for(const it of row) if(it&&it.armorType==='plates') return it;
+  return null;
+}
 let BAG_COLS=5,BAG_ROWS=6;
 const GUN_COLS=4,GUN_ROWS=4;
 let bagGrid=Array(BAG_ROWS).fill(null).map(()=>Array(BAG_COLS).fill(null));
@@ -4040,6 +4015,13 @@ let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a
 const SLOT_KIN={face:['face','goggles'],holster:['holster','belt']};   // consolidated seats (owner): FACE takes masks+goggles, HOLSTER takes holsters+belts — the goggles/belt slots are retired
 function quickEquip(it){                           // □□/Shift+LMB on ARMOR with a free seat: it goes ON, not away (owner)
   if(!(it instanceof Armor)) return false;
+  if(it.armorType==='plates'){                     // plates seat INTO the worn harness
+    const h=equip.harness;
+    if(h&&h.inv&&!wornPlates()&&autoPlace(it,h.inv,h.invCols,h.invRows)){
+      toast('PLATES SEATED'); playSound('place'); return true;
+    }
+    return false;
+  }
   for(const s of EQUIP_SLOTS){
     if((SLOT_KIN[s]||[s]).indexOf(it.armorType)>=0 && !equip[s]){
       equip[s]=it; syncBagAlias(); clampZone();
@@ -4352,6 +4334,7 @@ function activateAtCursor(){
   }
   if(!cell){ if(inspectItem) closeInspect(); return; }
   if(cell===inspectItem){ closeInspect(); return; }
+  if(cell.settingsDevice&&zoneFolds(cell)){ toggleZoneFold(cell); return; }   // X on a settings device ANYWHERE (helmet-seated phones included) toggles its dial zone (owner)
   if(cell instanceof Magazine){ menuInspect(cell); playSound('click'); return; }
   if(cell instanceof Tool){
     menuInspect(cell); playSound('click'); return;
@@ -5293,7 +5276,12 @@ function tryFirePlayer(dt){
   }
   if(!clicked || !activeTool || heldWorld) return;
 
-  const o=camPos(), f=aimForward();                    // P7: the crosshair ray — free-aim lead included
+  const o=camPos(); let f=aimForward();                // P7: the crosshair ray — free-aim lead included
+  if(playerPos.wallPush>0.01){                         // WALL COLLIDE (owner): the muzzle is pitched UP — bullets FLY the muzzle, not the crosshair
+    const _a=clamp(cameraPitch+aimPitchOff+1.5*playerPos.wallPush,-1.55,1.55);
+    const _cy=Math.cos(cameraYaw+aimYawOff), _sy=Math.sin(cameraYaw+aimYawOff), _cp=Math.cos(_a), _sp=Math.sin(_a);
+    f=new Vec3(_sy*_cp,_sp,_cy*_cp);
+  }
   const origin=muzzleWorld();
   // converge: shots leave the muzzle but land where the crosshair looks
   const tAim=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,60);
@@ -5384,7 +5372,13 @@ const WHIP_REACH=3.4;
 function drawWhip(dt){
   const ph=Math.min(1,meleeT/0.3);
   const o=camPos(), fw=aimForward(), b=camBasis();
-  const hx=o.x+b.right.x*0.22+fw.x*0.15, hy=o.y-0.24+fw.y*0.15, hz=o.z+b.right.z*0.22+fw.z*0.15;   // hand origin: low right, matching the GLSL hand arc
+  // the cord GROWS FROM THE HAND (owner): mirror the GLSL hand-arc END exactly —
+  // hd = mix((0.20,-0.24,0.10) → (-0.04,-0.12,0.34), sw) in view space, sw = the same master ease
+  const sw=ph*ph*(3-2*ph);
+  const hlx=0.20-0.24*sw, hly=-0.24+0.12*sw, hlz=0.10+0.24*sw;
+  const hx=o.x+b.right.x*hlx+b.up.x*hly+fw.x*hlz,
+        hy=o.y+b.right.y*hlx+b.up.y*hly+fw.y*hlz,
+        hz=o.z+b.right.z*hlx+b.up.z*hly+fw.z*hlz;
   const ext=Math.sin(Math.min(1,ph/0.45)*Math.PI*0.5);           // fling out fast...
   const rec=ph>0.55?(ph-0.55)/0.45:0;                            // ...then recoil home
   const len=WHIP_REACH*ext*(1-rec*0.85);
@@ -6466,9 +6460,11 @@ function applyStatus(t,pr){
 }
 // ---- a worn piece absorbs a point per hit; at 0 it breaks off the rig for good
 function armorWear(slot){
-  const a=equip[slot]; if(!a||!a.durMax) return;
+  const a=slot==='plates'?wornPlates():equip[slot]; if(!a||!a.durMax) return;   // plates live in the harness now
   if(--a.dur>0) return;
-  equip[slot]=null;
+  if(slot==='plates'){ const h=equip.harness;                                   // broken plates leave their harness seat
+    if(h&&h.inv) for(const row of h.inv) for(let i=0;i<row.length;i++) if(row[i]===a) row[i]=null; }
+  else equip[slot]=null;
   if(a.inv){ const seen=new Set();                        // a broken container SPILLS its cargo at your feet — seated filters survive the mask (P3)
     for(let r=0;r<a.invRows;r++) for(let c=0;c<a.invCols;c++){ const ch=a.inv[r][c];
       if(ch&&!ch.widget&&!seen.has(ch)){ seen.add(ch); spawnWorldItem(ch,playerPos.x,playerPos.y+1.0,playerPos.z,new Vec3((runRng()-0.5)*2,2.5,(runRng()-0.5)*2)); } }
@@ -6481,7 +6477,7 @@ function armorWear(slot){
 // ---- Multiplicative — each piece shaves its rolled share.
 function playerResist(kind){
   let m=1;
-  for(const s of ['plates','helmet']){ const a=equip[s]; if(a&&a.resist) m*=1-(a.resist[kind]||0); }
+  for(const a of [wornPlates(),equip.helmet]){ if(a&&a.resist) m*=1-(a.resist[kind]||0); }   // plates read from the harness seat
   return m;
 }
 // ---- the HUD's transients die with the run: the hurt vignette, the alert wash,
@@ -6512,7 +6508,8 @@ function damagePlayer(dmg,head){
       else{ h.dur=1; armorWear('helmet'); }            // spent — ride the break path: destroy, spill seated filters, 'BROKE' toast
     }
   }else{
-    if(equip.plates){ dmg*=equip.plates.damageMult; armorWear('plates'); }
+    const _pl2=wornPlates();
+    if(_pl2){ dmg*=_pl2.damageMult; armorWear('plates'); }   // plates work worn-in-harness
     if(equip.helmet){ dmg*=equip.helmet.reduce; armorWear('helmet'); }
   }
   playerPos.health=Math.max(0,playerPos.health-dmg);
@@ -8111,6 +8108,9 @@ function loadGame(slot){
       if(!b.equip[_mk[0]]) continue; const _mi=itemFromJSON(b.equip[_mk[0]]);
       if(_mi instanceof Armor && !equip[_mk[1]]) equip[_mk[1]]=_mi; else if(_mi) _retuneOrphans.push(_mi);
     }
+    if(b.equip&&b.equip.plates){ const _pp=itemFromJSON(b.equip.plates);                        // RETIRED plates slot: seat into the worn harness, else re-home
+      if(_pp){ const _h=equip.harness;
+        if(!(_h&&_h.inv&&autoPlace(_pp,_h.inv,_h.invCols,_h.invRows))) _retuneOrphans.push(_pp); } }
     syncBagAlias(); clampZone();
     if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
     for(const row of stashInv) row.fill(null);            // in place — the crate registry holds this array. v2 reads empty.
@@ -9673,10 +9673,10 @@ let _bagEl=null, _stashEl=null;              // #backpackUI / #stashUI, same idi
 function bagFrame(){
   const ui=_bagEl||(_bagEl=document.getElementById('backpackUI'));
   if(!ui||ui.classList.contains('hidden')) return;
-  const m=clamp(menuAnim,0,1), rise=(1-m)*(1-m)*0.45;
+  const m=clamp(menuAnim,0,1), rise=(1-m)*(1-m)*0.16;   // mirrors the scaled prop's settle
   const fovU=(playerPos.currentFov*(1-0.07*m))||1;                   // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  const py=H/2-(((0.302-rise)/0.798)/fovU)*H + H*0.045;              // the mouth line (anchor -0.02 + local crest 0.322), +4.5%H overlap — seated PAST the lip (owner)
+  const py=H/2-(((0.105-rise)/0.276)/fovU)*H + H*0.045;              // the mouth line of the SCALED close prop (anchor -0.03 + crest 0.322*0.42 at z 0.276), +4.5%H past the lip
   const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
   const rot=Math.sin(gameTime*0.5)*1.4;                              // swing WITH the model's rotY sway (owner: together is nice) — hung from the pinned mouth seam
   ui.style.left=(innerWidth/2)+'px';
