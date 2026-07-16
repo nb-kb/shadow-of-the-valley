@@ -1636,8 +1636,7 @@ vec2 map(vec3 p){
       }
       if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
-        float dk2=uMenuLook.x;                                   // free-looking DUCKS the inspection low and away (camera-locked = stable, never unhinged)
-        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20+dk2*0.05)*mm, (gz-uBob.z-0.47-dk2*0.08)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — CLOSER (owner); the duck only NUDGES it: the tool stays in view, inspecting (owner)
+        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.47)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — the model NEVER ducks (owner): it rides the camera with its drift, only the rack UI dips
         vl=rotX(vl, (1.42 + sin(iTime*0.31)*0.05)*mm);           // muzzle tipped WELL away — broadly looking down the top of the barrel (owner); a slow breathing pitch
         vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
         vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
@@ -3951,9 +3950,11 @@ function toolMenuVerb(){                                  // ○/Tab — one but
   else openToolMenu();
 }
 function openBag(){ menuSet('bag'); }
-function openToolMenu(){ menuSet('tool'); }
+function openToolMenu(){
+  if(!activeTool){ toast('NO TOOL WIELDED'); playSound('empty'); if(isInventoryOpen)menuSet('closed'); return; }   // no tool = no rack (owner); from the bag, circle still reads as "close layer"
+  menuSet('tool'); }
 function toggleInventory(){ (isInventoryOpen||Menus.view==='crate')?menuSet('closed'):menuSet('bag'); }
-function toggleToolMenu(){ isToolMenuOpen?menuSet('closed'):menuSet('tool'); }
+function toggleToolMenu(){ isToolMenuOpen?menuSet('closed'):openToolMenu(); }
 
 function rackZone(tool){
   const cols=toolColumns(tool);
@@ -8407,7 +8408,8 @@ function paintToolStats(){
 }
 let mouseX=0,mouseY=0;
 let tipMouseT=1, tipPadT=0;
-let _uiW=0, _uiVw=0;                         // #backpackUI layout width cache — refreshInvUI dirties it; bagFrame re-measures only then (kills the per-frame reflow)
+let _uiW=0, _uiH=0, _uiVw=0;                 // #backpackUI layout size cache — refreshInvUI dirties it; bagFrame re-measures only then (kills the per-frame reflow)
+let _bagHS=0.75, _bagWS=1.0;                 // smoothed model scales — the model IS the UI: its size eases toward the measured kit box, they grow as ONE (owner)
 function positionTipAtMouse(){
   tooltipEl.style.left=Math.min(window.innerWidth-260,mouseX+16)+'px';
   tooltipEl.style.top=Math.min(window.innerHeight-120,mouseY+14)+'px';
@@ -9802,7 +9804,7 @@ function bagFrame(){
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
     if(showTool){ const _swx=Math.sin(gameTime*0.41)*10, _swy=Math.sin(gameTime*0.27)*8;             // the rack UI SWAYS with its gun — mirrors the model's inspection drift + layered turns (owner)
       const _swr=Math.sin(gameTime*0.5)*1.6+Math.sin(gameTime*0.23)*0.8;
-      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+8*_dks).toFixed(1)+'%) scale('+(1-0.15*_dks).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)'; } }   // duck HALVED: a polite dip, the inspection stays present
+      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+16*_dks).toFixed(1)+'%) scale('+(1-0.35*_dks).toFixed(3)+','+((1-0.35*_dks)*(1-0.10*_dks)).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)'; } }   // the rack UI ducks AS MUCH as the backpack (owner) — the gun itself never does
   if(!showBag) return;
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
@@ -9818,8 +9820,8 @@ function bagFrame(){
   const scy=sc*(1-0.10*dk);                                          // the squash — a touch flatter as it tucks away
   const rot=Math.sin(gameTime*0.5)*1.4*(1-dk);                       // the sway calms while ducked
   if(ui.style.left!=='0px'){ ui.style.left='0px'; ui.style.top='0px'; ui.style.transformOrigin='50% 0'; }   // position rides the TRANSFORM — zero per-frame layout writes (the menu lag fix)
-  ui.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px) translate(-50%,0) scale('+sc.toFixed(3)+','+scy.toFixed(3)+') rotate('+rot.toFixed(2)+'deg)';
-  if(su){ if(_uiW<=0||_uiVw!==innerWidth){ _uiW=ui.offsetWidth||1; _uiVw=innerWidth; }   // measured ONLY when the DOM (refreshInvUI) or the viewport changed — no per-frame getBoundingClientRect reflow
+  ui.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px) translate(-50%,0) perspective(900px) rotateX(-6deg) scale('+sc.toFixed(3)+','+scy.toFixed(3)+') rotate('+rot.toFixed(2)+'deg)';   // rotateX hinges at the pinned mouth: the UI TAPERS toward the bottom, matching the pack's perspective (owner)
+  if(su){ if(_uiW<=0||_uiVw!==innerWidth){ _uiW=ui.offsetWidth||1; _uiH=ui.offsetHeight||1; _uiVw=innerWidth; }   // measured ONLY when the DOM (refreshInvUI) or the viewport changed — no per-frame getBoundingClientRect reflow
     if(su.style.left!=='0px'){ su.style.left='0px'; su.style.top='0px'; su.style.right='auto'; }
     su.style.transform='translate('+(px+_uiW*sc/2+34).toFixed(1)+'px,'+py.toFixed(1)+'px)'; }   // flush with the bag's right, top edges level
 }
@@ -9949,9 +9951,11 @@ function frame(){
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
-  let _ks=0; for(const _ek of EQUIP_SLOTS){ const _ea=equip[_ek]; if(_ea&&_ea.invCols>0) _ks+=_ea.invCols*_ea.invRows; }   // EVERY equipped slot counts (owner), not just the pack
-  gl.uniform1f(U.uBagH,Math.min(0.75,0.5+_ks*0.005));   // growth DOUBLED back (owner): +0.005 per kit slot, caps at 1.5x base — naked 0.5 · starter ~0.55 · full kit 0.75
-  gl.uniform1f(U.uBagW,Math.max(0.7,1-0.075*(5-(equip.rucksack?equip.rucksack.invCols:1))));  // columns breathe X — Day 0.85 · Patrol 0.925 · Field 1.0 · bagless 0.7
+  { const _bhT=Math.max(0.45,Math.min(0.9,((_uiH||560)/560)*0.75));   // TIED TO THE UI (owner): the model's height follows the kit box's measured height (full kit ~560px → 0.75)...
+    const _bwT=Math.max(0.65,Math.min(1.1,(_uiW||620)/620));          // ...and its width the kit's width — panels folding/opening, bigger packs, all of it grows AS ONE
+    _bagHS+=(_bhT-_bagHS)*Math.min(1,8*dt); _bagWS+=(_bwT-_bagWS)*Math.min(1,8*dt); }   // eased, so zone toggles breathe instead of snapping
+  gl.uniform1f(U.uBagH,_bagHS);
+  gl.uniform1f(U.uBagW,_bagWS);
   // rack presentation: menu prop AND the held viewmodel share this data
   let _mzTip=0.34;                                     // the barrel's local tip z — the free-aim PIVOT + the bare dot's anchor (suppressor/column may push it out)
   if(activeTool){
