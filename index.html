@@ -892,6 +892,7 @@ uniform vec4  uGlobs[10];   // xyz center · w radius
 uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uWallPush;    // 0..1 wall-ahead factor — the gun collides: stock back, muzzle up (no carve)
+uniform vec2  uMenuLook;    // menu free-look offsets (yaw,pitch) — the raised props counter-rotate to stay put in the world
 uniform float uHasTool;
 uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w melee whip phase 0→1
 uniform float uExposure;    // 0..1 player light exposure — dims the viewmodel in cover
@@ -1612,7 +1613,8 @@ vec2 map(vec3 p){
     vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
     if(uMenu>0.001 && uMenuMode==1){   // the raised BAG (bag/crate/stash views) — mode 0 on close keeps the ease for the worn tool (bug #7)
       float rise=(1.0-uMenu)*(1.0-uMenu)*0.16;         // ease-out: the prop settles, no lunge
-      vec3 bp=vl-vec3(0.0,-0.03-rise,0.34);            // FORCED PERSPECTIVE (owner): tiny and CLOSE — nearer than any wall, it can never lose to the world (bagFrame mirrors these numbers)
+      vec3 va=rotX(rotY(vl,uMenuLook.x),uMenuLook.y);  // ANCHORED (owner): counter the free-look — the bag stays where it OPENED while you glance around
+      vec3 bp=va-vec3(0.0,-0.03-rise,0.34);            // FORCED PERSPECTIVE (owner): tiny and CLOSE — nearer than any wall, it can never lose to the world (bagFrame mirrors these numbers)
       bp=rotX(bp, 0.45);                               // OPENED TO THE PLAYER
       bp=rotY(bp, sin(iTime*0.5)*0.08);                // the shared sway — the UI swings with it
       float d=sdBackpack(bp/0.42)*0.42;                // scaled small — forced perspective does the rest
@@ -1622,9 +1624,10 @@ vec2 map(vec3 p){
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:(uReticle>=3?0.13:0.0));   // iron/red-dot/holo pull ~0.18 closer at full ADS; the scope pulls 0.13 so its aperture (~0.073 rad) fills the eye
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
       if(uWallPush>0.001 && uMenuMode==0){ vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — pulled well back, muzzle STRAIGHT UP at full press (bullets fly the muzzle too)
-      if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to the rack pose — VERTICAL and CENTERED under the columns — and back to rest on close
-        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.26)*mm, (gz-uBob.z-0.85)*mm);   // un-mix the rest offsets toward the presented seat (0,-0.26,0.85)
-        vl=rotX(vl, 1.05*mm);                                    // muzzle up-screen, matching the vertical column layout
+      if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
+        vl=mix(vl, rotX(rotY(vl,uMenuLook.x),uMenuLook.y), mm);  // the presented gun is ANCHORED against the free-look; the rest pose stays hand-locked
+        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.55)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.55)
+        vl=rotX(vl, 1.25*mm);                                    // muzzle pitched well away — inspection, the rack UI fits over it neatly
         vl=rotY(vl, sin(iTime*0.5)*0.05*mm);                     // the gentle live sway
       }
       float g=sdGun(vl,true);
@@ -2060,7 +2063,7 @@ function setupAttrib(prog){
 const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
-  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
@@ -3904,10 +3907,8 @@ function menuSet(view){
   inspectItem     = Menus.inspect;
   menuMode        = (view==='bag'||view==='crate')?1:view==='tool'?2:0;   // the bag prop rises for LOOT/STASH too (owner) — you're still digging through your kit
   if(view!=='crate') lootCrate=null;                      // leaving the crate ends the crate
-  document.getElementById('backpackUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));
-  document.getElementById('stashUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));   // the outside box shows with the bag; renderZones re-toggles if it's empty
+  // (backpackUI/stashUI/toolUI visibility is OWNED by bagFrame's prop lifecycle now — eased in AND out)
   document.body.classList.toggle('bagOpen',view==='bag'||view==='crate');   // the folded flap owns the top strip zone — compass/eye/rad step aside while the bag is up
-  document.getElementById('toolUI').classList.toggle('hidden',view!=='tool');
   if(view==='closed'){
     document.getElementById('inspectUI').classList.add('hidden');
     requestLock();
@@ -4016,6 +4017,8 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
 let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a sub-inventory cell = quick-swap it out)
 let _mlY=0,_mlP=0,_mlVy=0,_mlVp=0;   // menu free-look spring: offset + velocity per axis (bounces home on release)
+let _propMode=0,_propPhase=0;        // the raised prop's OWN eased life (1 bag · 2 tool): the leaving prop drains before the arriving one rises — real ease-out + crossfade
+let _whipSeed={cx:0.6,ov:0.5,lag:1};// per-swing whip character — rolled fresh every crack (random unfurl)
 const SLOT_KIN={face:['face','goggles'],holster:['holster','belt']};   // consolidated seats (owner): FACE takes masks+goggles, HOLSTER takes holsters+belts — the goggles/belt slots are retired
 function quickEquip(it){                           // □□/Shift+LMB on ARMOR with a free seat: it goes ON, not away (owner)
   if(!(it instanceof Armor)) return false;
@@ -5275,7 +5278,8 @@ function tryFirePlayer(dt){
   if(fireCooldown>0) return;
   const clicked = res.auto ? fireDownEff() : firePressedEff();
   if(clicked && !activeTool && !heldWorld){            // EMPTY HANDS ARE A WEAPON — the whip
-    if(meleeT<=0){ meleeT=0.001; meleeHit=false; fireCooldown=0.7; playSound('drop'); }
+    if(meleeT<=0){ meleeT=0.001; meleeHit=false; fireCooldown=0.7; playSound('drop');
+      _whipSeed={cx:(runRng()*2-1)*1.2, ov:0.3+runRng()*0.45, lag:0.6+runRng()*0.8}; }   // every swing UNFURLS its own way (owner)
     return;
   }
   if(!clicked || !activeTool || heldWorld) return;
@@ -5386,9 +5390,9 @@ function drawWhip(dt){
   const ext=Math.sin(Math.min(1,ph/0.45)*Math.PI*0.5);           // fling out fast...
   const rec=ph>0.55?(ph-0.55)/0.45:0;                            // ...then recoil home
   const len=WHIP_REACH*ext*(1-rec*0.85);
-  const over=Math.max(0,Math.sin((ph-0.30)*10))*0.5;             // the tip whips PAST the line at the crack
+  const over=Math.max(0,Math.sin((ph-0.30)*10))*_whipSeed.ov;    // the tip whips PAST the line at the crack — per-swing magnitude
   const tx=o.x+fw.x*len, ty=o.y+fw.y*len+over*0.25-(1-ext)*0.4, tz=o.z+fw.z*len;
-  const cx=(hx+tx)/2-b.right.x*0.7*(1-ph), cy=(hy+ty)/2-0.35*(1-ext)+over*0.45, cz=(hz+tz)/2-b.right.z*0.7*(1-ph);   // control point lags the swing — the cord BOWS
+  const cx=(hx+tx)/2-b.right.x*0.7*(1-ph)*_whipSeed.cx, cy=(hy+ty)/2-0.35*(1-ext)*_whipSeed.lag+over*0.45, cz=(hz+tz)/2-b.right.z*0.7*(1-ph)*_whipSeed.cx;   // per-swing bow side + slack — every crack UNFURLS differently
   let px=hx,py=hy,pz=hz;
   for(let i=1;i<=6;i++){ const t=i/6, u=1-t;
     const qx=u*u*hx+2*u*t*cx+t*t*tx, qy=u*u*hy+2*u*t*cy+t*t*ty, qz=u*u*hz+2*u*t*cz+t*t*tz;
@@ -9181,12 +9185,12 @@ function updatePlayer(dt){
         if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;
         if(ey<B) ely=-(1-ey/B); else if(ey>1-B) ely=(ey-(1-B))/B;
       } else { elx=INPUT.padAxes[2]||0; ely=INPUT.padAxes[3]||0; }
-      _mlVy+=elx*7*dt; _mlVp+=-ely*5.5*dt;
+      _mlVy+=elx*9*dt; _mlVp+=-ely*7*dt;                         // more freedom (owner)
     }
     const _w0=9, _zt=0.5;                                        // underdamped — the satisfying bounce home
     _mlVy+=(-2*_zt*_w0*_mlVy-_w0*_w0*_mlY)*dt; _mlVp+=(-2*_zt*_w0*_mlVp-_w0*_w0*_mlP)*dt;
     const _dY=_mlVy*dt, _dP=_mlVp*dt;
-    _mlY=clamp(_mlY+_dY,-0.7,0.7); _mlP=clamp(_mlP+_dP,-0.5,0.5);
+    _mlY=clamp(_mlY+_dY,-1.1,1.1); _mlP=clamp(_mlP+_dP,-0.75,0.75);   // wider range (owner)
     cameraYaw+=_dY; cameraPitch=clamp(cameraPitch+_dP,-1.5,1.5);
   }
   // the TRAIL — the camera chases the aim on a small delay, eating the lead as it goes; the
@@ -9704,22 +9708,32 @@ let _bagEl=null, _stashEl=null;              // #backpackUI / #stashUI, same idi
 // (the model's flap crest peeks above it). Only resize/open move it; nothing sways.
 function bagFrame(){
   const ui=_bagEl||(_bagEl=document.getElementById('backpackUI'));
-  if(!ui||ui.classList.contains('hidden')) return;
-  const m=clamp(menuAnim,0,1), rise=(1-m)*(1-m)*0.16;   // mirrors the scaled prop's settle
-  const fovU=(playerPos.currentFov*(1-0.07*m))||1;                   // the exact fov the shader renders with this frame
+  const su=_stashEl||(_stashEl=document.getElementById('stashUI'));
+  const tu=document.getElementById('toolUI');
+  if(!ui) return;
+  // LIFECYCLE (owner): visibility + fade are OWNED here from the prop phase — real ease-out,
+  // and the bag↔tool switch crossfades (the leaving one drains before the arriving one rises)
+  const showBag=_propMode===1&&_propPhase>0.02&&isPlayable();
+  const showTool=_propMode===2&&_propPhase>0.02&&isPlayable();
+  ui.classList.toggle('hidden',!showBag);
+  ui.style.opacity=showBag?_propPhase.toFixed(2):'';
+  if(su){ su.classList.toggle('hidden',!showBag); su.style.opacity=showBag?_propPhase.toFixed(2):''; }
+  if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):''; }
+  if(!showBag) return;
+  const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
+  const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  const py=H/2-(((0.105-rise)/0.276)/fovU)*H + H*0.045;              // the mouth line of the SCALED close prop (anchor -0.03 + crest 0.322*0.42 at z 0.276), +4.5%H past the lip
+  let py=H/2-(((0.105-rise)/0.276)/fovU)*H + H*0.045;                // the mouth line of the SCALED close prop, +4.5%H past the lip
+  let px=innerWidth/2;
+  px-=(_mlY/fovU)*H; py+=(_mlP/fovU)*H;                              // ANCHORED vs the free-look: the UI counter-slides with the world (mirrors the prop's counter-rotation)
   const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
-  const rot=Math.sin(gameTime*0.5)*1.4;                              // swing WITH the model's rotY sway (owner: together is nice) — hung from the pinned mouth seam
-  ui.style.left=(innerWidth/2)+'px';
+  const rot=Math.sin(gameTime*0.5)*1.4;                              // swing WITH the model's rotY sway — hung from the pinned mouth seam
+  ui.style.left=px.toFixed(1)+'px';
   ui.style.top=Math.max(8,py).toFixed(1)+'px';
   ui.style.transformOrigin='50% 0';                                  // scale + sway hang from the pinned top edge — the mouth seam never drifts
   ui.style.transform='translate(-50%,0) scale('+sc+') rotate('+rot.toFixed(2)+'deg)';
-  const su=_stashEl||(_stashEl=document.getElementById('stashUI'));  // the OUTSIDE box rides flush with the bag: top edges level, left edge hugging the bag's right
-  if(su&&!su.classList.contains('hidden')){
-    const r=ui.getBoundingClientRect();
-    su.style.left=(r.right+34).toFixed(1)+'px'; su.style.top=Math.max(8,r.top).toFixed(1)+'px'; su.style.right='auto';   // a real gap — the OTHER box shouldn't lean on the bag
-  }
+  const r=ui.getBoundingClientRect();                                // the OUTSIDE box rides flush with the bag: top edges level, hugging the bag's right
+  if(su&&showBag){ su.style.left=(r.right+34).toFixed(1)+'px'; su.style.top=Math.max(8,r.top).toFixed(1)+'px'; su.style.right='auto'; }
 }
 
 const FRAME_MS=1000/60;
@@ -9816,6 +9830,12 @@ function frame(){
   // ---- camera & menu presentation ----
   menuAnim+=((uiMenusOpen()?1:0)-menuAnim)*Math.min(1,9*dt);
   if(isInventoryOpen||isCrateOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2; else menuMode=0;   // the bag prop rises for LOOT/STASH too (this per-frame recompute was silently overriding menuSet)
+  // PROP LIFECYCLE (owner): each prop eases OUT as well as in, and switching rooms CROSSFADES —
+  // the leaving prop drains to nothing, THEN the arriving one rises. The shader reads these.
+  const _wantProp=(isInventoryOpen||isCrateOpen)?1:isToolMenuOpen?2:0;
+  if(_propMode!==_wantProp){ _propPhase+=(0-_propPhase)*Math.min(1,11*dt); if(_propPhase<0.04) _propMode=_wantProp; }
+  else if(_propMode!==0) _propPhase+=(1-_propPhase)*Math.min(1,9*dt);
+  else _propPhase=0;
   const tYawOff=0, tPitchOff=(isToolMenuOpen&&activeTool)?-0.10:0;    // the camera dips to the raised prop — ONLY when opening the tool rack WITH a tool (no dip for the bag/crate or empty hands)
   playerPos.camYawOffset+=(tYawOff-playerPos.camYawOffset)*10*dt;
   playerPos.camPitchOffset+=(tPitchOff-playerPos.camPitchOffset)*8*dt;
@@ -9832,14 +9852,15 @@ function frame(){
   gl.uniform3f(U.ro,cp.x,cp.y,cp.z);
   gl.uniform3f(U.rd,rdx,rdy,rdz);
   const fcy=Math.cos(finalYaw),fsy=Math.sin(finalYaw),fcp=Math.cos(finalPitch),fsp=Math.sin(finalPitch);
-  { const _roll=playerPos.currentLean*0.22;            // TILT with the lean (owner) — a render-only camera roll; aim math never rolls
+  { const _roll=-playerPos.currentLean*0.22;           // TILT with the lean (owner; sign flipped per playtest) — render-only roll; aim math never rolls
     const _cr=Math.cos(_roll), _sr=Math.sin(_roll);
     const _ux=-fsp*fsy, _uy=fcp, _uz=-fsp*fcy;
     gl.uniform3f(U.uRight, fcy*_cr+_ux*_sr, _uy*_sr, -fsy*_cr+_uz*_sr);
     gl.uniform3f(U.uUp,   -fcy*_sr+_ux*_cr, _uy*_cr,  fsy*_sr+_uz*_cr); }
   gl.uniform1f(U.fov,playerPos.currentFov*(1-0.07*menuAnim));
-  gl.uniform1f(U.uMenu,menuAnim);
-  gl.uniform1i(U.uMenuMode,menuMode);
+  gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
+  gl.uniform1i(U.uMenuMode,_propMode);
+  gl.uniform2f(U.uMenuLook,_mlY,_mlP);                 // free-look offsets — the props COUNTER them to stay anchored where they opened
   // rack presentation: menu prop AND the held viewmodel share this data
   if(activeTool){
     const cols=activeTool._cols||(activeTool._cols=toolColumns(activeTool));   // no per-frame churn
