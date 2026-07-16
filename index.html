@@ -107,7 +107,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 /* ---------- THE OPEN RUCKSACK — the whole kit menu sits inside the bag (owner sketch).
      Pure CSS canvas: flap folded up/back over the mouth · trapezoid gusset flare · olive body ·
      dark lining that the interior panels sit in. Decoration wraps the layout; it never repositions it. */
-#backpackUI{position:absolute;left:5%;top:11%;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves (base transform stays none; short viewports scale from origin 0 0 below) */
+#backpackUI{position:absolute;left:max(5vw,244px);top:11%;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves. 244px floor keeps the bag chrome clear of the HP HUD (14+210px panel); base transform stays none, short viewports scale from origin 0 0 below */
   text-align:center;pointer-events:none;}
 #backpackUI:not(.hidden){animation:bagOpen .18s ease-out;}
 @keyframes bagOpen{from{opacity:0;}to{opacity:1;}}
@@ -150,8 +150,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
     repeating-linear-gradient(45deg, rgba(0,0,0,.045) 0 3px, transparent 3px 6px),
     linear-gradient(180deg,#181a0f 0%,#1d1f12 55%,#191a0e 100%);
   box-shadow:inset 0 10px 16px -6px rgba(0,0,0,.8), inset 0 -6px 12px -8px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.6);}
-@media (max-height:920px){ #backpackUI{top:7%;} }   /* short viewports: the anchor rises, then the whole bag scales from it — nothing inside re-flows, nothing scrolls */
-@media (max-height:880px){ #backpackUI{top:6%;transform:scale(.86);transform-origin:0 0;} }
+@media (max-height:920px){ #backpackUI{top:8%;} }   /* short viewports: the anchor rises, then the whole bag scales from it — nothing inside re-flows, nothing scrolls */
+@media (max-height:880px){ #backpackUI{transform:scale(.86);transform-origin:0 0;} }
 .zoneCol{display:flex;flex-direction:column;align-items:flex-start;}
 .zoneCol .gridWrap{margin:12px 0 0;}                            /* left-aligned in the column — a neighbor folding never re-centers the rest */
 /* worn containers read as canvas patch pockets sewn into the lining — stitched hem, flap lip up top */
