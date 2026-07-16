@@ -23,6 +23,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #crosshair.carrying::before{top:5px;left:0;width:12px;height:2px;}
 #crosshair.carrying::after{top:0;left:5px;width:2px;height:12px;}
 #crosshair.carrying{transform:translate(-50%,-50%) rotate(45deg);}
+/* ---------- ADS free-aim marker (P7) — the crosshair the camera trails. Bare tools get a wisp
+   dot; iron sights get their post-and-notch twin while the shader glyph sleeps (uReticle handoff).
+   Glass optics never use this — their center glyph IS the aim. vh = the shader's /iResolution.y */
+#freeAim{position:absolute;top:50%;left:50%;width:0;height:0;pointer-events:none;z-index:5;display:none;mix-blend-mode:screen;}
+#freeAim.dot::before{content:'';position:absolute;left:-0.35vh;top:-0.35vh;width:0.7vh;height:0.7vh;border-radius:50%;background:rgba(232,236,240,0.85);box-shadow:0 0 0.7vh rgba(232,236,240,0.45);}
+#freeAim.iron::before{content:'';position:absolute;left:-0.16vh;top:0;width:0.32vh;height:5.5vh;background:rgba(219,224,230,0.7);}  /* the post rises to center from below — shader twin: uv.y in [-0.055,0] */
+#freeAim.iron::after{content:'';position:absolute;left:-3.16vh;top:-1.2vh;width:0.32vh;height:2.4vh;background:rgba(219,224,230,0.7);box-shadow:6vh 0 rgba(219,224,230,0.7);}  /* notch shoulders at ±0.030·H, box-shadow paints the right one */
 #interactPrompt{position:absolute;left:50%;top:57%;transform:translateX(-50%);pointer-events:none;z-index:5;
   font-size:15px;letter-spacing:.14em;color:var(--bone);text-shadow:0 1px 2px #000;opacity:0;transition:opacity .12s;}
 #interactPrompt.show{opacity:.95;}
@@ -240,6 +247,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <body>
 <canvas id="gameCanvas"></canvas>
 <div id="crosshair"></div>
+<div id="freeAim"></div>
 <div id="laserRange"></div>
 <div id="interactPrompt"></div>
 <div id="vignette"></div>
@@ -9217,6 +9225,7 @@ let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
 const _liveEn=[];                            // reused live-enemy sort buffer (dormancy ranking) — no per-frame filter/sort alloc
 let _sgEl=null;                              // #scopeGlass, cached on first use — no per-frame getElementById in the upload path
+let _faEl=null;                              // #freeAim, same idiom (P7)
 
 const FRAME_MS=1000/60;
 let lastRender=0, _pendingRes=false;
@@ -9348,7 +9357,7 @@ function frame(){
     gl.uniform4fv(U.uCols,_colsBuf);
   }else gl.uniform1i(U.uColCount,0);
   gl.uniform1f(U.uAim,playerPos.aimAmt);
-  gl.uniform3f(U.uBob,playerPos.bobX,playerPos.bobY,playerPos.viewKick*0.09);
+  gl.uniform3f(U.uBob,playerPos.bobX+aimYawOff*0.45,playerPos.bobY+aimPitchOff*0.45,playerPos.viewKick*0.09);   // P7: the gun LEANS with the free-aim lead — the existing sway channel, 0.45 m/rad tracks the marker at the ADS gun depth (feel dial); zero lead = byte-identical
   gl.uniform3f(U.uLightDir,dayNight.lightDir.x,dayNight.lightDir.y,dayNight.lightDir.z);
   gl.uniform3f(U.uLightCol,dayNight.lightCol[0],dayNight.lightCol[1],dayNight.lightCol[2]);
   gl.uniform1f(U.uAmbient,dayNight.ambient);
@@ -9500,8 +9509,26 @@ function frame(){
   }
   gl.uniform1i(U.uEditCount,SDF_EDITS.length);
   gl.uniform1i(U.uGlobCount,GLOBS.length);
-  gl.uniform1i(U.uReticle,(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0);
+  // ADS FREE-AIM marker (P7): while a bare tool or IRON sights free-aim, the DOM crosshair is
+  // the aim's truth — it darts with the lead, the view trails it. The shader's iron glyph hands
+  // off (uReticle 0 while the DOM twin owns the screen; the gun's pose rides uSights, irons have
+  // no housing prim, so the viewmodel holds its ADS raise). Glass optics (1/2/3/4) never enter:
+  // their center glyph stays the aim, the optics render path untouched.
+  const _faRetR=resT?(resT.reticle||0):0;
+  const _faShow=P('adsFree')>0.5&&playerPos.aimAmt>0.55&&!!activeTool&&(_faRetR===0||_faRetR===5)&&!pausedUI();
+  gl.uniform1i(U.uReticle,(_faShow&&_faRetR===5)?0:_faRetR);
   gl.uniform1f(U.uSights, resT&&resT.sights?1:0);
+  { const fa=_faEl||(_faEl=document.getElementById('freeAim'));
+    if(fa){ if(_faShow){
+      const H=canvas.clientHeight||innerHeight;        // marker math inverts the ray build (uv*=fov, /iResolution.y)
+      const px=(aimYawOff*Math.cos(cameraPitch+aimPitchOff)/playerPos.currentFov)*H;
+      const py=(-aimPitchOff/playerPos.currentFov)*H;
+      const cls=_faRetR===5?'iron':'dot';
+      if(fa.className!==cls) fa.className=cls;
+      if(fa.style.display!=='block') fa.style.display='block';
+      fa.style.opacity=Math.min(1,(playerPos.aimAmt-0.55)*3.3).toFixed(2);   // fades in over the same uAim band the shader glyph used
+      fa.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px)';
+    }else if(fa.style.display!=='none') fa.style.display='none'; } }
   { const ret=(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0;   // scope glass: red-dot(1)/holo(2) only, in lockstep with the shader reticle's uAim>0.55 gate
     const sg=_sgEl||(_sgEl=document.getElementById('scopeGlass'));
     if(sg){ const on=playerPos.aimAmt>0.55&&(ret===1||ret===2)&&!pausedUI();   // off while paused/dead/menu so the glass can't stick on screen
