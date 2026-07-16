@@ -183,7 +183,7 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
   margin:12px 0 0;pointer-events:auto;cursor:pointer;}          /* a folded container keeps its dock, flat as a pocket flap — click opens it */
 .zoneStub:hover{border-color:rgba(255,217,138,.45);}
 .zoneBlock{margin-bottom:10px;}
-.bagMid{display:flex;gap:18px;align-items:flex-start;min-width:600px;justify-content:center;}   /* CONSTANT worst-case width (field rucksack + assault harness open) — the frame NEVER changes size, so the centered bag and its armor strip never move */
+.bagMid{display:flex;gap:18px;align-items:flex-start;min-width:600px;justify-content:center;}   /* worst-case fallback width — renderZones scales it with the pack's X (uBagW law): the frame grows WITH the bag; center-anchored, so the rig never moves */
 /* the RIG strip: the armor row on a leather backing band across the bag mouth */
 .rigStrip{align-self:stretch;}
 .rigStrip .zoneBlock{margin-bottom:0;}
@@ -896,7 +896,7 @@ uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uWallPush;    // 0..1 wall-ahead factor — the gun collides: stock back, muzzle up (no carve)
 uniform vec2  uMenuLook;    // .x = the DUCK 0..1 (smoothstepped) — activity with the kit open tucks the props small toward bottom-center
-uniform float uBagH;        // the worn pack's Y-scale (rows-driven, half-rate, caps at 2x base) — the bag model physically UPGRADES with capacity
+uniform float uBagH;        // the worn pack's Y-scale (rows-driven, half-rate, caps at 1.5x base) — the bag model physically UPGRADES with capacity
 uniform float uBagW;        // the worn pack's X-scale (columns-driven)
 uniform float uHasTool;
 uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w melee whip phase 0→1
@@ -8558,6 +8558,7 @@ function renderZones(){
   // in the same dock, click to open). Zone nav indices are untouched.
   const rig=document.createElement('div');   rig.className='zoneCol rigStrip';
   const mid=document.createElement('div');   mid.className='bagMid';
+  mid.style.minWidth=Math.round(600*Math.max(0.7,1-0.075*(5-(equip.rucksack?equip.rucksack.invCols:1))))+'px';   // the frame BREATHES with uBagW (same law): 420/510/555/600 — the growing-inventory effect (owner); center-anchored, so nothing jumps
   const colL=document.createElement('div');  colL.className='zoneCol';
   const colM=document.createElement('div');  colM.className='zoneCol';
   const colR=document.createElement('div');  colR.className='zoneCol colStash';
@@ -9940,7 +9941,7 @@ function frame(){
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
-  gl.uniform1f(U.uBagH,Math.min(1,0.5+((equip.rucksack?equip.rucksack.invRows:1)-1)*0.1));   // HALF-rate growth, the largest DOUBLES the base (owner) — Day 0.7 · Patrol 0.9 · Field 1.0 · bagless 0.5
+  gl.uniform1f(U.uBagH,Math.min(0.75,0.5+((equip.rucksack?equip.rucksack.invRows:1)-1)*0.05));   // growth HALVED again (owner): the largest is 1.5x base — Day 0.6 · Patrol 0.7 · Field 0.75 · bagless 0.5
   gl.uniform1f(U.uBagW,Math.max(0.7,1-0.075*(5-(equip.rucksack?equip.rucksack.invCols:1))));  // columns breathe X — Day 0.85 · Patrol 0.925 · Field 1.0 · bagless 0.7
   // rack presentation: menu prop AND the held viewmodel share this data
   let _mzTip=0.34;                                     // the barrel's local tip z — the free-aim PIVOT + the bare dot's anchor (suppressor/column may push it out)
