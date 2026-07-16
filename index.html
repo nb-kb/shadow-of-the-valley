@@ -1687,8 +1687,9 @@ vec2 map(vec3 p){
       float ph=uToolCfg.w;
       float sw=ph*ph*(3.0-2.0*ph);                                          // master ease
       vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame
-      float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050);
-      if(warm<vmD){ vmD=warm; vmM=21.0; }
+      float wenv=clamp(min(ph*8.0,(1.0-ph)*10.0),0.0,1.0);                  // the arm SWELLS in and thins away with the cord — no pop (owner)
+      float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050*wenv);
+      if(warm<vmD && wenv>0.02){ vmD=warm; vmM=21.0; }
       // (the GLSL lash + cracker bead are RETIRED — the whip had TWO sources; the JS bezier cord,
       //  which carries the per-swing unfurl, is THE whip now (owner), growing from this hand's end)
     }
@@ -4081,7 +4082,7 @@ function quickEquip(it){                           // □□/Shift+LMB on ARMOR 
 const AMMO_DEF={'9mm':'ammo9','7.62':'ammo762','flechette':'ammoFlch','slug':'ammoSlug','buckshot':'ammoBuck'};
 function syncMagInv(m){
   if(!m.inv){ m.invCols=1; m.invRows=1; m.inv=[[null]]; }
-  const t=m.loadedType;
+  const t=m.loadedType||m.acceptedTypes[0];            // loaded but caliber unknown (old saves validate magType away; enemy builds skip it) — show the mag's NATIVE round, never an empty slot
   if(m.loaded>0&&t&&AMMO_DEF[t]){
     if(!m._rounds||m._rounds.ammoType!==t) m._rounds=ITEM_DEFS[AMMO_DEF[t]]();
     m._rounds.count=m.loaded; m._rounds.x=0; m._rounds.y=0;
@@ -5493,7 +5494,8 @@ function drawWhip(dt){
   let px=hx,py=hy,pz=hz;
   for(let i=1;i<=6;i++){ const t=i/6, u=1-t;
     const qx=u*u*hx+2*u*t*cx+t*t*tx, qy=u*u*hy+2*u*t*cy+t*t*ty, qz=u*u*hz+2*u*t*cz+t*t*tz;
-    beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(qx,qy,qz), col:[0.55,0.42,0.28], ttl:dt+0.001, r:0.032-0.026*(i/6)});   // the cord TAPERS hand→tip (owner)
+    beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(qx,qy,qz), col:[0.55,0.42,0.28], ttl:dt+0.001,
+      r:(0.032-0.026*(i/6))*Math.min(1,Math.min(ph/0.10,(1.001-ph)/0.14))});   // TAPERS hand→tip, and the whole cord SWELLS in and THINS away — no pop at either end (owner)
     px=qx; py=qy; pz=qz;
   }
   if(!meleeHit&&meleeT+dt>=0.19){                                // the CRACK lands next tick — light pop + a small RANDOMIZED spark spray
@@ -10217,8 +10219,8 @@ function frame(){
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
-  { const _bhT=Math.max(0.45,Math.min(0.80,0.68*(0.55+0.45*((_uiH||560)/560))));   // TIED TO THE UI, SOFTENED (owner): full kit ~0.68, and UI changes move the model at LESS than 1:1 — the proportion tweak
-    const _bwT=Math.max(0.65,Math.min(1.05,0.70+0.30*((_uiW||620)/620)));          // width softened the same way — panels folding/opening still breathe, gently
+  { const _bhT=Math.max(0.38,Math.min(0.66,0.56*(0.55+0.45*((_uiH||560)/560))));   // TIED TO THE UI, scaled DOWN (owner): the model reads only a LITTLE bigger than the UI — full kit ~0.56
+    const _bwT=Math.max(0.55,Math.min(0.88,0.60+0.25*((_uiW||620)/620)));          // width down the same way — full kit ~0.85
     _bagHS+=(_bhT-_bagHS)*Math.min(1,8*dt); _bagWS+=(_bwT-_bagWS)*Math.min(1,8*dt); }   // eased, so zone toggles breathe instead of snapping
   gl.uniform1f(U.uBagH,_bagHS);
   gl.uniform1f(U.uBagW,_bagWS);
