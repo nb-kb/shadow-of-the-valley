@@ -1686,7 +1686,8 @@ vec2 map(vec3 p){
       // the pose curves. 3 prims, the tool's own mats (20/21) — uExposure dims them free.
       float ph=uToolCfg.w;
       float sw=ph*ph*(3.0-2.0*ph)*(1.0-smoothstep(0.70,1.0,ph));            // master ease — and the hand RETURNS home on the recoil (owner: come back, don't shrink)
-      vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame
+      vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame...
+      hd.y+=0.42*sin(sw*3.14159);                                           // ...OVER THE TOP (owner: an overhead crack) — raised mid-swing, home at both ends
       float wenv=clamp(ph*8.0,0.0,1.0);                                     // swell IN only — the exit is the RETURN
       float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050*wenv);
       if(warm<vmD && wenv>0.02){ vmD=warm; vmM=21.0; }
@@ -5484,7 +5485,7 @@ function drawWhip(dt){
   // hd = mix((0.20,-0.24,0.10) → (-0.04,-0.12,0.34), sw) in view space, sw = the same master ease
   const _ssf=(a2,b2,x)=>{ x=Math.max(0,Math.min(1,(x-a2)/(b2-a2))); return x*x*(3-2*x); };
   const sw=ph*ph*(3-2*ph)*(1-_ssf(0.70,1.0,ph));       // TWIN of the GLSL hand curve — the hand returns home on the recoil
-  const hlx=0.20-0.24*sw, hly=-0.24+0.12*sw, hlz=0.10+0.24*sw;
+  const hlx=0.20-0.24*sw, hly=-0.24+0.12*sw+0.42*Math.sin(sw*Math.PI), hlz=0.10+0.24*sw;   // + the OVERHEAD lift, mirrored exactly
   const hx=o.x+b.right.x*hlx+b.up.x*hly+fw.x*hlz,
         hy=o.y+b.right.y*hlx+b.up.y*hly+fw.y*hlz,
         hz=o.z+b.right.z*hlx+b.up.z*hly+fw.z*hlz;
@@ -5492,15 +5493,24 @@ function drawWhip(dt){
   const rec=ph>0.55?(ph-0.55)/0.45:0, recS=rec*rec*(3-2*rec);    // ...then REEL smoothly home: the cord returns INTO the hand, it never shrinks in place (owner)
   const len=WHIP_REACH*ext*(1-recS);
   const over=Math.max(0,Math.sin((ph-0.30)*10))*_whipSeed.ov;    // the overshoot lives in the BELLY now — the tip stays honest
-  const tx=o.x+fw.x*len+b.right.x*0.40*recS, ty=o.y+fw.y*len-(1-ext)*0.4-0.85*recS, tz=o.z+fw.z*len+b.right.z*0.40*recS;   // the TIP rides the aim line out (the reach gauge) — and reels home DOWN-AND-ASIDE, never straight into the viewport (owner)
-  const _belly=0.34*Math.sin(ph*Math.PI);              // STEEPER parabola (owner): a deep belly through the whole swing
-  const cx=(hx+tx)/2-b.right.x*1.25*(1-ph)*_whipSeed.cx, cy=(hy+ty)/2-0.70*(1-ext)*_whipSeed.lag-_belly+over*0.5, cz=(hz+tz)/2-b.right.z*1.25*(1-ph)*_whipSeed.cx;   // per-swing bow side + slack — every crack UNFURLS differently
+  const tx=o.x+fw.x*len+b.right.x*0.40*recS, ty=o.y+fw.y*len+(1-ext)*0.55-0.85*recS, tz=o.z+fw.z*len+b.right.z*0.40*recS;   // the TIP rides the aim line out (the reach gauge): raised behind on the wind-up, home DOWN-AND-ASIDE on the reel
+  const _arc=0.85*Math.sin(ph*Math.PI)*(0.55-ph)*2;    // OVERHEAD (owner): the belly rides ABOVE the line to the crack, whips through BELOW after — one smooth crossing
+  const cx=(hx+tx)/2-b.right.x*0.5*(1-ph)*_whipSeed.cx, cy=(hy+ty)/2-0.30*(1-ext)*_whipSeed.lag+_arc+over*0.5, cz=(hz+tz)/2-b.right.z*0.5*(1-ph)*_whipSeed.cx;   // a slimmer side bow — the swing lives in the vertical plane now
+  const _near=[];                                      // entities in cord range — the whip drapes on the FIRST thing it meets
+  for(const en of enemies){ if(en.health<=0) continue;
+    const dx3=en.position.x-o.x, dz3=en.position.z-o.z;
+    if(dx3*dx3+dz3*dz3<(WHIP_REACH+1.2)*(WHIP_REACH+1.2)) _near.push(en); }
   let px=hx,py=hy,pz=hz;
   for(let i=1;i<=6;i++){ const t=i/6, u=1-t;
     const qx=u*u*hx+2*u*t*cx+t*t*tx, qy=u*u*hy+2*u*t*cy+t*t*ty, qz=u*u*hz+2*u*t*cz+t*t*tz;
     beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(qx,qy,qz), col:[0.55,0.42,0.28], ttl:dt+0.001,
       r:(0.032-0.026*(i/6))*Math.min(1,ph/0.10)});     // TAPERS hand→tip and swells IN — the exit is the reel-home, never a thin-out (owner)
     px=qx; py=qy; pz=qz;
+    if(mapWorldJS(qx,qy,qz)<0.04) break;               // the cord CANNOT phase through walls (owner) — it CUTS at the surface, the crack lands there
+    let _hitE=false;
+    for(const en of _near){ const ex2=qx-en.position.x, ey2=qy-(en.position.y+0.95), ez2=qz-en.position.z;
+      if(ex2*ex2+ez2*ez2<0.16&&Math.abs(ey2)<1.05){ _hitE=true; break; } }
+    if(_hitE) break;                                   // ...or drapes short on a BODY
   }
   if(!meleeHit&&meleeT+dt>=0.19){                                // the CRACK lands next tick — light pop + a small RANDOMIZED spark spray
     addDyn(px,py,pz,[1.0,0.85,0.55],2.6,0.09);
