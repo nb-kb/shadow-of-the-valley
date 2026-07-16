@@ -7654,9 +7654,9 @@ function itemFromJSON(j){
   if(!j||!ITEM_DEFS[j.k]) return null;
   const it=ITEM_DEFS[j.k]();
   if(typeof j.cn==='string') it.customName=sanitizeName(j.cn)||null;
-  if(j.loaded!==undefined){ it.loaded=Math.max(0,Math.min(j.loaded|0,it.maxCapacity)); if(j.magType) it.loadedType=j.magType; }
-  if(j.count!==undefined) it.count=j.count;
-  if(j.cap!==undefined){ it.cap=j.cap; it.charge=Math.min(j.charge,j.cap); }
+  if(j.loaded!==undefined){ it.loaded=Math.max(0,Math.min(j.loaded|0,it.maxCapacity)); if(j.magType&&(it.anyCaliber?!!AMMO[j.magType]:it.acceptedTypes.indexOf(j.magType)>=0)) it.loadedType=j.magType; }   // caliber must be one this mag holds (anyCaliber: any REAL round) — garbage falls back to acceptedTypes[0]
+  if(j.count!==undefined) it.count=Math.max(0,Math.min(j.count|0,AMMO_STACK));   // clamp to the merge cap — a rotted count can't mint rounds or go negative
+  if(j.cap!==undefined){ it.cap=Math.max(0,Math.min(+j.cap||0,it.capMax)); it.charge=Math.max(0,Math.min(+j.charge||0,it.cap)); }   // cap<=design, charge<=cap — and a capless-charge blob reads 0, not NaN
   if(j.on!==undefined) it.on=j.on;
   if(it.filter&&j.lf!==undefined) it.life=Math.max(0,Math.min(+j.lf||0,it.lifeMax));   // clamp garbage: a spent filter stays spent, never over-full
   if(it instanceof Armor && it.durMax){
@@ -7667,7 +7667,7 @@ function itemFromJSON(j){
   if(it instanceof Barrel){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } }); it.muzzle=itemFromJSON(j.muzzle); }   // pre-retune saves ran longer — tail mods salvage, never vanish
   if(it instanceof Platform){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } });   // same clamp as the Barrel — overlong saves salvage, never overrun
     if(j.cycles) it.cycles=j.cycles.slice(); }
-  if(it instanceof Tool){ j.slots.forEach((c,i)=>it.base.slots[i]=itemFromJSON(c));
+  if(it instanceof Tool){ j.slots.forEach((c,i)=>{ if(i<it.base.slots.length) it.base.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } });   // the Barrel clamp — an overlong blob never grows the 4-slot rack into phantom cells
     it.base.muzzle=itemFromJSON(j.muzzle); it.baseCycle=j.cycle||0; }
   if(it instanceof Armor && j.inv && it.inv){
     for(const cj of j.inv){
@@ -7679,16 +7679,16 @@ function itemFromJSON(j){
         else if(!slotPlace(ch,{grid:it.inv,cols:it.invCols,rows:it.invRows})) _retuneOrphans.push(ch);   // rack shrank: salvage, never vanish
       }
       else if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,it.inv,it.invCols,it.invRows)) placeInGrid(ch,cj.x,cj.y,it.inv);
-      else autoPlace(ch,it.inv,it.invCols,it.invRows);
+      else if(!autoPlace(ch,it.inv,it.invCols,it.invRows)) _retuneOrphans.push(ch);   // container shrank/overfilled: salvage, never vanish
     }
   }
   if(it instanceof ToolMod && it.effect && it.effect.adapter && it.inv){
     if(j.inv) for(const cj of j.inv){
       const ch=itemFromJSON(cj); if(!ch||!isSight(ch)) continue;   // adapter holds SIGHTS only — drop anything else on load (a corrupt adapter-in-adapter would recurse foldFrame)
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,it.inv,it.invCols,it.invRows)) placeInGrid(ch,cj.x,cj.y,it.inv);
-      else autoPlace(ch,it.inv,it.invCols,it.invRows);
+      else if(!autoPlace(ch,it.inv,it.invCols,it.invRows)) _retuneOrphans.push(ch);   // same salvage as the container branch
     }
-    if(j.sel!==undefined) it.opticSel=j.sel|0;
+    if(j.sel!==undefined) it.opticSel=Math.max(0,j.sel|0);   // a negative sel would index nothing forever
   }
   return it;
 }
