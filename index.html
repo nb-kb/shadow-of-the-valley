@@ -7411,8 +7411,11 @@ function seedLevelSpawns(L){
     }
     // C13 empty-crate floor: the scatter above is balls-in-bins, so many boxes roll
     // empty. Give every still-bare, non-stash crate ONE guaranteed roll from its own
-    // tier character — lootN stays the "extra richness" dial on top.
-    for(const cr of crateRegistry){
+    // tier character — lootN stays the "extra richness" dial on top. Gated on that
+    // same dial: a level that scatters NOTHING (hideout, lootN:0) floors nothing —
+    // the home crates re-seeding free loot every boot/death/exfil was the BALANCE-LAW
+    // faucet (die-loot-bank-repeat). The guaranteed loop below is untouched.
+    if(L.spawn.lootN) for(const cr of crateRegistry){
       if(cr.stash||cr.inv.flat().some(Boolean)) continue;
       const tn=cr.tiers[Math.floor(rng()*cr.tiers.length)];
       const list=TIERS[tn]||TIERS.common;
