@@ -238,7 +238,7 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
   clip-path:polygon(0 0, 0 72%, 22% 55%, 40% 100%, 55% 92%, 38% 50%, 68% 50%);}
 #termCursor.on{display:block;}
 #tipPanel{position:absolute;left:calc(50% + 205px);top:50%;transform:translateY(-50%);z-index:44;
-  width:225px;pointer-events:none;}
+  width:225px;pointer-events:none;will-change:transform;}
 #tipMain{min-height:225px;padding:14px;border:1px solid var(--line);background:rgba(8,10,13,.72);
   font-size:14px;letter-spacing:.1em;line-height:1.8;text-align:left;}
 #tipMain .tt-name{color:var(--exposed);font-weight:bold;font-size:16px;letter-spacing:.16em;display:block;margin-bottom:6px;}
@@ -1633,7 +1633,7 @@ vec2 map(vec3 p){
     if(uMenu>0.001 && uMenuMode==1){   // the raised BAG (bag/crate/stash views) — mode 0 on close keeps the ease for the worn tool (bug #7)
       float rise=(1.0-uMenu)*(1.0-uMenu)*0.16;         // ease-out: the prop settles, no lunge
       float dk=uMenuLook.x;                            // the DUCK: activity tucks the bag small toward the bottom, back on settle (owner)
-      vec3 bp=vl-vec3(0.0,(0.105-dk*0.14-rise)-0.135*uBagH*(1.0-0.35*dk),0.34);   // PINNED MOUTH (owner): the seam holds a CONSTANT eyeline and the pack hangs DOWNWARD from it — swapping rucksacks never jumps the UI
+      vec3 bp=vl-vec3(0.0,(0.105-dk*0.20-rise)-0.135*uBagH*(1.0-0.35*dk),0.34);   // PINNED MOUTH (owner): the seam holds a CONSTANT eyeline and the pack hangs DOWNWARD from it — swapping rucksacks never jumps the UI; the duck digs DEEPER toward bottom-center
       bp=rotX(bp, 0.45);                               // OPENED TO THE PLAYER
       bp=rotY(bp, sin(iTime*0.5)*0.08);                // the shared sway — the UI swings with it
       bp.y/=uBagH; bp.x/=uBagW;                        // rows stretch Y, columns breathe X — watch the pack physically upgrade
@@ -1651,7 +1651,7 @@ vec2 map(vec3 p){
       if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
         vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.47)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — the model NEVER ducks (owner): it rides the camera with its drift, only the rack UI dips
-        vl=rotX(vl, (1.42 + sin(iTime*0.31)*0.05)*mm);           // muzzle tipped WELL away — broadly looking down the top of the barrel (owner); a slow breathing pitch
+        vl=rotX(vl, (1.56 + sin(iTime*0.31)*0.05)*mm);           // muzzle AIMED AWAY, a touch past vertical (owner) — looking down the top of the barrel; a slow breathing pitch
         vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
         vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
       }
@@ -10010,7 +10010,8 @@ function bagFrame(){
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
     if(showTool){ const _swx=Math.sin(gameTime*0.41)*10, _swy=Math.sin(gameTime*0.27)*8;             // the rack UI SWAYS with its gun — mirrors the model's inspection drift + layered turns (owner)
       const _swr=Math.sin(gameTime*0.5)*1.6+Math.sin(gameTime*0.23)*0.8;
-      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+55*_dks).toFixed(1)+'%) scale('+(1-0.35*_dks).toFixed(3)+','+((1-0.35*_dks)*(1-0.10*_dks)).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)'; } }   // the rack UI ducks AS MUCH as the backpack — dragged to BOTTOM-CENTER, same convention (owner); the gun itself never does
+      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+70*_dks).toFixed(1)+'%) scale('+(1-0.35*_dks).toFixed(3)+','+((1-0.35*_dks)*(1-0.10*_dks)).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)';   // the rack UI ducks AS MUCH as the backpack — dragged to BOTTOM-CENTER, same convention (owner); the gun itself never does
+      if(tipPanelEl) tipPanelEl.style.transform='translateY(-50%) translate('+(-110*_dks).toFixed(1)+'px,'+(innerHeight*0.24*_dks).toFixed(1)+'px) scale('+(1-0.35*_dks).toFixed(3)+')'; } }   // the LEGEND ducks too (owner) — pulled toward bottom-center with the rack
   if(!showBag) return;
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
@@ -10019,7 +10020,7 @@ function bagFrame(){
   // hangs DOWNWARD from the pinned seam, so swapping rucksacks never jumps the rig/pockets.
   // Only the duck and the open-settle move it.
   const dk=_dks, _bsc=1-0.35*dk;                                     // mirrors the model's duck-shrink exactly
-  const _vy=(0.105-0.14*dk)-rise;                                    // the pinned mouth line
+  const _vy=(0.105-0.20*dk)-rise;                                    // the pinned mouth line — the duck digs deeper (owner), mirrors the model exactly
   const px=innerWidth/2;
   const py=Math.max(8,H/2-((_vy/0.276)/fovU)*H + H*0.045);
   const sc=((innerWidth<=1100||innerHeight<=880)?0.86:1)*_bsc;
