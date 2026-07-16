@@ -773,6 +773,7 @@ uniform int   uMenuMode;    // 1 rucksack · 2 tool
 uniform int   uColCount;    // rack columns (menu presentation only)
 uniform vec4  uCols[8];     // x len(slots) · y x-offset · z chain joints · w hasMuzzleMod
 uniform int   uReticle;     // 0 none · 1 red dot · 2 holo · 3 2x · 4 3x · 5 iron
+uniform vec2  uAimOff;      // free-aim lead in reticle-uv space — glass glyphs + the 2x/3x lens ride it (0,0 when lead is idle)
 uniform float uSights;      // >0.5 → draw the iron-sight post (mod-gated)
 uniform int   uGlobCount;   // glue globs
 uniform vec4  uGlobs[10];   // xyz center · w radius
@@ -1646,6 +1647,11 @@ vec3 skyColor(vec3 dir){
 
 void main(){
   vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
+  if(uReticle>=3 && uAim>0.55){                      // 2x/3x GLASS: the lens MAGNIFIES — rays inside the disc converge
+    vec2 _ld=uv-uAimOff;                             // on the (free-aim-led) lens center; power eases in over the same
+    float _lr=(uReticle==3)?0.40:0.31;               // uAim band as the glyph. Rim stays 1:1 — the vignette hides the seam.
+    if(dot(_ld,_ld)<_lr*_lr) uv=uAimOff+_ld/mix(1.0,(uReticle==3)?2.0:3.0,smoothstep(0.55,1.0,uAim));
+  }
   uv *= fov;
   vec3 forward=normalize(rd);
   vec3 rayDir=normalize(forward + uv.x*uRight + uv.y*uUp);
@@ -1863,7 +1869,7 @@ void main(){
   col = mix(vec3(dot(col, vec3(0.299,0.587,0.114))), col, uSaturation); // color-grade saturation (goggles COLOR dial) — post-gamma so no pow() NaN, pre-HUD so reticle stays neutral
   // ---- optic reticle: the player looks THROUGH the glass while aiming ----
   if(uReticle>0 && uAim>0.55){
-    vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
+    vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y - uAimOff;   // glyphs ride the free-aim lead — the glass aims where the shot lands
     float r=length(uv);
     float a=smoothstep(0.55,1.0,uAim);
     if(uReticle==1){                                    // red dot
@@ -1960,7 +1966,7 @@ function setupAttrib(prog){
 const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
-  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
@@ -2281,7 +2287,7 @@ const playerPos={
   flashlightOn:false,
   noiseLevel:0.2, exposure:0.5, muzzleGlow:0,
   camYawOffset:0,camPitchOffset:0,
-  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, walkCycle:0,
+  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, yawPend:0, walkCycle:0,
   velX:0, velZ:0, swinging:false, launched:false,   // velX/velZ = the ONLY horizontal velocity state (rope swing + slide-hop launch)
 };
 let cameraYaw=0.6, cameraPitch=0;
@@ -3333,10 +3339,11 @@ function toolMagazine(tool){                      // any mag, base first — rel
     for(const r of col.refs){ const it=readRef(r); if(it instanceof Magazine) return it; }
   return null;
 }
-function toolMagazineRef(tool){                   // same walk, but keep the ref — the mag-for-mag swap writes into it
+function toolMagazineRef(tool){                   // the DRIEST racked mag, ref kept — R refills the emptiest first (wing mags hot-reload); tie → base-first (QoL)
+  let best=null;
   for(const col of toolColumns(tool))
-    for(const r of col.refs){ const it=readRef(r); if(it instanceof Magazine) return {ref:r,mag:it}; }
-  return null;
+    for(const r of col.refs){ const it=readRef(r); if(it instanceof Magazine&&(!best||it.loaded<best.mag.loaded)) best={ref:r,mag:it}; }
+  return best;
 }
 function emptyMagSlot(tool){                      // first empty column slot to rack a mag into (base first) — reload uses it when the tool has no mag
   for(const col of toolColumns(tool)) for(const r of col.refs) if(!readRef(r)) return {ref:r};
@@ -4321,7 +4328,7 @@ function muzzleWorld(){
 
 // which world item sits under the crosshair?
 function itemUnderCrosshair(maxDist){
-  const o=camPos(), f=camForward();
+  const o=camPos(), f=aimForward();                // QoL: the pickup prompt reads the MARKER, not screen center — what you point at is what you get (zero lead = camForward exactly)
   const wallT=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxDist);
   let best=-1,bestT=Math.min(maxDist,wallT+0.4);
   for(let i=0;i<worldItems.length;i++){
@@ -4474,7 +4481,7 @@ function sipFromHeld(){
 }
 function grabWorld(idx,dist,mode){
   const w=worldItems[idx];
-  const o=camPos(), f=camForward();
+  const o=camPos(), f=aimForward();                // pin lands where the MARKER pointed (matches itemUnderCrosshair); the carry itself still rides the camera
   // pin: remember where on the item the crosshair landed, in the item's own frame
   const gx=o.x+f.x*dist-w.pos.x, gy=o.y+f.y*dist-w.pos.y, gz=o.z+f.z*dist-w.pos.z;
   const l=itemLocalJS(gx,gy,gz, w.ry||0, w.pitch||0);
@@ -4972,7 +4979,7 @@ const _colsBuf=new Float32Array(32);
 // RECOIL, EASED — impulse → critically damped spring (ω=16): the kick rises to
 // peak over ~62ms (J/(ωe)≈0.39 ≈ the old +0.4 step) and settles by ~0.3s, C¹
 // smooth both ways. Pitch climb pays out over ~4 frames instead of stepping.
-function addKick(p){ playerPos.pitchPend+=p; playerPos.kickV+=17; }
+function addKick(p){ p*=0.85+runRng()*0.3; playerPos.pitchPend+=p; playerPos.yawPend+=(runRng()*2-1)*p*0.5; playerPos.kickV+=17; }   // QoL: recoil is a VELOCITY pull — randomized magnitude, random side jitter, the kickV spring is the backward push
 let fireCooldown=0, reloadTimer=0;
 let meleeT=0, meleeHit=false;   // the whip: swing clock + one-strike latch
 let BARE_RES=null;
@@ -6202,15 +6209,15 @@ function tickBeltFeed(dt){
   magPut(mag,_bt,1); playSound('click');
   if(!activeTool._res.silenced) addNoise(playerPos.x,playerPos.y,playerPos.z,3);   // the belt ticks — a suppressed tool feeds silent
 }
-function findSwapMag(exclude){    // a spare Magazine from HARNESS then HOLSTER then POCKETS, top-down/left-right; any fill, any caliber
-  const zs=playerZones(true);
+function findSwapMag(exclude){    // the FULLEST spare Magazine from HARNESS/HOLSTER/POCKETS — a loaded mag ALWAYS beats an empty one, placement never decides (QoL); tie → the old top-down order
+  const zs=playerZones(true); let best=null;
   for(const id of ['harness','holster','pockets']){
     const z=zs.find(zz=>zz.id===id); if(!z) continue;
     for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++){ const it=z.grid[r][c];
-      if(it&&it!==exclude&&it instanceof Magazine&&it.x===c&&it.y===r) return {z,mag:it,x:c,y:r};   // anchor dedupe — a mag is 1×2
+      if(it&&it!==exclude&&it instanceof Magazine&&it.x===c&&it.y===r&&(!best||it.loaded>best.mag.loaded)) best={z,mag:it,x:c,y:r};   // anchor dedupe — a mag is 1×2
     }
   }
-  return null;
+  return best;
 }
 function tossMag(mag){            // heave a magazine out in a random horizontal direction — a light toss
   const a=runRng()*6.2832, dx=Math.cos(a), dz=Math.sin(a);
@@ -7505,6 +7512,7 @@ function nearStubDoor(){
 // ---- `transition` rows later — the terminal doesn't know what a hideout is.
 let termScreen='home', termSel=0, _termOverRow=false;   // _termOverRow: is the center crosshair on a terminal row THIS frame — gates click-confirm so a fire-press while not aimed at the panel can't trigger a hidden option
 let _termPlaced=false;   // did terminalFrame land the panel ON SCREEN this frame — gates E/pad confirms so a player facing away can't blind-drive an invisible row
+let _termLkY=0,_termLkP=0;   // last frame's camera — the row hit-test retargets only when the LOOK moved (mouse or stick), so d-pad nav holds its row
 let _termSnooze=false;   // a MANUAL close latches the desk dark inside the wake radius (else it blinks back next frame); stepping past 1.4m lifts it
 const TERM_SCREENS={
   home:()=>({title:'ValleyOS', rows:[
@@ -7577,13 +7585,15 @@ function terminalFrame(){
   // sink the auto-res ratchet then paid for). One frame of hover latency is invisible;
   // a hidden panel reads rects of 0 and simply lands on "no row".
   // The fixed center crosshair picks a row. _termOverRow (checked EVERY frame) gates the click-confirm;
-  // the termSel *update* still fires only while the MOUSE MOVES, so the stick/dpad (termNav) can nav
-  // without the hit-test snapping the selection back to the centered row each frame.
+  // the termSel *update* fires only when the LOOK actually moved — mouse OR pad stick (the camera is
+  // live at the desk now) — so the d-pad (termNav) can still nav without the hit-test snapping back.
   _termOverRow=false;
+  const _lkMoved=INPUT.mdx||INPUT.mdy||Math.abs(cameraYaw-_termLkY)>1e-4||Math.abs(cameraPitch-_termLkP)>1e-4;
+  _termLkY=cameraYaw; _termLkP=cameraPitch;
   if(_termPlaced&&!ui.classList.contains('hidden')){
     const rows=document.getElementById('termRows').children, cx=innerWidth/2, cy=innerHeight/2;
     for(let i=0;i<rows.length;i++){ const r=rows[i].getBoundingClientRect();
-      if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ _termOverRow=true; if((INPUT.mdx||INPUT.mdy)&&i!==termSel){ termSel=i; renderTerminal(); } break; } }
+      if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){ _termOverRow=true; if(_lkMoved&&i!==termSel){ termSel=i; renderTerminal(); } break; } }
   }
   // WRITE PHASE — place the panel for THIS frame
   let placed=false;
@@ -8754,16 +8764,16 @@ const _c1=new Vec3(), _c2=new Vec3();
 function updatePlayer(dt){
   const menus=uiMenusOpen();
   // look
-  const _pl=isTerminalOpen?0:1;   // terminal: freeze PAD look so stick drift can't drag the crosshair down; mouse still aims, stick navs rows (termNav)
-  const lx=INPUT.mdx*0.0022*INPUT.sensMouse + _pl*INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1);
-  let ly=INPUT.mdy*0.0022*INPUT.sensMouse + _pl*INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1);
+  // terminal: the camera stays LIVE — the crosshair IS the cursor (stick + mouse both drive row
+  // selection; terminalFrame's hit-test only retargets when the look actually MOVED, so d-pad nav holds)
+  const lx=INPUT.mdx*0.0022*INPUT.sensMouse + INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1);
+  let ly=INPUT.mdy*0.0022*INPUT.sensMouse + INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1);
   if(INPUT.invertY) ly=-ly;
-  // ADS FREE-AIM (P7): live only for BARE tools and IRON sights — glass optics (dot/holo/2×/3×)
-  // draw their glyph at screen center, so their aim stays center-locked and unfought. While live,
-  // look input feeds the LEAD (gun + crosshair dart, capped at the adsDev ring); the camera
-  // chases below. heldWorld/physgun already force isAiming false, so they never route here.
-  const _faRet=activeTool&&activeTool._res?(activeTool._res.reticle||0):0;
-  const faLive=P('adsFree')>0.5&&playerPos.isAiming&&!!activeTool&&(_faRet===0||_faRet===5);
+  // ADS FREE-AIM (P7, QoL: ALL sights now): live for bare/iron AND glass — the glass glyphs ride
+  // uAimOff to the lead, so dot/holo/2×/3× aim exactly where the marker sits. While live, look
+  // input feeds the LEAD (gun + crosshair dart, capped at the adsDev ring); the camera chases
+  // below. heldWorld/physgun already force isAiming false, so they never route here.
+  const faLive=P('adsFree')>0.5&&playerPos.isAiming&&!!activeTool;
   if(!menus && (pointerLocked()||Math.abs(INPUT.padAxes[2])>0||Math.abs(INPUT.padAxes[3])>0)){
     if(faLive){
       const dev=P('adsDev')*playerPos.currentFov;    // constant marker travel on SCREEN at any zoom (uv*=fov, inverted)
@@ -9028,10 +9038,10 @@ function updatePlayer(dt){
   { const w0=16;                                     // recoil spring — see addKick
     playerPos.kickV-=(2*w0*playerPos.kickV+w0*w0*playerPos.viewKick)*dt;
     playerPos.viewKick=Math.max(0,Math.min(1,playerPos.viewKick+playerPos.kickV*dt));
-    const pk=playerPos.pitchPend*Math.min(1,26*dt);
-    if(faLive) aimPitchOff=clamp(aimPitchOff+pk,-1.5-cameraPitch,1.5-cameraPitch);   // FREE-AIM: the kick lands on the GUN — the marker jumps, the camera trails it in (the climb SUM matches the rigid path exactly)
-    else cameraPitch=clamp(cameraPitch+pk,-1.5,1.5);
-    playerPos.pitchPend-=pk; }
+    const pk=playerPos.pitchPend*Math.min(1,26*dt), yk=playerPos.yawPend*Math.min(1,26*dt);
+    if(faLive){ aimPitchOff=clamp(aimPitchOff+pk,-1.5-cameraPitch,1.5-cameraPitch); aimYawOff+=yk; }   // FREE-AIM: the kick lands on the GUN — the marker jumps (up + random side), the camera trails it in
+    else { cameraPitch=clamp(cameraPitch+pk,-1.5,1.5); cameraYaw+=yk; }
+    playerPos.pitchPend-=pk; playerPos.yawPend-=yk; }
 
   // noise from movement + footfalls
   playerPos.noiseLevel=moving?(playerPos.isSprinting?9:(playerPos.isCrouching?1.0:3.4)):0.25;
@@ -9564,6 +9574,11 @@ function frame(){
   const _faShow=P('adsFree')>0.5&&playerPos.aimAmt>0.55&&!!activeTool&&(_faRetR===0||_faRetR===5)&&!pausedUI();
   gl.uniform1i(U.uReticle,(_faShow&&_faRetR===5)?0:_faRetR);
   gl.uniform1f(U.uSights, resT&&resT.sights?1:0);
+  // free-aim lead in reticle-uv space (QoL: glass glyphs + the 2x/3x lens ride it; bare/iron keep the DOM marker)
+  const _faOn=P('adsFree')>0.5&&playerPos.aimAmt>0.55&&!!activeTool&&!pausedUI();
+  const _aoX=_faOn?aimYawOff*Math.cos(cameraPitch+aimPitchOff)/playerPos.currentFov:0;
+  const _aoY=_faOn?aimPitchOff/playerPos.currentFov:0;
+  gl.uniform2f(U.uAimOff,_aoX,_aoY);
   { const fa=_faEl||(_faEl=document.getElementById('freeAim'));
     if(fa){ if(_faShow){
       const H=canvas.clientHeight||innerHeight;        // marker math inverts the ray build (uv*=fov, /iResolution.y)
@@ -9580,7 +9595,10 @@ function frame(){
   { const ret=(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0;   // scope glass: red-dot(1)/holo(2) only, in lockstep with the shader reticle's uAim>0.55 gate
     const sg=_sgEl||(_sgEl=document.getElementById('scopeGlass'));
     if(sg){ const on=playerPos.aimAmt>0.55&&(ret===1||ret===2)&&!pausedUI();   // off while paused/dead/menu so the glass can't stick on screen
-      sg.classList.toggle('on',on); if(on&&sg.dataset.optic!==''+ret) sg.dataset.optic=ret; } }   // dataset writes invalidate style — only on change
+      sg.classList.toggle('on',on); if(on&&sg.dataset.optic!==''+ret) sg.dataset.optic=ret;
+      const _sgH=canvas.clientHeight||innerHeight;                             // QoL: the tint disc rides the free-aim lead like the shader glyphs
+      const _sgTr=on?'translate('+(_aoX*_sgH).toFixed(1)+'px,'+(-_aoY*_sgH).toFixed(1)+'px)':'';
+      if(sg.style.transform!==_sgTr) sg.style.transform=_sgTr; } }             // dataset/style writes invalidate — only on change
   for(let i=0;i<GLOBS.length;i++) gl.uniform4f(U.uGlobs[i],GLOBS[i].x,GLOBS[i].y,GLOBS[i].z,GLOBS[i].r);
   for(let i=0;i<SDF_EDITS.length;i++){
     const ed=SDF_EDITS[i];
