@@ -888,13 +888,14 @@ uniform int   uColCount;    // rack columns (menu presentation only)
 uniform vec4  uCols[8];     // x len(slots) · y x-offset · z chain joints · w hasMuzzleMod
 uniform int   uReticle;     // 0 none · 1 red dot · 2 holo · 3 2x · 4 3x · 5 iron
 uniform vec2  uAimOff;      // free-aim lead in reticle-uv space — glass glyphs + the 2x/3x lens ride it (0,0 when lead is idle)
+uniform vec3  uLead;        // free-aim lead in RADIANS (x yaw · y pitch) + z the muzzle-tip local z — the gun ROTATES about its planted tip (the butt swings)
 uniform float uSights;      // >0.5 → draw the iron-sight post (mod-gated)
 uniform int   uGlobCount;   // glue globs
 uniform vec4  uGlobs[10];   // xyz center · w radius
 uniform float uAim;         // 0..1 aim-down blend
 uniform vec3  uBob;         // x sway · y bob · z recoil kick
 uniform float uWallPush;    // 0..1 wall-ahead factor — the gun collides: stock back, muzzle up (no carve)
-uniform vec2  uMenuLook;    // menu free-look offsets (yaw,pitch) — the raised props counter-rotate to stay put in the world
+uniform vec2  uMenuLook;    // .x = the DUCK 0..1 (smoothstepped) — activity with the kit open tucks the props small toward bottom-center
 uniform float uBagH;        // the worn pack's Y-scale (rows-driven) — the bag model physically UPGRADES with capacity
 uniform float uHasTool;
 uniform vec4  uToolCfg;     // x silenced · y scoped · z magged · w melee whip phase 0→1
@@ -1628,11 +1629,15 @@ vec2 map(vec3 p){
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:(uReticle>=3?0.13:0.0));   // iron/red-dot/holo pull ~0.18 closer at full ADS; the scope pulls 0.13 so its aperture (~0.073 rad) fills the eye
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
+      if(uMenuMode==0 && (uLead.x!=0.0||uLead.y!=0.0)){   // MUZZLE-PIVOT free-aim (owner): the lead swings the BUTT around the planted muzzle tip — natural fine aim, reads a corner
+        vec3 mzp=vec3(0.0,0.075,uLead.z);                 // the pivot = the barrel's actual tip
+        vl-=mzp; vl=rotX(rotY(vl,uLead.x),uLead.y); vl+=mzp;
+      }
       if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
         float dk2=uMenuLook.x;                                   // free-looking DUCKS the inspection low and away (camera-locked = stable, never unhinged)
-        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20+dk2*0.14)*mm, (gz-uBob.z-0.55-dk2*0.22)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.55), tucked under the look
-        vl=rotX(vl, (1.25 + sin(iTime*0.31)*0.05)*mm);           // muzzle pitched well away — inspection; a slow breathing pitch
+        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20+dk2*0.14)*mm, (gz-uBob.z-0.47-dk2*0.22)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — CLOSER (owner), tucked under the look
+        vl=rotX(vl, (1.42 + sin(iTime*0.31)*0.05)*mm);           // muzzle tipped WELL away — broadly looking down the top of the barrel (owner); a slow breathing pitch
         vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
         vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
       }
@@ -2069,7 +2074,7 @@ function setupAttrib(prog){
 const U={};
 function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUniformLocation(prog,name+'['+i+']')); return a; }
 function cacheUniforms(prog){
-  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uBagH','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
+  ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uBagH','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uLead','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
    'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
@@ -4024,8 +4029,7 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 // ============================================================
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
 let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a sub-inventory cell = quick-swap it out)
-let _mlY=0,_mlP=0,_mlVy=0,_mlVp=0,_mlHold=false;   // menu free-look: direct-drive offsets while pushing, spring (velocity) home on release
-let _mlDuck=0;                                     // 0..1: free-looking DUCKS the inventories — smoothly shrunk + squashed toward bottom-center, back on release (owner)
+let _mlDuck=0;                                     // 0..1: looking/moving/crouching with the kit open DUCKS it — shrunk + squashed toward bottom-center, easing back when you settle (owner)
 let _propMode=0,_propPhase=0;        // the raised prop's OWN eased life (1 bag · 2 tool): the leaving prop drains before the arriving one rises — real ease-out + crossfade
 let _whipSeed={cx:0.6,ov:0.5,lag:1};// per-swing whip character — rolled fresh every crack (random unfurl)
 const SLOT_KIN={face:['face','goggles'],holster:['holster','belt']};   // consolidated seats (owner): FACE takes masks+goggles, HOLSTER takes holsters+belts — the goggles/belt slots are retired
@@ -8659,7 +8663,7 @@ function renderZones(){
       for(let r=0;r<=EQUIP_SLOTS.length;r++){
         const it=r===EQUIP_SLOTS.length?wornPlates():equip[EQUIP_SLOTS[r]]; if(!it) continue;   // the proxy cell shows the seated plates
         const span=document.createElement('div'); span.className='itemSpan';
-        span.style.left=(GRID_PAD+r*CELL_PITCH)+'px'; span.style.top=GRID_PAD+'px';   // transposed with the strip: the slot index walks X
+        span.style.left=(GRID_PAD+r*(CELL_PITCH+11))+'px'; span.style.top=GRID_PAD+'px';   // transposed with the strip: the slot index walks X at the SPACED pitch (44px cell + 14px columnGap)
         span.style.width=(CELL_PITCH-3)+'px'; span.style.height=(CELL_PITCH-3)+'px';
         const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false;
         span.appendChild(img); g.appendChild(span);
@@ -9193,15 +9197,16 @@ function updatePlayer(dt){
   // acting again takes ownership back instantly (activity stamps tipMouseT/tipPadT).
   if(Math.abs(INPUT.padAxes[2])>0.12||Math.abs(INPUT.padAxes[3])>0.12) tipPadT=performance.now();
   const _mOwns=tipMouseT>=tipPadT;
-  const lx=(_mOwns?INPUT.mdx*0.0022*INPUT.sensMouse:0) + (!_mOwns?INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1):0);
-  let ly=(_mOwns?INPUT.mdy*0.0022*INPUT.sensMouse:0) + (!_mOwns?INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1):0);
+  const _adsS=playerPos.isAiming?0.55:1;               // ADS slows the MOUSE too for finer aiming (owner) — the pad already ran 0.45
+  const lx=(_mOwns?INPUT.mdx*0.0022*INPUT.sensMouse*_adsS:0) + (!_mOwns?INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1):0);
+  let ly=(_mOwns?INPUT.mdy*0.0022*INPUT.sensMouse*_adsS:0) + (!_mOwns?INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1):0);
   if(INPUT.invertY) ly=-ly;
   // ADS FREE-AIM (P7, QoL: ALL sights now): live for bare/iron AND glass — the glass glyphs ride
   // uAimOff to the lead, so dot/holo/2×/3× aim exactly where the marker sits. While live, look
   // input feeds the LEAD (gun + crosshair dart, capped at the adsDev ring); the camera chases
   // below. heldWorld/physgun already force isAiming false, so they never route here.
   const faLive=P('adsFree')>0.5&&playerPos.isAiming&&!!activeTool;
-  if(!menus && (pointerLocked()||Math.abs(INPUT.padAxes[2])>0||Math.abs(INPUT.padAxes[3])>0)){
+  if((!menus||isInventoryOpen||isCrateOpen||isToolMenuOpen) && (pointerLocked()||Math.abs(INPUT.padAxes[2])>0||Math.abs(INPUT.padAxes[3])>0)){   // the stick looks freely in the kit menus (mouse is unlocked there — it owns the cells; the EDGE drives its look)
     if(faLive){
       const dev=P('adsDev')*playerPos.currentFov;    // constant marker travel on SCREEN at any zoom (uv*=fov, inverted)
       aimYawOff=_devPush(aimYawOff,lx,dev);
@@ -9212,37 +9217,24 @@ function updatePlayer(dt){
       cameraPitch=clamp(cameraPitch-ly,-1.5,1.5);
     }
   }
-  // FREE-LOOK IN MENUS v2 (owner): bag/crate/stash AND the tool rack — a spring-loaded OFFSET.
-  // The edge-mouse or right stick pushes it out; releasing lets it BOUNCE home to origin.
+  // LOOK IN MENUS v3 (owner): NO elasticity — with the kit open you LOOK (edge-mouse here, the
+  // right stick through the main gate above), MOVE, and CROUCH freely, and the camera KEEPS
+  // wherever you point it. Doing any of it DUCKS the menus out of the eyeline; settling eases
+  // them back up.
   {
     const _on=menus&&(isInventoryOpen||isCrateOpen||isToolMenuOpen)&&!listeningBind;
-    if(_on){
+    let _act=false;
+    if(_on&&tipMouseT>=tipPadT){                                 // the mouse owns the cells, so its LOOK lives on the screen edge
       const B=0.12, ex=mouseX/innerWidth, ey=mouseY/innerHeight;
       let elx=0, ely=0;
-      if(tipMouseT>=tipPadT){                                    // the owning device pushes (exclusivity)
-        if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;
-        if(ey<B) ely=-(1-ey/B); else if(ey>1-B) ely=(ey-(1-B))/B;
-      } else { elx=INPUT.padAxes[2]||0; ely=INPUT.padAxes[3]||0; }
-      // DIRECT DRIVE while pushing (owner: real freedom — the old spring capped the range at its
-      // equilibrium ~8°). Pushing pans the head at full rate to the clamps; the spring only owns
-      // the RELEASE, bouncing the head home.
-      if(elx||ely){
-        const _dY0=clamp(_mlY+elx*2.4*dt,-2.4,2.4)-_mlY;
-        const _dP0=clamp(_mlP-ely*1.8*dt,-1.2,1.2)-_mlP;
-        _mlY+=_dY0; _mlP+=_dP0; _mlVy=0; _mlVp=0;
-        cameraYaw+=_dY0; cameraPitch=clamp(cameraPitch+_dP0,-1.5,1.5);
-        _mlHold=true;                                            // this frame is handled — the spring stays out
-      } else _mlHold=false;
-    } else _mlHold=false;
-    if(!_mlHold){                                                // idle or menu closed: the spring owns the way home
-      const _w0=9, _zt=0.5;                                      // underdamped — the satisfying bounce
-      _mlVy+=(-2*_zt*_w0*_mlVy-_w0*_w0*_mlY)*dt; _mlVp+=(-2*_zt*_w0*_mlVp-_w0*_w0*_mlP)*dt;
-      const _dY=_mlVy*dt, _dP=_mlVp*dt;
-      _mlY+=_dY; _mlP+=_dP;
-      cameraYaw+=_dY; cameraPitch=clamp(cameraPitch+_dP,-1.5,1.5);
+      if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;
+      if(ey<B) ely=-(1-ey/B); else if(ey>1-B) ely=(ey-(1-B))/B;
+      if(elx||ely){ cameraYaw+=elx*2.2*dt; cameraPitch=clamp(cameraPitch-ely*1.8*dt,-1.5,1.5); _act=true; }
     }
-    const _dkT=clamp(Math.max(Math.abs(_mlY)/0.5,Math.abs(_mlP)/0.4),0,1);   // any real look-away ducks the kit out of the eyeline
-    _mlDuck+=(_dkT-_mlDuck)*Math.min(1,10*dt);
+    if(_on&&(Math.abs(INPUT.padAxes[2])>0.12||Math.abs(INPUT.padAxes[3])>0.12)) _act=true;   // stick look (the main gate applied it) still ducks
+    if(_on&&(down('forward')||down('back')||down('left')||down('right')||Math.abs(INPUT.padAxes[0])>0.12||Math.abs(INPUT.padAxes[1])>0.12||down('crouch'))) _act=true;   // walking / crouching rummages the kit down too
+    const _dkT=_on&&_act?1:0;
+    _mlDuck+=(_dkT-_mlDuck)*Math.min(1,(_dkT>_mlDuck?5.5:3.0)*dt);   // SMOOTHER (owner): eases down, drifts back up even softer
   }
   // the TRAIL — the camera chases the aim on a small delay, eating the lead as it goes; the
   // aim (camera+lead) holds still in the world while the view glides on. Runs unconditionally:
@@ -9284,7 +9276,7 @@ function updatePlayer(dt){
   // grounded) it becomes a SLIDE: the stance ducks NOW and the run's momentum
   // keeps its line while friction spends it (the step block below). Mid-slide
   // the same button flips the exit stance; a slide otherwise ends in a crouch.
-  if(pressed('crouch')&&!menus){
+  if(pressed('crouch')&&(!menus||isInventoryOpen||isCrateOpen||isToolMenuOpen)){   // crouch works with the kit open (owner) — it just ducks the menus
     const m=Math.hypot(mx,mz);
     if(slideT>0){ slideT=0; playerPos.isCrouching=false; sprintLatch=false; }   // uncrouch cancels the slide — stand up now, drop the sprint latch
     else if(!playerPos.onGround) airSlideArmed=!airSlideArmed;   // MID-AIR CROUCH: arm a landing-slide (toggle). No mid-air duck — keeping the air speed is what lets the touchdown clear the slide's speed gate; the slide (and its crouch) begin on landing
@@ -9482,7 +9474,7 @@ function updatePlayer(dt){
   const _pkR=(playerPos._peek&&playerPos._peek.on&&playerPos.isCrouching)?Math.min(playerPos._peek.rise,0.6):0;   // the peek's variable un-crouch — capped at standing
   const targetH=playerPos.isCrouching?0.72+_pkR:1.32;
   playerPos.baseHeight+=(targetH-playerPos.baseHeight)*Math.min(1,(slideT>0?22:10)*dt);   // the slide ducks NOW
-  const targetLean=menus?0:(playerPos.autoLean||0)*0.5;   // ENTIRELY context-sensitive (owner): the cover peek drives the lean — no manual mappings
+  const targetLean=menus?0:(playerPos.autoLean||0)*0.8;   // ENTIRELY context-sensitive (owner): the cover peek drives the lean — MORE pronounced per playtest
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
   // aim fov
@@ -9509,12 +9501,12 @@ function updatePlayer(dt){
       let _lnT=0;
       if(_obstr){                                       // still blocked → keep working the problem
         const _b2=camBasis();
-        const _dl=mapWorldJS(playerPos.x-_b2.right.x*0.6+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z-_b2.right.z*0.6+_f.z*0.55);   // wider reach — the edge is FOUND more, so the rise fires less (owner)
-        const _dr=mapWorldJS(playerPos.x+_b2.right.x*0.6+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z+_b2.right.z*0.6+_f.z*0.55);
-        const _open=Math.max(_dl,_dr)>0.45, _room=Math.hypot(playerPos.x-pk.ax,playerPos.z-pk.az)<0.9;
-        if(_open&&_room){                               // 1) LEFT/RIGHT FIRST (owner): step past the open edge — the lean rides with it
+        const _dl=mapWorldJS(playerPos.x-_b2.right.x*0.75+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z-_b2.right.z*0.75+_f.z*0.55);   // wider reach still (owner: liberal) — the edge is FOUND more, so the rise fires less
+        const _dr=mapWorldJS(playerPos.x+_b2.right.x*0.75+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z+_b2.right.z*0.75+_f.z*0.55);
+        const _open=Math.max(_dl,_dr)>0.45, _room=Math.hypot(playerPos.x-pk.ax,playerPos.z-pk.az)<1.2;
+        if(_open&&_room){                               // 1) LEFT/RIGHT FIRST (owner): step past the open edge — standing or crouched — the lean rides with it
           const _sd=(_dr>_dl?1:-1);
-          playerPos.x+=_b2.right.x*_sd*0.9*dt; playerPos.z+=_b2.right.z*_sd*0.9*dt;
+          playerPos.x+=_b2.right.x*_sd*1.2*dt; playerPos.z+=_b2.right.z*_sd*1.2*dt;
           _lnT=_sd;
         }
         else if(playerPos.isCrouching&&pk.rise<0.6) pk.rise=Math.min(0.6,pk.rise+0.9*dt);   // 2) LAST resort: rise, gently (de-prioritized per owner)
@@ -9794,16 +9786,17 @@ function bagFrame(){
   ui.classList.toggle('hidden',!showBag);
   ui.style.opacity=showBag?_propPhase.toFixed(2):'';
   if(su){ su.classList.toggle('hidden',!showBag); su.style.opacity=showBag?_propPhase.toFixed(2):''; }
+  const _dks=_mlDuck*_mlDuck*(3-2*_mlDuck);                          // smoothstepped duck — soft at BOTH ends (owner: smoother), shared by every consumer
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
-    if(showTool) tu.style.transform='translate(-50%,'+(-44+16*_mlDuck).toFixed(1)+'%) scale('+(1-0.30*_mlDuck).toFixed(3)+')'; }   // the rack UI ducks with its gun
+    if(showTool) tu.style.transform='translate(-50%,'+(-44+16*_dks).toFixed(1)+'%) scale('+(1-0.30*_dks).toFixed(3)+')'; }   // the rack UI ducks with its gun
   if(!showBag) return;
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
   // THE DUCK (owner): the kit is camera-locked (dead stable), and free-looking smoothly SHRINKS,
   // SQUASHES, and tucks it toward bottom-center, below the eyeline — released, it eases back up.
-  const _sy2=0.55+(equip.rucksack?equip.rucksack.invRows:1)*0.075;   // mirrors uBagH — the mouth line rides the pack's height
-  const dk=_mlDuck, _bsc=1-0.35*dk;                                  // mirrors the model's duck-shrink exactly
+  const _sy2=Math.max(0.4,(equip.rucksack?equip.rucksack.invRows:1)/6);   // mirrors uBagH — the mouth line rides the pack's height
+  const dk=_dks, _bsc=1-0.35*dk;                                     // mirrors the model's duck-shrink exactly
   const _vy=(-0.03-0.14*dk+0.135*_sy2*_bsc)-rise;                    // the mouth line follows the ducked, shrunken model down
   const px=innerWidth/2;
   const py=H/2-((_vy/0.276)/fovU)*H + H*0.045;
@@ -9942,9 +9935,10 @@ function frame(){
   gl.uniform1f(U.fov,playerPos.currentFov*(1-0.07*menuAnim));
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
-  gl.uniform2f(U.uMenuLook,_mlDuck,0);                 // .x = the DUCK factor: free-looking tucks the props small toward bottom-center (the anchoring counters are retired — they went wild at full range)
-  gl.uniform1f(U.uBagH,0.55+(equip.rucksack?equip.rucksack.invRows:1)*0.075);   // Day 3 rows→0.78 · Patrol 5→0.93 · Field 6→1.0 · bagless→0.62
+  gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
+  gl.uniform1f(U.uBagH,Math.max(0.4,(equip.rucksack?equip.rucksack.invRows:1)/6));   // 1:1 with the rows (owner) — Day 3→0.50 · Patrol 5→0.83 · Field 6→1.0 · bagless→0.4
   // rack presentation: menu prop AND the held viewmodel share this data
+  let _mzTip=0.34;                                     // the barrel's local tip z — the free-aim PIVOT + the bare dot's anchor (suppressor/column may push it out)
   if(activeTool){
     const cols=activeTool._cols||(activeTool._cols=toolColumns(activeTool));   // no per-frame churn
     const n=Math.min(8,cols.length);
@@ -9955,12 +9949,13 @@ function frame(){
       const muz=refs.length&&refs[refs.length-1].muzzle&&readRef(refs[refs.length-1])?1:0;
       _colsBuf[i*4]=Math.fround(Math.max(1,refs.length)); _colsBuf[i*4+1]=Math.fround(cols[i].x);
       _colsBuf[i*4+2]=Math.fround(joints); _colsBuf[i*4+3]=muz;
+      if(i===0) _mzTip=Math.max(_mzTip, 0.28+Math.min(Math.max(1,refs.length)*0.022,0.24)+(muz?0.03:0));   // the fire column's tip — mirrors the shader's len math exactly
     }
     for(let i=n*4;i<32;i++) _colsBuf[i]=0;
     gl.uniform4fv(U.uCols,_colsBuf);
   }else gl.uniform1i(U.uColCount,0);
   gl.uniform1f(U.uAim,playerPos.aimAmt);
-  gl.uniform3f(U.uBob,playerPos.bobX+aimYawOff*0.45,playerPos.bobY+aimPitchOff*0.45,playerPos.viewKick*0.09);   // P7: the gun LEANS with the free-aim lead — the existing sway channel, 0.45 m/rad tracks the marker at the ADS gun depth (feel dial); zero lead = byte-identical
+  gl.uniform3f(U.uBob,playerPos.bobX,playerPos.bobY,playerPos.viewKick*0.09);   // pure sway/bob — the free-aim lead now ROTATES the gun about its muzzle (uLead), it no longer translates it
   gl.uniform1f(U.uWallPush,playerPos.wallPush);   // wall-ahead: the gun collides (stock back, muzzle up)
   gl.uniform3f(U.uLightDir,dayNight.lightDir.x,dayNight.lightDir.y,dayNight.lightDir.z);
   gl.uniform3f(U.uLightCol,dayNight.lightCol[0],dayNight.lightCol[1],dayNight.lightCol[2]);
@@ -10013,6 +10008,8 @@ function frame(){
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
   gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, (resT&&(resT.reticle===3||resT.reticle===4))?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.42):0);   // .y = the hollow scope TUBE, by reticle code; .w = the whip phase (0.42s clock)
+  if(resT&&resT.silenced) _mzTip=Math.max(_mzTip,0.45);                                   // the can's tip wins
+  gl.uniform3f(U.uLead,aimYawOff,aimPitchOff,_mzTip);   // MUZZLE-PIVOT (owner): the lead swings the BUTT around the planted tip — zero lead = byte-identical pose
   _expVis+=(playerPos.exposure-_expVis)*Math.min(1,dt*10);   // smooth the 0.12s exposure steps for the viewmodel dim only
   gl.uniform1f(U.uExposure, _expVis);
 
@@ -10130,8 +10127,15 @@ function frame(){
   { const fa=_faEl||(_faEl=document.getElementById('freeAim'));
     if(fa){ if(_faShow){
       const H=canvas.clientHeight||innerHeight;        // marker math inverts the ray build (uv*=fov, /iResolution.y)
-      const px=(aimYawOff*Math.cos(cameraPitch+aimPitchOff)/playerPos.currentFov)*H;
-      const py=(-aimPitchOff/playerPos.currentFov)*H;
+      let px,py;
+      if(_faRetR===0){                                 // BARE (owner): the dot rides the MUZZLE TIP itself — the pivot holds it planted, diegetic
+        const _tz=0.46+_mzTip-playerPos.viewKick*0.09; // tip view-space: seat(0,-0.09,0.46)+barrel(0,0.075,_mzTip)+bob
+        px=((playerPos.bobX/_tz)/playerPos.currentFov)*H;
+        py=(-((playerPos.bobY-0.015)/_tz)/playerPos.currentFov)*H;
+      }else{                                           // IRON: the post keeps darting with the lead — the aim's truth
+        px=(aimYawOff*Math.cos(cameraPitch+aimPitchOff)/playerPos.currentFov)*H;
+        py=(-aimPitchOff/playerPos.currentFov)*H;
+      }
       const cls=_faRetR===5?'iron':'dot';
       if(fa.className!==cls) fa.className=cls;
       if(fa.style.display!=='block') fa.style.display='block';
