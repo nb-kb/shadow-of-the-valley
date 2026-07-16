@@ -438,6 +438,9 @@ const PARAMS = {
   hazeMul:     {v:1.0, min:0.5, max:2.0,  step:0.1, label:'haze ×'},              // scales uFog
   crowdCap:    {v:20,  min:4,   max:20,   step:1,   label:'crowd cap'},           // caps rendered+active enemies (uEnemyCount)
   radBurn:     {v:4,   min:0,   max:12,   step:0.5, label:'gas burn hp/s'},       // CONTAINMENT P3: full-strength haze dose into the burn pool (masks shave it)
+  adsFree:     {v:1,   min:0,   max:1,    step:1,   label:'ADS free-aim'},        // CONTAINMENT P7 (spec H): while aiming, the gun leads and the camera trails — bare/iron only (glass optics stay center-locked). The goggles FREEAIM row fronts this
+  adsTrail:    {v:10,  min:3,   max:30,   step:1,   label:'free-aim trail /s'},   // camera catch-up rate — higher = tighter leash (10 ≈ 100ms lag)
+  adsDev:      {v:0.11,min:0.03,max:0.25, step:0.01,label:'free-aim ring'},       // max lead, as a fraction of the screen height at any zoom (marker travel cap)
 };
 const P = k => PARAMS[k].v;
 const PARAM_DEFAULTS={}; for(const k in PARAMS) PARAM_DEFAULTS[k]=PARAMS[k].v;   // boot literals — NEW GAME and slots without a value land here
@@ -2274,6 +2277,14 @@ const playerPos={
   velX:0, velZ:0, swinging:false, launched:false,   // velX/velZ = the ONLY horizontal velocity state (rope swing + slide-hop launch)
 };
 let cameraYaw=0.6, cameraPitch=0;
+// ADS FREE-AIM (CONTAINMENT P7, spec H): the gun's LEAD over the camera, radians. While
+// free-aiming (bare tool / iron sights) look input lands HERE, the camera chases it every
+// frame (adsTrail), and every player weapon ray reads aimForward() = camera + lead. The
+// true aim = cameraYaw+aimYawOff / cameraPitch+aimPitchOff — the trail transfer moves the
+// pair in lockstep, so the aim holds still in the world while the view glides onto it.
+// Zero whenever free-aim is idle → aimForward() degrades to camForward() exactly.
+let aimYawOff=0, aimPitchOff=0;
+const _devPush=(v,d,cap)=>{ const n=v+d, m=Math.max(cap,Math.abs(v)); return n>m?m:(n<-m?-m:n); };   // input may ride the lead TO the ring, never past it — and never robs recoil's overshoot back
 let gameTime=0, timeScale=1, runClock=0, kills=0, depth=1;
 let worldClock=0;                             // the sun's clock — ticks with gameTime but survives every deploy; only boot · NEW GAME · the debug time-of-day slider rewind it (gameTime stays the anim/iTime phase source)
 let highestDetection=0;
@@ -4266,6 +4277,14 @@ function camForward(){                                 // scratch — never hold
   _camFwd.x=sy*cp; _camFwd.y=sp; _camFwd.z=cy*cp;
   return _camFwd;
 }
+function aimForward(){                                 // the CROSSHAIR ray (P7): camera fwd unless free-aim leads it — every player weapon reads this, never camForward, so the hit-test follows the crosshair, not the camera center (spec H). Same scratch, same rules
+  if(aimYawOff===0&&aimPitchOff===0) return camForward();
+  const y=cameraYaw+aimYawOff, p=clamp(cameraPitch+aimPitchOff,-1.5,1.5);
+  const cy=Math.cos(y),sy=Math.sin(y);
+  const cp=Math.cos(p),sp=Math.sin(p);
+  _camFwd.x=sy*cp; _camFwd.y=sp; _camFwd.z=cy*cp;
+  return _camFwd;
+}
 const _camPosV=new Vec3(0,0,0);
 function camPos(){
   const ySm=(playerPos.ySm===undefined)?playerPos.y:playerPos.ySm;
@@ -4953,7 +4972,7 @@ function tryFirePlayer(dt){
   }
   if(!clicked || !activeTool || heldWorld) return;
 
-  const o=camPos(), f=camForward();
+  const o=camPos(), f=aimForward();                    // P7: the crosshair ray — free-aim lead included
   const origin=muzzleWorld();
   // converge: shots leave the muzzle but land where the crosshair looks
   const tAim=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,60);
@@ -5190,7 +5209,7 @@ function runContinuousBeams(dt){
   if(!res||res.bare){ _endBeams(); return; }
   const firing=fireDownEff()&&(!heldWorld||heldWorld.mode==='beam');
   if(!firing||uiOpen()){ _endBeams(); return; }
-  const o=camPos(), f=camForward();
+  const o=camPos(), f=aimForward();                     // P7: threads ride the crosshair ray — SEEKER/RETURN/CHAOS bend THIS, downstream, unchanged
   let any=false;
   for(let li=0;li<res.columns.length;li++){
     const lane=res.columns[li];
@@ -5611,7 +5630,7 @@ function runBurstLasers(dt){
       const cost=Math.ceil((q.sh.cost||0)/3);
       if(activeTool.charge<cost){ q.left=0; playSound('click'); break; }              // browned out mid-volley
       wearRoll(spendCharge(activeTool,cost));
-      let f=camForward(); const origin=muzzleWorld();   // each pulse re-reads the aim — the burst walks with the crosshair
+      let f=aimForward(); const origin=muzzleWorld();   // each pulse re-reads the aim — the burst walks with the crosshair (P7: lead included)
       const ch=q.sh.pend.chaos||0;
       if(ch){
         if(q.sh.pend.homing>0) f=chaosBias(camPos(),f);            // CHAIN LIGHTNING: the pulse leans at the warm first
@@ -5647,7 +5666,7 @@ function runTacLaser(dt){
   }
   if(activeTool.charge<0.5) return;
   activeTool.charge=Math.max(0,activeTool.charge-2*dt);
-  const o=camPos(), f=camForward();
+  const o=camPos(), f=aimForward();                     // P7: the laser tells the free-aim truth — its dot IS where the shots land
   const maxLen=40;
   let t=marchWorldJS(o.x,o.y,o.z,f.x,f.y,f.z,maxLen);
   const end=new Vec3(o.x+f.x*t,o.y+f.y*t,o.z+f.z*t);
@@ -6119,6 +6138,7 @@ function clearHudFx(){
   document.getElementById('radTint').style.opacity=0;                          // the gas dies with the run — the field re-reads next live frame
   document.getElementById('radStrip').classList.add('hidden'); _radTintO=0; _radSig='';
   playerPos.viewKick=0; playerPos.kickV=0; playerPos.pitchPend=0;
+  aimYawOff=0; aimPitchOff=0;                           // P7: a dead man's lead dies with him
 }
 function damagePlayer(dmg,head){
   // ---- armor seam: plates multiply, helmet shaves; medPort stays dormant.
@@ -7144,7 +7164,7 @@ function deployTo(levelId){
     const _ins = L.insertions ? L.insertions[Math.floor(runRng()*L.insertions.length)] : L.insertion;
     playerPos.x=_ins.x; playerPos.z=_ins.z;
     playerPos.y=Math.max(0,levelGroundJS(_ins.x,_ins.z));
-    cameraYaw=_ins.yaw; cameraPitch=0;
+    cameraYaw=_ins.yaw; cameraPitch=0; aimYawOff=0; aimPitchOff=0;
     playerPos.velY=0;
     for(const ex of L.exfils) ex.y=Math.max(0,levelGroundJS(ex.x,ex.z));   // smoke column bases sit on the dirt
     if(levelId==='hideout') _lkNews=installLockboxes();   // P4: BEFORE the registry/pack read ownership — a box hauled home stands this very visit
@@ -8688,9 +8708,33 @@ function updatePlayer(dt){
   const lx=INPUT.mdx*0.0022*INPUT.sensMouse + _pl*INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1);
   let ly=INPUT.mdy*0.0022*INPUT.sensMouse + _pl*INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1);
   if(INPUT.invertY) ly=-ly;
+  // ADS FREE-AIM (P7): live only for BARE tools and IRON sights — glass optics (dot/holo/2×/3×)
+  // draw their glyph at screen center, so their aim stays center-locked and unfought. While live,
+  // look input feeds the LEAD (gun + crosshair dart, capped at the adsDev ring); the camera
+  // chases below. heldWorld/physgun already force isAiming false, so they never route here.
+  const _faRet=activeTool&&activeTool._res?(activeTool._res.reticle||0):0;
+  const faLive=P('adsFree')>0.5&&playerPos.isAiming&&!!activeTool&&(_faRet===0||_faRet===5);
   if(!menus && (pointerLocked()||Math.abs(INPUT.padAxes[2])>0||Math.abs(INPUT.padAxes[3])>0)){
-    cameraYaw+=lx;
-    cameraPitch=clamp(cameraPitch-ly,-1.5,1.5);
+    if(faLive){
+      const dev=P('adsDev')*playerPos.currentFov;    // constant marker travel on SCREEN at any zoom (uv*=fov, inverted)
+      aimYawOff=_devPush(aimYawOff,lx,dev);
+      aimPitchOff=_devPush(aimPitchOff,-ly,dev);
+      aimPitchOff=clamp(aimPitchOff,-1.5-cameraPitch,1.5-cameraPitch);   // the world pitch clamp binds the SUM
+    }else{
+      cameraYaw+=lx;
+      cameraPitch=clamp(cameraPitch-ly,-1.5,1.5);
+    }
+  }
+  // the TRAIL — the camera chases the aim on a small delay, eating the lead as it goes; the
+  // aim (camera+lead) holds still in the world while the view glides on. Runs unconditionally:
+  // dropping ADS (or swapping to glass) drains any leftover lead smoothly, no snap.
+  if(aimYawOff!==0||aimPitchOff!==0){
+    const k=Math.min(1,P('adsTrail')*dt);
+    cameraYaw+=aimYawOff*k; aimYawOff-=aimYawOff*k;
+    const tp=aimPitchOff*k;
+    cameraPitch=clamp(cameraPitch+tp,-1.5,1.5); aimPitchOff-=tp;
+    if(Math.abs(aimYawOff)<1e-5) aimYawOff=0;
+    if(Math.abs(aimPitchOff)<1e-5) aimPitchOff=0;    // settle to EXACT zero so aimForward() takes its free path
   }
   playerPos.isAiming=down('aim')&&!menus&&!heldWorld&&!physgunRes();   // the physgun repurposes aim: it freezes
   playerPos.aimAmt+=((playerPos.isAiming?1:0)-playerPos.aimAmt)*Math.min(1,12*dt);
@@ -8933,7 +8977,9 @@ function updatePlayer(dt){
     playerPos.kickV-=(2*w0*playerPos.kickV+w0*w0*playerPos.viewKick)*dt;
     playerPos.viewKick=Math.max(0,Math.min(1,playerPos.viewKick+playerPos.kickV*dt));
     const pk=playerPos.pitchPend*Math.min(1,26*dt);
-    cameraPitch=clamp(cameraPitch+pk,-1.5,1.5); playerPos.pitchPend-=pk; }
+    if(faLive) aimPitchOff=clamp(aimPitchOff+pk,-1.5-cameraPitch,1.5-cameraPitch);   // FREE-AIM: the kick lands on the GUN — the marker jumps, the camera trails it in (the climb SUM matches the rigid path exactly)
+    else cameraPitch=clamp(cameraPitch+pk,-1.5,1.5);
+    playerPos.pitchPend-=pk; }
 
   // noise from movement + footfalls
   playerPos.noiseLevel=moving?(playerPos.isSprinting?9:(playerPos.isCrouching?1.0:3.4)):0.25;
