@@ -142,7 +142,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   border:1px solid #170f07;border-radius:2px 2px 6px 6px;box-shadow:0 3px 6px rgba(0,0,0,.5);}
 #bagBody::before{left:26px;} #bagBody::after{right:26px;}
 /* the lining: the interior everything sits in — the bag lip shades the panel tops (vignette) */
-#zoneStack{display:flex;gap:18px;align-items:flex-start;justify-content:flex-start;position:relative;
+#zoneStack{display:flex;flex-direction:column;gap:10px;align-items:flex-start;justify-content:flex-start;position:relative;   /* column flow: armor strip · interior row · settings band */
   padding:12px;border-radius:7px 7px 20px 20px;
   outline:1px dashed rgba(214,205,180,.17);outline-offset:-6px;
   background:
@@ -158,6 +158,23 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   border:1px solid rgba(215,220,230,.14);border-radius:5px;background:rgba(60,64,58,.22);
   margin:12px 0 0;pointer-events:auto;cursor:pointer;}          /* a folded container keeps its dock — click opens it */
 .zoneBlock{margin-bottom:10px;}
+.bagMid{display:flex;gap:18px;align-items:flex-start;}          /* the interior row: three fixed anchors under the armor strip */
+/* the RIG strip: the armor row on a leather backing band across the bag mouth */
+.rigStrip{align-self:stretch;}
+.rigStrip .zoneBlock{margin-bottom:0;}
+.rigStrip .gridWrap{margin:0;
+  background:linear-gradient(180deg,rgba(66,50,32,.58),rgba(40,30,18,.62)),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.12) 0 45px, rgba(255,255,255,.03) 45px 47px);
+  background-position:0 0,6px 0;border-color:rgba(23,15,7,.85);}
+/* the settings band: a webbing strip across the bag's bottom interior — the fittings dock here */
+.bagSettings{position:relative;display:flex;gap:14px;align-items:flex-start;align-self:stretch;padding:7px 9px;border-radius:5px;
+  background:repeating-linear-gradient(90deg, rgba(0,0,0,.16) 0 24px, rgba(255,255,255,.028) 24px 28px),
+    linear-gradient(180deg,#2c2b1b,#232213);
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.55), inset 0 -1px 0 rgba(233,220,180,.05);}
+.bagSettings:not(:has(.zoneBlock,.zoneStub)){display:none;}     /* nothing worn on the eyes/ears: no empty band */
+.bagSettings .zoneBlock{margin-bottom:0;}
+.bagSettings .gridWrap,.bagSettings .zoneStub{margin:0;}
+.bagSettings .zoneStub{min-width:104px;height:22px;align-self:center;}
 .equipCell{position:relative;}
 .slotGhost{font-size:11px;letter-spacing:.1em;color:#4a4a42;}
 .lockedCell{background:rgba(60,70,60,.12);}
@@ -8328,25 +8345,29 @@ const CELL_PITCH=47, GRID_PAD=6;      // 44px cell + 3px gap · 6px wrap padding
 function renderZones(){
   const host=document.getElementById('zoneStack');
   host.innerHTML='';
-  // THREE-ANCHOR LAYOUT (owner sketch): fixed left-anchored columns —
-  //   [RIG] · LEFT: pockets + belt/holsters/settings · MIDDLE: rucksack + harness · RIGHT: stash/loot crate.
-  // The rig never moves; each worn container is a detached panel docked in a FIXED slot order
-  // (folded = a slim stub in the same dock, click to open). Zone nav indices are untouched.
-  const rig=document.createElement('div');   rig.className='zoneCol';
+  // BAG-INTERIOR LAYOUT (owner sketch): the RIG rides as a horizontal armor strip across the bag
+  // mouth; the interior row keeps the fixed anchors — LEFT: pockets + belt/holsters · MIDDLE:
+  // rucksack + harness · RIGHT: stash/loot crate — and the fittings (goggles/headphones) dock in a
+  // settings band across the bottom. Docks stay one-per-slot in a FIXED order (folded = a slim stub
+  // in the same dock, click to open). Zone nav indices are untouched.
+  const rig=document.createElement('div');   rig.className='zoneCol rigStrip';
+  const mid=document.createElement('div');   mid.className='bagMid';
   const colL=document.createElement('div');  colL.className='zoneCol';
   const colM=document.createElement('div');  colM.className='zoneCol';
-  const colR=document.createElement('div');  colR.className='zoneCol';
-  host.appendChild(rig); host.appendChild(colL); host.appendChild(colM); host.appendChild(colR);
-  const LEFT_DOCK=['belt','holster','goggles','headphones'], MID_DOCK=['rucksack','harness'];
+  const colR=document.createElement('div');  colR.className='zoneCol colStash';
+  const setRow=document.createElement('div'); setRow.className='bagSettings';
+  host.appendChild(rig); host.appendChild(mid); mid.appendChild(colL); mid.appendChild(colM); mid.appendChild(colR); host.appendChild(setRow);
+  const LEFT_DOCK=['belt','holster'], SET_DOCK=['goggles','headphones'], MID_DOCK=['rucksack','harness'];
   const dock={};                                       // one dock per armor slot — panel or stub, the order never shuffles
   const pkSlot=document.createElement('div'); colL.appendChild(pkSlot);   // pockets pin the top of the LEFT group
   LEFT_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; colL.appendChild(d); });
+  SET_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; setRow.appendChild(d); });
   MID_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; colM.appendChild(d); });
   const zl=invZones();
   zl.forEach((z,zi)=>{
     const blk=document.createElement('div'); blk.className='zoneBlock'+(z.equipCol||z.id==='pockets'?'':' zonePanel');
     const g=document.createElement('div'); g.className='gridWrap';
-    g.style.gridTemplateColumns='repeat('+z.cols+',44px)';
+    g.style.gridTemplateColumns='repeat('+(z.equipCol?z.rows:z.cols)+',44px)';   // the RIG transposes to ONE ROW across the mouth — purely visual; nav ids + cursorY stay slot-indexed
     if(z.equipCol){
       EQUIP_SLOTS.forEach((slot,r)=>{
         const div=document.createElement('div'); div.className='cell equipCell';
@@ -8431,7 +8452,7 @@ function renderZones(){
       EQUIP_SLOTS.forEach((slot,r)=>{
         const it=equip[slot]; if(!it) return;
         const span=document.createElement('div'); span.className='itemSpan';
-        span.style.left=GRID_PAD+'px'; span.style.top=(GRID_PAD+r*CELL_PITCH)+'px';
+        span.style.left=(GRID_PAD+r*CELL_PITCH)+'px'; span.style.top=GRID_PAD+'px';   // transposed with the strip: the slot index walks X
         span.style.width=(CELL_PITCH-3)+'px'; span.style.height=(CELL_PITCH-3)+'px';
         const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false;
         span.appendChild(img); g.appendChild(span);
@@ -8441,7 +8462,7 @@ function renderZones(){
     (z.equipCol?rig : z.id==='pockets'?pkSlot : (z.id==='stash'||z.id==='crate')?colR : (dock[z.id]||colM)).appendChild(blk);
   });
   // folded containers hold their dock as a slim stub — click = the same open verb as X on the item
-  [...LEFT_DOCK,...MID_DOCK].forEach(id=>{ const it=equip[id];
+  [...LEFT_DOCK,...SET_DOCK,...MID_DOCK].forEach(id=>{ const it=equip[id];
     if(it&&it.inv&&it.invCols>0&&zoneShut(it)){
       const st=document.createElement('div'); st.className='zoneStub';
       st.innerHTML='<span class="slotGhost">'+id.slice(0,4).toUpperCase()+'</span>';
