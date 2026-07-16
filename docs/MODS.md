@@ -56,14 +56,15 @@ counts. Effects per-pellet.
 delivers per pellet (CONTACT+BOOM behind buckshot ≈ 5 blasts — price per
 delivery).
 
-**CODE LAGS THIS SPEC — fix on the next combat pass (NOT now):**
-1. Refund waives rounds — remove `roundsFor()`'s `sh.pend.refund?0` branch + the
-   mod text "no round spent". Refund = ⚡-base only.
-2. Remove my powder-lane `sh.lane.isPowder → return own` line in `roundsFor`
-   (built for the retired coreless C3).
-3. Retire the coreless powder synth (`resolveLane`'s `powderShot`, C1
-   self-detonate / C4 twin): a coreless powder round is plain lead now. Powder's
-   payoff is free relay mods WITH a bolt core.
+**CODE CAUGHT UP — the combat pass landed all three (3c2430b…bc4445e,
+2026-07-14; kept as the record of what changed):**
+1. ~~Refund waives rounds~~ — `roundsFor()`'s `refund?0` branch and the
+   "no round spent" mod text are GONE (1b57cf9). Refund = ⚡-base only.
+2. ~~Powder-lane `isPowder → return own` in `roundsFor`~~ — removed with it.
+3. ~~Coreless powder synth~~ — retired (`powderShot`/C1 self-detonate/C4 twin
+   deleted): a coreless powder round is plain lead. Powder's payoff is free
+   relay mods WITH a bolt core.
+Browser verification of the new model is still owed — docs/PLAYTEST.md §14.
 
 ---
 
@@ -84,8 +85,9 @@ delivery).
   face), enemy `tryShoot` and the continuous-beam head pick skip it too, and the
   CARRIER's pull pre-pays the whole chain — each housed shot's assembled cost
   (base + its own feeders' ⚡) plus its rounds (`roundsFor` recurses). REFUND on
-  the carrier waives the carrier's own base/lead only — the housed addition
-  stands (feed REFUND to the housed core itself to waive that link). POWDER
+  the carrier waives the carrier's own base ⚡ only — **never lead** (the
+  Corrected Model above; the old round-waiver is gone) and never the housed
+  addition (feed REFUND to the housed core itself to waive that link). POWDER
   waives mod surcharges only, never housed core bases. **CONTACT-thread
   carriers house and DRUM (v22 P-beamC C2)**: the thread fires half-size casts
   of the housed payload at its contact point every 0.5s — priced through the
@@ -205,8 +207,10 @@ Each modifier adds/multiplies its field; a proj core copies `pend`, then it rese
   (`pend.fuse+=pend.timer` when both >0), (b) resolveLane's relay wiring (third
   trigger), (c) the instant-boom gate (`!(p.fuse>0||p.timer>0)` — a timed BOOM
   flies), (d) emit → `pr.timerT`, the flight bell in `updateProjectiles`.
-- `refund` — consumed at (a) the resolveLane cost formula (waives the core's
-  base ⚡), (b) `roundsFor()` (waives lead).
+- `refund` — consumed at the resolveLane cost formula (waives the core's base
+  ⚡). Full stop — the old second consumer, `roundsFor()`'s lead waiver, was
+  REMOVED with the Corrected Model (combat pass 1b57cf9): lead is always a
+  full price.
 - `surchargeHard` — consumed at the resolveLane cost formula: the un-waivable
   slice of the surcharge pool. Only REFUND writes it; POWDER cannot touch it.
 - `chaos` — consumed at `emitProjectile` (→`pr.chaos` steer wobble),
