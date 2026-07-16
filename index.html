@@ -4737,6 +4737,7 @@ function updateInteract(dt){
   const _lvl=activeLevel;                                 // the exfil verb runs in EVERY world now — liveExfils gates it
   const ex=updateExfil(dt);
   if(activeLevel!==_lvl){ setPrompt(_pr,'',false); return; }  // exfil completed — extraction tore the world down mid-frame
+  if(uiMenusOpen()){ setPrompt(_pr,'',false); return; }       // menus open: the WORLD prompt goes dark (owner) — no frozen grab/stash cards behind the bag/rack/crate
   if(ex){ setPrompt(_pr, _exfilHold>0
       ? promptCard('EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s','keep holding '+_ik())
       : promptCard(ex.label,'hold '+_ik()+' extract'), true); return; }
@@ -5479,7 +5480,8 @@ function drawWhip(dt){
   const len=WHIP_REACH*ext*(1-rec*0.85);
   const over=Math.max(0,Math.sin((ph-0.30)*10))*_whipSeed.ov;    // the tip whips PAST the line at the crack — per-swing magnitude
   const tx=o.x+fw.x*len, ty=o.y+fw.y*len+over*0.25-(1-ext)*0.4, tz=o.z+fw.z*len;
-  const cx=(hx+tx)/2-b.right.x*0.7*(1-ph)*_whipSeed.cx, cy=(hy+ty)/2-0.35*(1-ext)*_whipSeed.lag+over*0.45, cz=(hz+tz)/2-b.right.z*0.7*(1-ph)*_whipSeed.cx;   // per-swing bow side + slack — every crack UNFURLS differently
+  const _belly=0.22*Math.sin(ph*Math.PI);              // a real PARABOLA (owner): the cord keeps a belly through the whole swing, not just the wind-up
+  const cx=(hx+tx)/2-b.right.x*1.05*(1-ph)*_whipSeed.cx, cy=(hy+ty)/2-0.55*(1-ext)*_whipSeed.lag-_belly+over*0.45, cz=(hz+tz)/2-b.right.z*1.05*(1-ph)*_whipSeed.cx;   // per-swing bow side + slack — every crack UNFURLS differently
   let px=hx,py=hy,pz=hz;
   for(let i=1;i<=6;i++){ const t=i/6, u=1-t;
     const qx=u*u*hx+2*u*t*cx+t*t*tx, qy=u*u*hy+2*u*t*cy+t*t*ty, qz=u*u*hz+2*u*t*cz+t*t*tz;
@@ -9127,7 +9129,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
 let _trPips=null;        // last pips HTML — the setPrompt dedup idiom (this rebuilt every 8Hz HUD tick, changed or not)
 function updateToolReadout(){
   const nm=document.getElementById('trName'), md=document.getElementById('trMode');
-  if(!activeTool){ nm.textContent='EMPTY HANDS'; md.textContent='—'; if(_trPips!==''){ _trPips=''; document.getElementById('trPips').innerHTML=''; } document.getElementById('chargeFill').style.width='0%'; return; }
+  if(!activeTool){ nm.textContent='WHIP'; md.textContent='—'; if(_trPips!==''){ _trPips=''; document.getElementById('trPips').innerHTML=''; } document.getElementById('chargeFill').style.width='0%'; return; }
   activeTool._res=activeTool._res||resolveTool(activeTool);
   const res=activeTool._res;
   nm.textContent=dispName(activeTool).toUpperCase();
