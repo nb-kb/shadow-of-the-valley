@@ -150,13 +150,35 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
     repeating-linear-gradient(45deg, rgba(0,0,0,.045) 0 3px, transparent 3px 6px),
     linear-gradient(180deg,#181a0f 0%,#1d1f12 55%,#191a0e 100%);
   box-shadow:inset 0 10px 16px -6px rgba(0,0,0,.8), inset 0 -6px 12px -8px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.6);}
-@media (max-height:820px){ #backpackUI{top:6%;transform:scale(.86);transform-origin:0 0;} }   /* short viewports: the whole bag scales from the fixed anchor — nothing inside re-flows, nothing scrolls */
+@media (max-height:920px){ #backpackUI{top:7%;} }   /* short viewports: the anchor rises, then the whole bag scales from it — nothing inside re-flows, nothing scrolls */
+@media (max-height:880px){ #backpackUI{top:6%;transform:scale(.86);transform-origin:0 0;} }
 .zoneCol{display:flex;flex-direction:column;align-items:flex-start;}
 .zoneCol .gridWrap{margin:12px 0 0;}                            /* left-aligned in the column — a neighbor folding never re-centers the rest */
-.zonePanel .gridWrap{background:rgba(8,10,12,.5);border-color:rgba(215,220,230,.26);}   /* worn containers + stash read as their own detached panels */
+/* worn containers read as canvas patch pockets sewn into the lining — stitched hem, flap lip up top */
+.zonePanel .gridWrap{border:1px solid rgba(16,12,5,.85);border-radius:7px;
+  outline:1px dashed rgba(214,205,180,.22);outline-offset:-5px;
+  background:
+    repeating-linear-gradient(100deg, rgba(255,255,255,.025) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg,#3d3b2b 0%,#33321f 62%,#2c2b19 100%);
+  box-shadow:0 3px 8px rgba(0,0,0,.5), inset 0 1px 0 rgba(233,220,180,.08);}
+.zonePanel .gridWrap::before{content:'';position:absolute;left:14%;right:14%;top:-7px;height:8px;pointer-events:none;
+  border:1px solid rgba(16,12,5,.85);border-bottom:none;border-radius:3px 3px 0 0;
+  background:linear-gradient(180deg,#4a4734,#35331f);}
+/* the stash column: a footlocker leaning in the bag's right side — plank-and-rim, not canvas */
+.colStash .gridWrap{border:1px solid #0e130a;border-radius:4px;
+  outline:1px solid rgba(130,150,120,.16);outline-offset:-4px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 9px, rgba(255,255,255,.022) 9px 18px),
+    linear-gradient(180deg,#333a2d 0%,#272d21 60%,#20251b 100%);
+  box-shadow:0 4px 10px rgba(0,0,0,.55), inset 0 1px 0 rgba(180,200,170,.07);}
+.colStash .gridWrap::before{content:none;}                      /* no fabric flap lip on the locker */
 .zoneStub{display:flex;align-items:center;justify-content:center;min-width:120px;align-self:stretch;height:18px;
-  border:1px solid rgba(215,220,230,.14);border-radius:5px;background:rgba(60,64,58,.22);
-  margin:12px 0 0;pointer-events:auto;cursor:pointer;}          /* a folded container keeps its dock — click opens it */
+  border:1px solid rgba(18,14,6,.8);border-radius:4px 4px 9px 9px;
+  outline:1px dashed rgba(214,205,180,.16);outline-offset:-4px;
+  background:linear-gradient(180deg,#413f2d,#312f1e);
+  box-shadow:0 2px 4px rgba(0,0,0,.45), inset 0 1px 0 rgba(233,220,180,.07);
+  margin:12px 0 0;pointer-events:auto;cursor:pointer;}          /* a folded container keeps its dock, flat as a pocket flap — click opens it */
+.zoneStub:hover{border-color:rgba(255,217,138,.45);}
 .zoneBlock{margin-bottom:10px;}
 .bagMid{display:flex;gap:18px;align-items:flex-start;}          /* the interior row: three fixed anchors under the armor strip */
 /* the RIG strip: the armor row on a leather backing band across the bag mouth */
@@ -176,8 +198,10 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .bagSettings .gridWrap,.bagSettings .zoneStub{margin:0;}
 .bagSettings .zoneStub{min-width:104px;height:22px;align-self:center;}
 .equipCell{position:relative;}
-.slotGhost{font-size:11px;letter-spacing:.1em;color:#4a4a42;}
-.lockedCell{background:rgba(60,70,60,.12);}
+.slotGhost{font-size:11px;letter-spacing:.1em;color:#5a5644;}
+.lockedCell{border-style:solid;border-color:rgba(0,0,0,.5);   /* settings dials: flat plates, not fabric recesses — stay dimmed and distinct */
+  background:linear-gradient(180deg,rgba(34,38,26,.5),rgba(24,27,17,.55));
+  box-shadow:inset 0 0 6px rgba(0,0,0,.5), inset 0 1px 0 rgba(180,190,160,.05);}
 .widg{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;}
 .widgLab{font-size:11px;letter-spacing:.06em;color:var(--dust);text-align:center;line-height:1.1;}
 .widgVal{font-size:13px;color:var(--bone);margin-top:2px;}
@@ -220,11 +244,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #rackInspect .tt-body{font-size:13px;line-height:1.6;color:var(--bone);}
 #toolUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);z-index:40;
   text-align:center;pointer-events:none;}
-.gridWrap{position:relative;display:grid;gap:3px;padding:6px;margin:12px auto 0;width:max-content;
-  pointer-events:auto;background:rgba(6,8,10,.16);border:1px solid rgba(215,220,230,.13);border-radius:7px;
-  backdrop-filter:blur(1.5px);}
-.cell{width:44px;height:44px;border:1px solid rgba(215,220,230,.15);border-radius:3px;
-  background:rgba(12,14,18,.28);position:relative;font-size:11px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
+.gridWrap{position:relative;display:grid;gap:3px;padding:6px;margin:12px auto 0;width:max-content;   /* gap+padding are the GRID_PAD/CELL_PITCH law — never touch */
+  pointer-events:auto;background:rgba(4,5,2,.24);border:1px solid rgba(20,16,8,.55);border-radius:7px;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+.cell{width:44px;height:44px;border:1px dashed rgba(15,12,5,.72);border-radius:4px;   /* a recess pressed into the fabric, stitched hairline edge */
+  background:linear-gradient(148deg, rgba(5,6,2,.52) 0%, rgba(24,24,14,.36) 52%, rgba(56,52,32,.28) 100%);
+  box-shadow:inset 2px 2px 5px rgba(0,0,0,.62), inset -1px -1px 2px rgba(226,196,130,.07), 0 1px 0 rgba(226,209,160,.05);
+  position:relative;font-size:11px;line-height:1.05;font-weight:bold;color:#fff;cursor:pointer;}
 #rackWrap{display:flex;gap:14px;align-items:flex-end;justify-content:center;padding:8px 4px;pointer-events:auto;}   /* re-enable clicks: parent #toolUI is pointer-events:none, so the rack-cell handlers were dead (mirrors .gridWrap) */
 .rackCol{display:flex;flex-direction:column-reverse;gap:3px;align-items:center;}
 .rackHead{font-size:11px;letter-spacing:.08em;color:var(--dust);text-align:center;white-space:nowrap;align-self:end;pointer-events:none;}
@@ -241,16 +267,26 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .rcell .rlbl{position:absolute;bottom:-1px;left:1px;right:1px;font-size:10px;line-height:1;color:#dfe3ea;
   text-shadow:0 1px 2px #000;pointer-events:none;overflow:hidden;white-space:nowrap;}
 .cell:hover{outline:1px solid var(--dust);z-index:2;}
-.cell.cursor{outline:2px solid var(--exposed);z-index:3;}
+.cell.cursor{outline:2px solid var(--exposed);z-index:3;   /* warm lamplight on the recess edges */
+  box-shadow:inset 2px 2px 5px rgba(0,0,0,.45), inset 0 0 9px rgba(255,217,138,.22), 0 0 13px rgba(255,190,90,.30), 0 1px 0 rgba(226,209,160,.05);}
 .cell.origin{border-color:rgba(255,255,255,.30);}
 .itemSpan{position:absolute;z-index:1;pointer-events:none;display:flex;flex-direction:column;
   align-items:center;justify-content:flex-end;padding:2px;}
+.itemSpan::before{content:'';position:absolute;inset:10% 8% 6%;z-index:-1;border-radius:50%;   /* the item presses a soft shadow into the fabric */
+  background:radial-gradient(ellipse at 50% 66%, rgba(0,0,0,.42), transparent 68%);}
 .itemSpan img{width:86%;height:70%;object-fit:contain;margin:auto;
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.85));}
 .itemSpan .lbl2{font-size:11px;letter-spacing:.05em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 4px #000;
   white-space:nowrap;overflow:hidden;max-width:100%;}
 #inspectUI{position:absolute;left:46%;top:58%;transform:none;z-index:45;min-width:250px;width:max-content;max-width:calc(100vw - 50px);padding:14px;}   /* MIDDLE-aligned (owner sketch): opened lockboxes/mags/tool pockets dock by the middle group; renderInspect clamps it on-screen */
 #inspectUI .gridWrap{margin:10px auto 0;}
+/* the inspect panel speaks the pouch language: a detached canvas pocket held up to the light */
+#inspectUI.panel{border:2px solid #1c1b10;border-radius:10px 10px 18px 18px;
+  background:
+    repeating-linear-gradient(100deg, rgba(255,255,255,.03) 0 2px, transparent 2px 5px),
+    linear-gradient(178deg,#454331 0%,#37351f 58%,#2b2a18 100%);
+  box-shadow:0 16px 34px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.5), inset 0 1px 0 rgba(233,220,180,.12);}
+#inspectUI.panel::before,#inspectUI.panel::after{border-color:rgba(122,96,62,.9);}   /* leather corner tabs instead of stencil brackets */
 #inspectBody{max-height:calc(100vh - 130px);overflow-y:auto;}   /* last ditch: a monster rack scrolls inside the panel, never past the fold. NOT on .panel — its corner brackets live at -2px */
 .seqReadout{margin-top:14px;padding:10px;border:1px dashed var(--line);font-size:13px;letter-spacing:.1em;color:var(--dust);}
 .seqChip{display:inline-block;border:1px solid var(--line);padding:2px 6px;margin:2px 3px 2px 0;color:var(--bone);background:#000;}
