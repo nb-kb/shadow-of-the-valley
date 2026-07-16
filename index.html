@@ -9529,8 +9529,10 @@ function frame(){
       const cls=_faRetR===5?'iron':'dot';
       if(fa.className!==cls) fa.className=cls;
       if(fa.style.display!=='block') fa.style.display='block';
-      fa.style.opacity=Math.min(1,(playerPos.aimAmt-0.55)*3.3).toFixed(2);   // fades in over the same uAim band the shader glyph used
-      fa.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px)';
+      const op=Math.min(1,(playerPos.aimAmt-0.55)*3.3).toFixed(2);           // fades in over the same uAim band the shader glyph used
+      if(fa.style.opacity!==op) fa.style.opacity=op;                         // changed-only writes, the render-loop dedup idiom
+      const tr='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px)';
+      if(fa.style.transform!==tr) fa.style.transform=tr;
     }else if(fa.style.display!=='none') fa.style.display='none'; } }
   { const ret=(activeTool&&activeTool._res)?(activeTool._res.reticle||0):0;   // scope glass: red-dot(1)/holo(2) only, in lockstep with the shader reticle's uAim>0.55 gate
     const sg=_sgEl||(_sgEl=document.getElementById('scopeGlass'));
