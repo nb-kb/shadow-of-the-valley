@@ -7718,7 +7718,7 @@ function saveGame(slot){
     const ch=lockLegInv[r][c];
     if(ch&&!llSeen.has(ch)&&ch.x===c&&ch.y===r){ llSeen.add(ch); lockLeg.push(itemToJSON(ch)); }
   }
-  const params={}; for(const k in PARAMS) params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it
+  const params={}; for(const k in PARAMS) if(k!=='maxEnemies') params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it. maxEnemies stays OUT: deploy code owns it (seedLevelSpawns/resetLevel set it per raid) — a blob copy would stale-pin the horde size
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
               equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
               params, poiRot:_poiRot, crateRot:_crateRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},
@@ -7753,8 +7753,8 @@ function saveMeta(slot){
 // still means "empty", never a crash. NEW GAME walks this with no blob at all.
 function applyDebugTuning(bp,bf){
   for(const k in PARAMS) PARAMS[k].v=PARAM_DEFAULTS[k];
-  if(bp) for(const k in PARAMS) if(typeof bp[k]==='number'&&isFinite(bp[k]))
-    PARAMS[k].v=clamp(bp[k],PARAMS[k].min,PARAMS[k].max);
+  if(bp) for(const k in PARAMS) if(k!=='maxEnemies'&&typeof bp[k]==='number'&&isFinite(bp[k]))
+    PARAMS[k].v=clamp(bp[k],PARAMS[k].min,PARAMS[k].max);   // maxEnemies never restores from a blob — deploy code owns it (old blobs still carry one; ignore it)
   FLAGS.god=!!(bf&&bf.god); FLAGS.noclip=!!(bf&&bf.noclip); FLAGS.seeAll=!!(bf&&bf.seeAll);
   resize();                                               // renderScale may have moved with the rest
   syncDebugPanel();                                       // the once-built knobs go stale otherwise
@@ -7767,14 +7767,14 @@ function loadGame(slot){
     const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));       // must read as EMPTY, never crash over a half-wiped rig
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
-    for(const k in b.equip){ const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }
+    for(const k of EQUIP_SLOTS){ if(!b.equip[k]) continue; const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }   // saveGame's own whitelist — a foreign blob key can't invent an equip slot
     syncBagAlias(); clampZone();
     if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
     for(const row of stashInv) row.fill(null);            // in place — the crate registry holds this array. v2 reads empty.
     for(const cj of (b.stash||[])){
       const ch=itemFromJSON(cj); if(!ch) continue;        // unknown defKeys drop silently, as everywhere
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,stashInv,STASH_COLS,STASH_ROWS)) placeInGrid(ch,cj.x,cj.y,stashInv);
-      else autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS);
+      else if(!autoPlace(ch,stashInv,STASH_COLS,STASH_ROWS)) _retuneOrphans.push(ch);   // overflow salvages + reports below — never a silent vanish
     }
     // v6 CONTAINMENT: death-proof lockboxes restore exactly like the stash. Absent in
     // v2..v5 blobs → (b.lockEpic||[]) empty → boxes stay empty (and unowned, below).
@@ -7782,19 +7782,19 @@ function loadGame(slot){
     for(const cj of (b.lockEpic||[])){
       const ch=itemFromJSON(cj); if(!ch) continue;        // unknown defKeys drop silently, as everywhere
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,lockEpicInv,LOCK_EPIC_COLS,LOCK_EPIC_ROWS)) placeInGrid(ch,cj.x,cj.y,lockEpicInv);
-      else autoPlace(ch,lockEpicInv,LOCK_EPIC_COLS,LOCK_EPIC_ROWS);
+      else if(!autoPlace(ch,lockEpicInv,LOCK_EPIC_COLS,LOCK_EPIC_ROWS)) _retuneOrphans.push(ch);   // a death-proof box must not eat its own contents
     }
     for(const row of lockLegInv) row.fill(null);
     for(const cj of (b.lockLeg||[])){
       const ch=itemFromJSON(cj); if(!ch) continue;
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,lockLegInv,LOCK_LEG_COLS,LOCK_LEG_ROWS)) placeInGrid(ch,cj.x,cj.y,lockLegInv);
-      else autoPlace(ch,lockLegInv,LOCK_LEG_COLS,LOCK_LEG_ROWS);
+      else if(!autoPlace(ch,lockLegInv,LOCK_LEG_COLS,LOCK_LEG_ROWS)) _retuneOrphans.push(ch);
     }
     for(const row of pocketsGrid) row.fill(null);         // absent in old blobs → stays empty
     for(const cj of (b.pockets||[])){
       const ch=itemFromJSON(cj); if(!ch) continue;
       if(cj.x!==undefined && gridFits(ch,cj.x,cj.y,pocketsGrid,POCKET_COLS,POCKET_ROWS)) placeInGrid(ch,cj.x,cj.y,pocketsGrid);
-      else autoPlace(ch,pocketsGrid,POCKET_COLS,POCKET_ROWS);
+      else if(!autoPlace(ch,pocketsGrid,POCKET_COLS,POCKET_ROWS)) _retuneOrphans.push(ch);
     }
     applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
     _poiRot=(Number.isInteger(b.poiRot)&&b.poiRot>=0&&b.poiRot<6)?b.poiRot:0;   // POI rotation rides the slot (v5); missing/corrupt → 0
@@ -7804,8 +7804,8 @@ function loadGame(slot){
     _lockOpen={}; if(Array.isArray(b.labsOpen)) for(const k of b.labsOpen) if(LOCKS[k]) _lockOpen[k]=true;   // P4 raid-state; unknown ids drop, missing/garbage → all labs LOCKED
     for(const t in LOCKBOX) LOCKBOX[t].own=Array.isArray(b.lockOwn)&&b.lockOwn.indexOf(t)>=0;   // P4: missing/garbage → not owned
     syncLockCrates();                                                            // loads run at the hideout — the physical boxes must match the loaded ownership NOW
-    zombiesKilled=Number.isFinite(b.zombiesKilled)?b.zombiesKilled:0;            // v6 PR (System I); older/absent/garbage → 0
-    outskirtsTime=Number.isFinite(b.outskirtsTime)?b.outskirtsTime:0;            // v6 PR (System I); older/absent/garbage → 0
+    zombiesKilled=Number.isFinite(b.zombiesKilled)?Math.max(0,b.zombiesKilled):0;   // v6 PR (System I); older/absent/garbage → 0, negatives clamp — the record never counts backward
+    outskirtsTime=Number.isFinite(b.outskirtsTime)?Math.max(0,b.outskirtsTime):0;   // v6 PR (System I); same clamp
   }catch(e){
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
@@ -7818,17 +7818,19 @@ function loadGame(slot){
     syncLockCrates();                                          // and the LIVE hideout sheds them
     zombiesKilled=0; outskirtsTime=0;                      // v6: corrupt slot reads as an empty identity → PR counters zero too
     _retuneOrphans.length=0;
+    reloadTimer=0; holsterCur=-1; holsterDir=0; _lastReloadT=-9; _lastSwap=null;   // the onDeath idiom — no combat transient survives a rig swap
     syncBagAlias(); clampZone();
     applyDebugTuning(null,null);                          // a corrupt slot is an empty one — stock knobs
     toast('SLOT '+(slot+1)+' CORRUPT — READ AS EMPTY'); playSound('empty');
     refreshInvUI();
     return;
   }
+  reloadTimer=0; holsterCur=-1; holsterDir=0; _lastReloadT=-9; _lastSwap=null;   // the onDeath idiom: no half-fed reload, draw memory, or swap-undo pointing into the PRE-load rig
   toast('MEMORY RESTORED · SLOT '+(slot+1)); playSound('pickup');
-  if(_retuneOrphans.length){                              // the retune unseated tail mods — pockets first, stash second
-    let lost=0;
-    for(const o of _retuneOrphans) if(!autoPlaceAny(o)&&!autoPlace(o,stashInv,STASH_COLS,STASH_ROWS)) lost++;
-    toast('BARRELS SHRANK — '+(_retuneOrphans.length-lost)+' MODS MOVED'+(lost?' · '+lost+' LOST':''));
+  if(_retuneOrphans.length){                              // the salvage bin: retune tails + every grid overflow — pockets first, stash second, the floor LAST (never vanish)
+    let dropped=0;
+    for(const o of _retuneOrphans) if(!autoPlaceAny(o)&&!autoPlace(o,stashInv,STASH_COLS,STASH_ROWS)){ dropItemToWorld(o,0.6,1.2); dropped++; }
+    toast('LOADOUT REPACKED — '+(_retuneOrphans.length-dropped)+' MOVED'+(dropped?' · '+dropped+' DROPPED AT YOUR FEET':''));
     _retuneOrphans.length=0;
   }
   refreshInvUI();
