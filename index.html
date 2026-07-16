@@ -1637,7 +1637,7 @@ vec2 map(vec3 p){
       if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
         float dk2=uMenuLook.x;                                   // free-looking DUCKS the inspection low and away (camera-locked = stable, never unhinged)
-        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20+dk2*0.14)*mm, (gz-uBob.z-0.47-dk2*0.22)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — CLOSER (owner), tucked under the look
+        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20+dk2*0.05)*mm, (gz-uBob.z-0.47-dk2*0.08)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.47) — CLOSER (owner); the duck only NUDGES it: the tool stays in view, inspecting (owner)
         vl=rotX(vl, (1.42 + sin(iTime*0.31)*0.05)*mm);           // muzzle tipped WELL away — broadly looking down the top of the barrel (owner); a slow breathing pitch
         vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
         vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
@@ -9791,7 +9791,9 @@ function bagFrame(){
   if(su){ su.classList.toggle('hidden',!showBag); su.style.opacity=showBag?_propPhase.toFixed(2):''; }
   const _dks=_mlDuck*_mlDuck*(3-2*_mlDuck);                          // smoothstepped duck — soft at BOTH ends (owner: smoother), shared by every consumer
   if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
-    if(showTool) tu.style.transform='translate(-50%,'+(-44+16*_dks).toFixed(1)+'%) scale('+(1-0.30*_dks).toFixed(3)+')'; }   // the rack UI ducks with its gun
+    if(showTool){ const _swx=Math.sin(gameTime*0.41)*10, _swy=Math.sin(gameTime*0.27)*8;             // the rack UI SWAYS with its gun — mirrors the model's inspection drift + layered turns (owner)
+      const _swr=Math.sin(gameTime*0.5)*1.6+Math.sin(gameTime*0.23)*0.8;
+      tu.style.transform='translate('+_swx.toFixed(1)+'px,'+_swy.toFixed(1)+'px) translate(-50%,'+(-44+8*_dks).toFixed(1)+'%) scale('+(1-0.15*_dks).toFixed(3)+') rotate('+_swr.toFixed(2)+'deg)'; } }   // duck HALVED: a polite dip, the inspection stays present
   if(!showBag) return;
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
