@@ -115,6 +115,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   border:1px solid rgba(215,220,230,.14);border-radius:5px;background:rgba(60,64,58,.22);
   margin:12px 0 0;pointer-events:auto;cursor:pointer;}          /* a folded container keeps its dock — click opens it */
 .zoneBlock{margin-bottom:10px;}
+#invTip{position:fixed;z-index:60;pointer-events:none;background:rgba(8,10,12,.93);border:1px solid rgba(215,220,230,.25);
+  border-radius:6px;padding:7px 10px;font-size:14px;line-height:1.35;max-width:280px;color:#cfd2c8;text-align:left;}
 .equipCell{position:relative;}
 .slotGhost{font-size:11px;letter-spacing:.1em;color:#4a4a42;}
 .lockedCell{background:rgba(60,70,60,.12);}
@@ -284,6 +286,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="backpackUI" class="hidden">
   <div id="zoneStack"></div>
 </div>
+<div id="invTip" class="hidden"></div>
 
 <!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
 <div id="toolUI" class="hidden">
@@ -3689,7 +3692,7 @@ function clampZone(){
   return z[zoneIdx];
 }
 // try each equipped storage grid, affinity-first (ordering only, never a restriction)
-function autoPlaceAny(item){
+function autoPlaceAny(item,excludeId){   // excludeId (QoL): quick-move never sends an item back to the zone it just left (stack top-ups still merge anywhere)
   if(item instanceof Ammunition){        // top up existing same-caliber stacks before claiming a fresh cell
     for(const z of storageZones().filter(z=>!z.external))
       for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++){ const it=z.grid[r][c];
@@ -3697,7 +3700,7 @@ function autoPlaceAny(item){
           const move=Math.min(AMMO_STACK-it.count,item.count); it.count+=move; item.count-=move;
           if(item.count<=0) return true; } }
   }
-  const zs=storageZones().filter(z=>!z.external);
+  const zs=storageZones().filter(z=>!z.external&&z.id!==excludeId);
   const order=[...zs];
   const pref=id=>{ const i=order.findIndex(z=>z.id===id); if(i>0) order.unshift(order.splice(i,1)[0]); };
   const defer=id=>{ const i=order.findIndex(z=>z.id===id); if(i>=0&&i<order.length-1) order.push(order.splice(i,1)[0]); };
@@ -3903,10 +3906,107 @@ function consumeHeld(){
 
 // a SIGHT = any fov-class rack part that is NOT the adapter itself (the 5 reticles: iron/dot/holo/2×/3×)
 function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.unique==='fov' && !it.effect.adapter; }
+
+// ============================================================
+// INVENTORY ERGONOMICS (owner batch): drag&drop rides the hands-pick, double-tap □ /
+// Shift+LMB quick-moves, Shift+RMB / LT+□ splits stacks, hover names everything.
+// ============================================================
+let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
+let _tipT=null, _mx=0, _my=0;
+document.addEventListener('mousemove',e=>{ _mx=e.clientX; _my=e.clientY; });
+function stackInto(it,grid){                       // pour a held pile onto same-caliber stacks in a grid (banking merges before it claims a cell)
+  for(const row of grid) for(const ch of row){
+    if(ch&&ch instanceof Ammunition&&ch.ammoType===it.ammoType&&ch.count<AMMO_STACK){
+      const mv=Math.min(AMMO_STACK-ch.count,it.count); ch.count+=mv; it.count-=mv;
+      if(it.count<=0) return; } }
+}
+function quickMoveHeld(){                          // □□ / double-LMB: the held item goes to its smartest home
+  const it=heldWorld.w.item;
+  if(it._armT!=null){ toast('ARMED'); playSound('empty'); return; }
+  let ok=false;
+  if(_hpick&&_hpick.ext) ok=autoPlaceAny(it);                                   // out of someone else's box → onto the player
+  else if(isCrateOpen&&lootCrate&&lootCrate.stash&&(!_hpick||_hpick.srcId!=='stash')){   // a bank is open → bank it (stacks merge first)
+    if(it instanceof Ammunition){ stackInto(it,lootCrate.inv); if(it.count<=0){ consumeHeld(); playSound('place'); refreshInvUI(); return; } }
+    ok=autoPlace(it,lootCrate.inv,lootCrate.invCols,lootCrate.invRows);
+  }
+  else ok=autoPlaceAny(it,_hpick?_hpick.srcId:undefined);                       // best pocket — never the one it just left
+  if(ok){ consumeHeld(); playSound('place'); refreshInvUI(); }
+  else { toast('NO ROOM'); playSound('empty'); }
+}
+function quickMoveAtCursor(){                      // Shift+LMB: quick-move the cell under the cursor, no pick-place dance
+  hideInvTip();
+  if(heldWorld){ playSound('empty'); return; }
+  const f=focusGrid(); if(!f){ return; }
+  clampCursor(f);
+  if(f.equipCol){                                  // on the rig: strip the piece straight into storage
+    const slot=EQUIP_SLOTS[cursorY], it=equip[slot];
+    if(!it){ playSound('click'); return; }
+    equip[slot]=null; syncBagAlias();
+    if(autoPlaceAny(it)){ clampZone(); playSound('place'); refreshInvUI(); }
+    else { equip[slot]=it; syncBagAlias(); toast('NO ROOM'); playSound('empty'); }
+    return;
+  }
+  if(f.locked||f.rack||!f.grid){ playSound('click'); return; }
+  const cell=cellAt(f);
+  if(!cell||cell.widget){ playSound('click'); return; }
+  if(cell instanceof Barrel && !barrelIsEmpty(cell)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
+  if(cell instanceof Platform && !platformIsEmpty(cell)){ toast('CLEAR THE PLATFORM FIRST'); playSound('empty'); return; }
+  if(cell===inspectItem) closeInspect();
+  const ox=cell.x, oy=cell.y;
+  const srcId=(currentFocus===0)?(invZones()[zoneIdx]||{}).id:undefined;
+  if(f.slotMode) f.grid[oy][ox]=null; else removeFromGrid(cell,f.grid);
+  let ok=false;
+  if(f.external) ok=autoPlaceAny(cell);
+  else if(isCrateOpen&&lootCrate&&lootCrate.stash&&srcId!=='stash'){
+    if(cell instanceof Ammunition){ stackInto(cell,lootCrate.inv); if(cell.count<=0){ playSound('place'); refreshInvUI(); return; } }
+    ok=autoPlace(cell,lootCrate.inv,lootCrate.invCols,lootCrate.invRows);
+  }
+  else ok=autoPlaceAny(cell,srcId);
+  if(ok){ playSound('place'); refreshInvUI(); }
+  else {                                           // no home — put it back exactly where it was
+    if(f.slotMode){ f.grid[oy][ox]=cell; cell.x=ox; cell.y=oy; } else placeInGrid(cell,ox,oy,f.grid);
+    toast('NO ROOM'); playSound('empty'); refreshInvUI();
+  }
+}
+function splitAtCursor(){                          // Shift+RMB / LT+□: half the pile into the empty hand
+  hideInvTip();
+  if(heldWorld){ playSound('empty'); return; }
+  const f=focusGrid(); if(!f||!f.grid||f.locked){ playSound('click'); return; }
+  clampCursor(f);
+  const cell=cellAt(f);
+  if(!(cell instanceof Ammunition)||cell.count<2){ playSound('empty'); return; }
+  const take=cell.count>>1; cell.count-=take;
+  const half=ITEM_DEFS[cell.defKey](); half.count=take;
+  handHold(half); refreshInvUI();
+}
+function armInvTip(it){                            // hover ~a beat and the item names itself — no inspect needed
+  clearTimeout(_tipT);
+  const tip=document.getElementById('invTip');
+  if(!it||it.widget){ if(tip) tip.classList.add('hidden'); return; }
+  _tipT=setTimeout(()=>{
+    if(!tip||(!uiMenusOpen()&&!isCrateOpen)) return;
+    const extra=it instanceof Ammunition?' ×'+it.count:(it instanceof Magazine?' '+it.loaded+'/'+it.maxCapacity:'');
+    const d=(it.desc&&it.desc())||'';
+    tip.innerHTML='<b>'+dispName(it)+extra+'</b>'+(d?'<div style="opacity:.8;margin-top:3px">'+d+'</div>':'');
+    tip.classList.remove('hidden');
+    tip.style.left=Math.min(innerWidth-300,_mx+16)+'px';
+    tip.style.top =Math.min(innerHeight-90,_my+14)+'px';
+  },300);
+}
+function hideInvTip(){ clearTimeout(_tipT); const t=document.getElementById('invTip'); if(t) t.classList.add('hidden'); }
 function interactInventory(){
   const f=focusGrid(); if(!f.grid&&!f.rack&&!f.equipCol) return;
   clampCursor(f);
   const cell=cellAt(f);
+  hideInvTip();
+  // DOUBLE-TAP QUICK-MOVE (□□ / double-LMB): the pick verb again on the SAME cell right after
+  // a hands-pick sends the held item to its smartest home instead of setting it back down
+  if(heldWorld&&heldWorld.mode==='hands'&&_hpick&&runClock-_hpick.t<0.35
+     &&_hpick.f===currentFocus&&_hpick.zi===zoneIdx&&_hpick.x===cursorX&&_hpick.y===cursorY){
+    quickMoveHeld(); return;
+  }
+  if(_hpick) _hpick.live=false;                    // any OTHER verb ends the drag gesture — a swap must not re-place on mouseup
+  if(!heldWorld&&INPUT.padButtons&&INPUT.padButtons[6]&&cell instanceof Ammunition){ splitAtCursor(); return; }   // LT(held)+□ (pad): split the stack (kb: Shift+RMB) — padButtons is the LIVE state, rawPad is edge-only
 
   // ---- the rig column: equip / unequip / swap, type-locked --------------------------
   if(f.equipCol){
@@ -3926,6 +4026,7 @@ function interactInventory(){
       equip[slot]=null;
       syncBagAlias(); clampZone();
       handHold(cell);
+      _hpick={t:runClock,f:currentFocus,zi:zoneIdx,x:cursorX,y:cursorY,ext:false,srcId:undefined,live:true};
       playSound('pickup'); refreshInvUI(); return;
     }
     playSound('click'); return;
@@ -3937,6 +4038,7 @@ function interactInventory(){
     if(cell){                                              // lift loot into your hands; you stow it yourself
       removeFromGrid(cell,f.grid);
       handHold(cell);                                      // spawns it in-hand + plays 'grab'
+      _hpick={t:runClock,f:currentFocus,zi:zoneIdx,x:cursorX,y:cursorY,ext:true,srcId:undefined,live:true};
       toast(dispName(cell).toUpperCase()+' TAKEN'); refreshInvUI(); return;
     }
     playSound('click'); return;
@@ -4038,6 +4140,8 @@ function interactInventory(){
     if(f.rack) writeRef(refAt(f),null);
     else removeFromGrid(cell,f.grid);
     handHold(cell);
+    _hpick={t:runClock,f:currentFocus,zi:zoneIdx,x:cursorX,y:cursorY,ext:false,
+            srcId:(currentFocus===0)?(invZones()[zoneIdx]||{}).id:undefined,live:true};   // drag&drop + □□ read this pick
     refreshInvUI(); return;
   }
   playSound('click');
@@ -8169,8 +8273,13 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus===0&&zoneIdx===zi&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
-          currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press so a DOM rebuild can't eat it (trackpad tap may emit button 1)
+          currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); armInvTip(equip[slot]); });
+        div.addEventListener('mouseleave',hideInvTip);
+        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r;
+          if(e.shiftKey){ quickMoveAtCursor(); return; }             // Shift+LMB: strip straight into storage
+          interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press so a DOM rebuild can't eat it (trackpad tap may emit button 1)
+        div.addEventListener('mouseup',e=>{ if(e.button>0) return;    // DRAG&DROP: released over a DIFFERENT cell than the pick → place here
+          if(heldWorld&&heldWorld.mode==='hands'&&_hpick&&_hpick.live&&!(_hpick.f===currentFocus&&_hpick.zi===zoneIdx&&_hpick.x===cursorX&&_hpick.y===cursorY)){ _hpick.live=false; interactInventory(); } });
         div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
         div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; quickUse(); });               // MMB = F (wield·feed) — desktop-mouse bonus
         g.appendChild(div);
@@ -8195,9 +8304,16 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus===0&&zoneIdx===zi&&cursorX===c&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
-          currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
-        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
-        div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
+          currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); armInvTip(z.grid?z.grid[r][c]:null); });
+        div.addEventListener('mouseleave',hideInvTip);
+        div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r;
+          if(e.shiftKey){ quickMoveAtCursor(); return; }             // Shift+LMB: quick-move to the smartest home
+          interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
+        div.addEventListener('mouseup',e=>{ if(e.button>0) return;    // DRAG&DROP: released over a DIFFERENT cell than the pick → place here
+          if(heldWorld&&heldWorld.mode==='hands'&&_hpick&&_hpick.live&&!(_hpick.f===currentFocus&&_hpick.zi===zoneIdx&&_hpick.x===cursorX&&_hpick.y===cursorY)){ _hpick.live=false; interactInventory(); } });
+        div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r;
+          if(e.shiftKey){ splitAtCursor(); return; }                 // Shift+RMB: split a stack into the hand
+          activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
         div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; quickUse(); });               // MMB = F (wield·feed)
         g.appendChild(div);
       }
@@ -8274,16 +8390,21 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       if(isDebugOpen) return;
       currentFocus=focusIdx; cursorX=c; cursorY=r;
-      refreshInvUI();
+      refreshInvUI(); armInvTip(grid?grid[r][c]:null);
     });
+    div.addEventListener('mouseleave',hideInvTip);
     div.addEventListener('mousedown',e=>{ if(e.button>0) return;
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
+      if(e.shiftKey){ quickMoveAtCursor(); return; }   // Shift+LMB: quick-move
       interactInventory();          // LMB = E — primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
     });
+    div.addEventListener('mouseup',e=>{ if(e.button>0) return;   // DRAG&DROP: released over a different cell than the pick → place here
+      if(heldWorld&&heldWorld.mode==='hands'&&_hpick&&_hpick.live&&!(_hpick.f===currentFocus&&_hpick.x===cursorX&&_hpick.y===cursorY)){ _hpick.live=false; interactInventory(); } });
     div.addEventListener('contextmenu',e=>{ e.preventDefault();
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
+      if(e.shiftKey){ splitAtCursor(); return; }    // Shift+RMB: split a stack into the hand
       activateAtCursor();           // RMB / two-finger tap = X
     });
     div.addEventListener('auxclick',e=>{ if(e.button!==1) return;
