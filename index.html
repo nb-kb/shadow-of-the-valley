@@ -2280,6 +2280,8 @@ let highestDetection=0;
 let bruteRespawnT=0;                          // BRUTE mini-boss: game-time countdown to the lone roamer's return (0 = a brute is live or none owed). Teardown-safe: reset in teardownWorld + resetLevel so a boss never leaks across worlds.
 const BRUTE_RESPAWN=15*60;                    // 15 min game-time (horde spec) — ticked by the same dt as worldClock
 let _poiRot=Math.floor(Math.random()*3);      // AREA-1 POI ROTATION (build 4): cursor into the opposite-quadrant hot pairs {c,c+half}; advances each CAMP raid so the NEXT raid draws a DISJOINT pair. Persisted per-slot (SAVE_VER 5) so rotation survives reload; re-randomized on a fresh run.
+let _crateRot=Math.floor(Math.random()*12);   // AREA-1 CONTAINMENT (P6): LIVE-CRATE rotation phase — which crate of each rot-flagged PROPS cluster sits out THIS raid (spec G: positions rotate raid to raid). Advances once per CAMP raid in buildCrateRegistry, NOT beside _poiRot: the registry and BOTH SDF twins must read ONE settled phase, and the registry builds before seedLevelSpawns runs. Persisted per-slot (v6 additive: crateRot); re-randomized on a fresh run. 12 = lcm of the 3/4-crate clusters, so every crate gets its turn dark.
+const crateLive=(r,ci)=>!r.rot||r.crates.length<2||((ci+_crateRot)%r.crates.length)!==0;   // P6 ONE predicate for BOTH twins + the registry (the lockShut law — they cannot drift): a rotated-out crate exists NOWHERE this raid (no geometry, no grid, no guaranteed-card slot). rot-less regions (locked caches, hideout clutter, valley) never rotate.
 let _hazedPOIs=[];      // AREA-1 CONTAINMENT (SAVE_VER 6): POI indices carrying the radioactive haze THIS raid. Persisted so a mid-raid reload keeps the same hot/hazed split (derivable from _poiRot, but stored to stay stable). Seeded per CAMP raid in seedLevelSpawns beside the _poiRot advance (every NON-hot POI); radAt() + the gas-fog zone uniforms read it.
 let _gateOpen=false;    // AREA-1 CONTAINMENT (SAVE_VER 6): horde-gate open/locked. Default false = LOCKED. RAID-state, live: the gate terminal (interact block) sets it, BOTH SDF twins carve the notch off it (levelSDF uContain.w / levelSdfJS), and seedLevelSpawns RE-LOCKS it at every CAMP raid seed.
 let outskirtsTime=0;    // AREA-1 CONTAINMENT (P2b): lifetime seconds the player has lingered in the outskirts (past the OPEN gate) — the suicide-run PR metric. Session-scoped for now; the stats page (System I) wires save persistence + the terminal readout (reuse THIS global, don't redeclare).
@@ -2339,27 +2341,30 @@ LEVELS.area1={
   ambient:1.0,
   regions:[
     // THE ROAD is one region: every strip in the camp, min over a handful of segments.
-    {id:'crateA', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-114,-92,-102,-78],
+    // P6 ROTATION: rot:1 clusters sit one crate out per raid (crateLive, phase _crateRot).
+    // The carded caches (crateB/C, labCache, testCache) carry NO rot — a breach reward is
+    // as-described, always whole. So is the hideout clutter and the valley.
+    {id:'crateA', loot:['common','gear'], rot:1, kind:LVL.KIND.PROPS, box:[-114,-92,-102,-78],
      crates:[[-110,-86,0.85],[-108.7,-85.1,0.7],[-104,-80,0.75],[-112,-79,0.9]]},
     {id:'crateB', loot:['mods','common'], lockedBy:'testing', kind:LVL.KIND.PROPS, box:[104,-70,120,-50],
      crates:[[108,-64,0.9],[109.3,-63,0.7],[116,-56,0.8],[106,-54,0.7]]},   // P4: sits INSIDE the locked range — guaranteed cards must not seed here
     {id:'crateC', loot:['mods','rare'], lockedBy:'testing', kind:LVL.KIND.PROPS, box:[128,-80,140,-68],
      crates:[[132,-76,0.85],[133.4,-75.1,0.7],[137,-71,0.75]]},             // P4: sits INSIDE the locked range — guaranteed cards must not seed here
-    {id:'crateD', loot:['common'], kind:LVL.KIND.PROPS, box:[-142,-142,-134,-134],
+    {id:'crateD', loot:['common'], rot:1, kind:LVL.KIND.PROPS, box:[-142,-142,-134,-134],
      crates:[[-140,-140,0.8],[-138.6,-139.2,0.65],[-136,-136,0.75]]},
-    {id:'crateE', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-67,-142,-59,-134],
+    {id:'crateE', loot:['common','gear'], rot:1, kind:LVL.KIND.PROPS, box:[-67,-142,-59,-134],
      crates:[[-65,-140,0.85],[-63.6,-139.1,0.7],[-61,-136,0.8]]},
-    {id:'crateF', loot:['gear'], kind:LVL.KIND.PROPS, box:[84,-142,92,-134],
+    {id:'crateF', loot:['gear'], rot:1, kind:LVL.KIND.PROPS, box:[84,-142,92,-134],
      crates:[[86,-140,0.75],[87.3,-139.2,0.7],[90,-136,0.85]]},
-    {id:'crateG', loot:['common'], kind:LVL.KIND.PROPS, box:[-167,-117,-159,-109],
+    {id:'crateG', loot:['common'], rot:1, kind:LVL.KIND.PROPS, box:[-167,-117,-159,-109],
      crates:[[-165,-115,0.8],[-163.7,-114.1,0.65],[-161,-111,0.75]]},
-    {id:'crateH', loot:['mods'], kind:LVL.KIND.PROPS, box:[59,-92,67,-84],
+    {id:'crateH', loot:['mods'], rot:1, kind:LVL.KIND.PROPS, box:[59,-92,67,-84],
      crates:[[61,-90,0.85],[62.4,-89.1,0.7],[65,-86,0.8]]},
-    {id:'crateI', loot:['rare','gear'], kind:LVL.KIND.PROPS, box:[159,-117,167,-109],
+    {id:'crateI', loot:['rare','gear'], rot:1, kind:LVL.KIND.PROPS, box:[159,-117,167,-109],
      crates:[[161,-115,0.75],[162.3,-114.2,0.7],[165,-111,0.8]]},
-    {id:'crateJ', loot:['common'], kind:LVL.KIND.PROPS, box:[9,-142,17,-134],
+    {id:'crateJ', loot:['common'], rot:1, kind:LVL.KIND.PROPS, box:[9,-142,17,-134],
      crates:[[11,-140,0.8],[12.4,-139.1,0.65],[15,-136,0.75]]},
-    {id:'crateK', loot:['gear','mods'], kind:LVL.KIND.PROPS, box:[59,-67,67,-59],
+    {id:'crateK', loot:['gear','mods'], rot:1, kind:LVL.KIND.PROPS, box:[59,-67,67,-59],
      crates:[[61,-65,0.85],[62.3,-64.2,0.7],[65,-61,0.8]]},
     {id:'road', kind:LVL.KIND.ROAD, w:4.6,
      cars:[[-24,-6,0.7],[6,32,2.3],[38,72,1.1],[-6,14,0.35,1],[59,33,0.44,1]],   // 4th lane: 1=truck
@@ -2399,15 +2404,15 @@ LEVELS.area1={
     // N-door back yard; tx12 is polluted by road seg2's bake bbox); labApron (3,9) lab
     // only (outside the carded gate — street tier, the rich lab cache stays carded);
     // housingCache (9,4) tentsB only.
-    {id:'pitsCache', lootOf:'pits', kind:LVL.KIND.PROPS, box:[-80,106,-64,120],
+    {id:'pitsCache', lootOf:'pits', rot:1, kind:LVL.KIND.PROPS, box:[-80,106,-64,120],
      crates:[[-72,108,0.85],[-70.6,109.2,0.7],[-66,114,0.75],[-71,116,0.8]]},
-    {id:'armoryCache', lootOf:'armory', kind:LVL.KIND.PROPS, box:[26,102,40,114],
+    {id:'armoryCache', lootOf:'armory', rot:1, kind:LVL.KIND.PROPS, box:[26,102,40,114],
      crates:[[28,104,0.85],[29.4,105.1,0.7],[33,110,0.8]]},
-    {id:'facilityCache', lootOf:'facility', kind:LVL.KIND.PROPS, box:[128,130,142,142],
+    {id:'facilityCache', lootOf:'facility', rot:1, kind:LVL.KIND.PROPS, box:[128,130,142,142],
      crates:[[130,132,0.8],[131.4,133,0.7],[136,138,0.85],[139,133,0.75]]},
-    {id:'labApron', loot:['common','gear'], kind:LVL.KIND.PROPS, box:[-122,26,-110,38],
+    {id:'labApron', loot:['common','gear'], rot:1, kind:LVL.KIND.PROPS, box:[-122,26,-110,38],
      crates:[[-120,28,0.8],[-118.6,29.1,0.65],[-114,34,0.75]]},
-    {id:'housingCache', lootOf:'tentsB', kind:LVL.KIND.PROPS, box:[26,-98,40,-86],
+    {id:'housingCache', lootOf:'tentsB', rot:1, kind:LVL.KIND.PROPS, box:[26,-98,40,-86],
      crates:[[30,-90,0.8],[31.3,-91.1,0.7],[35,-94,0.85]]},
     // South: housing — tents scattered on the footpaths
     {id:'tentsA', kind:LVL.KIND.TENT, box:[-116,-96,-48,-32], tents:[[-102,-52,0.5],[-84,-66,2.4],[-66,-46,1.2],[-60,-84,4.0]]},
@@ -2740,8 +2745,8 @@ function regionSdfJS(r,px,py,pz){
       }
     }
   }else if(r.kind===K.PROPS){
-    for(const c of r.crates){
-      if(lockCrateHidden(c)) continue;               // P4: an unowned lockbox has no geometry (TWIN: buildLevelTexData packs the same skip)
+    for(let ci=0;ci<r.crates.length;ci++){ const c=r.crates[ci];
+      if(lockCrateHidden(c)||!crateLive(r,ci)) continue;   // P4: an unowned lockbox has no geometry; P6: neither does a rotated-out crate (TWIN: buildLevelTexData packs the same skips)
       const cd=_sdBox3(px,py,pz,c[0],c[2]/2,c[1],c[2]*0.55,c[2]/2,c[2]*0.55);
       if(cd<d){ d=cd; m=4.0; }
     }
@@ -2812,7 +2817,7 @@ function buildLevelTexData(level,bake){
     }
     if(r.kind===K.TREES){ B=[r.kind,r.hMax,r.cell,r.cutX!==undefined?1:0]; C=[pool,r.shrubs?1:0,r.cutX??0,r.hMin]; }
     if(r.kind===K.STUMPS){ B=[r.kind,0,r.cell,0]; }
-    if(r.kind===K.PROPS){ const vis=r.crates.filter(cr=>!lockCrateHidden(cr));   // P4 twin: unowned lockbox crates pack nothing (JS twin: regionSdfJS skip)
+    if(r.kind===K.PROPS){ const vis=r.crates.filter((cr,ci)=>!lockCrateHidden(cr)&&crateLive(r,ci));   // P4 twin: unowned lockbox crates pack nothing; P6 twin: rotated-out crates too (JS twin: regionSdfJS skips)
       B=[r.kind,r.term?1:0,0,0]; vis.forEach(cr=>items.push([cr[0],cr[1],cr[2],0]));
       if(vis.length>10) console.warn('PROPS crate count over GLSL loop cap (GPU drops the rest):',r.id);   // lvRegion kind==10 marches i<10 — JS would still collide the extras (twin desync)
       if(r.term) items.push([r.term[0],r.term[1],r.term[2],0]); }   // terminal rides the last slot; B.y flags it
@@ -7049,6 +7054,7 @@ function seedStashKit(){                       // the kit waits in the STASH now
 function startRun(){
   runRng=mulberry32((Math.random()*1e9)|0);
   _poiRot=Math.floor(Math.random()*3);             // fresh run: fresh POI rotation (loadGame overrides from the slot)
+  _crateRot=Math.floor(Math.random()*12);          // fresh run: fresh crate phase (loadGame overrides from the slot)
   _hazedPOIs=[]; _gateOpen=false;                  // fresh run: no haze mapped, gate LOCKED (loadGame overrides from the slot)
   depth=1; kills=0; runClock=0; _lastReloadT=-9;   // reset the double-tap clock so the first reload of a run isn't read as a double-tap
   playerPos.health=playerPos.maxHealth;
@@ -7214,6 +7220,7 @@ function syncLockCrates(){                      // load/corrupt path: ownership 
 // per-raid seeded placement: zealots per region + loot scatter with min spacing
 let crateRegistry=[], lootCrate=null;
 function buildCrateRegistry(L){
+  if(L.spawn&&L.spawn.pois) _crateRot=(_crateRot+1)%12;   // P6 LIVE-CRATE ROTATION — one advance per CAMP raid, HERE and not beside _poiRot: the registry (built now), the loot seed (runs after), and both SDF twins (packed/marched all raid) must read the same settled phase. Hideout/valley carry no pois — home never rotates.
   crateRegistry=[]; lootCrate=null;
   const add=(c,tiers,lockedBy)=>{
     if(c[3]==='stash'){                                   // THE STASH: persistent grid, never seeded
@@ -7229,7 +7236,7 @@ function buildCrateRegistry(L){
   const RL=(L.spawn&&L.spawn.regionLoot)||{};             // P4: the wired loot registry — lootOf regions draw their tiers here
   for(const r of (L.regions||[])){
     if(r.kind!==LVL.KIND.PROPS||!r.crates) continue;
-    for(const c of r.crates) add(c, r.loot||RL[r.lootOf]||['common'], r.lockedBy);   // P4: lockedBy rides the entry — guaranteed cards skip crates behind that lock
+    r.crates.forEach((c,ci)=>{ if(crateLive(r,ci)) add(c, r.loot||RL[r.lootOf]||['common'], r.lockedBy); });   // P4: lockedBy rides the entry — guaranteed cards skip crates behind that lock. P6: a rotated-out crate gets NO entry — the seed and the card promise see only what stands.
   }
   if(L.crates) for(const c of L.crates) add(c, L.crateTiers||['common']);
   if(L.kind==='rings'){
@@ -7318,6 +7325,7 @@ function seedLevelSpawns(L){
     _lockOpen={};      // P4: the lab locks re-seal on the same law — cards persist, doors don't (deployTo already set levelTexDirty, so the sealed pack uploads before first draw)
     _hazedPOIs=[];     // HAZE MAP (P3): every NON-hot POI carries the radioactive haze THIS raid — re-rolled here, the same per-raid site as the rotation, so the 'THIS raid' comment stays true; radAt()/the gas-fog uniforms read it, loadGame's override keeps a saved split
     for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) _hazedPOIs.push(i);
+    // (P6 crate rotation is NOT seeded here with the rest of the raid state — _crateRot advanced earlier this same deploy, in buildCrateRegistry: the registry is this function's input)
     const N_SOLD=10, N_ZOMB=9;                           // + 1 brute = 20 (RLIM.ENEMIES) — single-site dials
     PARAMS.maxEnemies.v=N_SOLD+N_ZOMB+1;                 // the horde REVIVES to its full 16 (reinforce gate reads maxEnemies) instead of thinning to the leftover valley cap
     // SOLDIERS — tight knot around ONE cover anchor per hot POI (~7m, minSpace 2: overrides the loose level minSpace)
@@ -7579,7 +7587,7 @@ function termNav(){
 
 // ---- SAVE SYSTEM: versioned JSON in localStorage. Three slots. Corruption reads as
 // ---- empty, never as a crash. Captures the rucksack + Tool loadouts, recursively.
-const SAVE_VER=6, SAVE_KEY=i=>'sotv_save_'+i;             // v6: AREA-1 CONTAINMENT scaffold — death-proof lockboxes (lockEpic 2×2 / lockLeg 3×3 contents + P4 lockOwn install flags) + raid-state (hazed POI indices, gateOpen, P4 labsOpen); keycards ride existing itemJSON grids, no new field. All additive — v2..v5 lack these, read as empty box / not owned / no haze / everything LOCKED. v5: + area-1 POI rotation cursor (j.poiRot). v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
+const SAVE_VER=6, SAVE_KEY=i=>'sotv_save_'+i;             // v6: AREA-1 CONTAINMENT scaffold — death-proof lockboxes (lockEpic 2×2 / lockLeg 3×3 contents + P4 lockOwn install flags) + raid-state (hazed POI indices, gateOpen, P4 labsOpen, P6 crateRot); keycards ride existing itemJSON grids, no new field. All additive — v2..v5 lack these, read as empty box / not owned / no haze / everything LOCKED. v5: + area-1 POI rotation cursor (j.poiRot). v4: + per-instance customName (j.cn). v3: + stash; + params/flags; + pockets (all additive — absent reads as defaults/empty). v2 loads as an empty stash.
 const _retuneOrphans=[];                                  // mods a shrunken barrel can no longer seat — loadGame re-homes them
 function _ls(){ try{ return (typeof localStorage!=='undefined')?localStorage:null; }catch(e){ return null; } }
 function itemToJSON(it){
@@ -7679,7 +7687,7 @@ function saveGame(slot){
   const params={}; for(const k in PARAMS) params[k]=PARAMS[k].v;   // debug tuning rides the slot — additive, old blobs just lack it
   const blob={version:SAVE_VER, stamp:new Date().toISOString().slice(0,16).replace('T',' '),
               equip:eq, wield:activeTool?itemToJSON(activeTool):null, stash, pockets,
-              params, poiRot:_poiRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},
+              params, poiRot:_poiRot, crateRot:_crateRot, flags:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},
               lockEpic, lockLeg, hazed:_hazedPOIs, gateOpen:_gateOpen,
               labsOpen:Object.keys(_lockOpen).filter(k=>_lockOpen[k]===true),   // P4 raid-state, additive — same law as gateOpen (v6 unshipped, no ver bump)
               lockOwn:Object.keys(LOCKBOX).filter(t=>LOCKBOX[t].own),           // P4: installed lockboxes, additive — absent reads as none owned
@@ -7756,6 +7764,7 @@ function loadGame(slot){
     }
     applyDebugTuning(b.params,b.flags);                   // pre-params blobs read as defaults
     _poiRot=(Number.isInteger(b.poiRot)&&b.poiRot>=0&&b.poiRot<6)?b.poiRot:0;   // POI rotation rides the slot (v5); missing/corrupt → 0
+    _crateRot=(Number.isInteger(b.crateRot)&&b.crateRot>=0&&b.crateRot<12)?b.crateRot:0;   // P6 crate rotation (v6 additive); missing/corrupt → 0. Loads land at the hideout (no rot regions there), so the restored phase first bites at the next CAMP deploy's advance.
     _hazedPOIs=Array.isArray(b.hazed)?b.hazed.filter(i=>Number.isInteger(i)&&i>=0&&i<LEVELS.area1.spawn.pois.length):[];   // v6 raid-state; missing/corrupt/out-of-range → no haze (radAt indexes POIs with these)
     _gateOpen=b.gateOpen===true;                                                // v6 raid-state; only a real true opens (missing/corrupt/garbage → gate LOCKED)
     _lockOpen={}; if(Array.isArray(b.labsOpen)) for(const k of b.labsOpen) if(LOCKS[k]) _lockOpen[k]=true;   // P4 raid-state; unknown ids drop, missing/garbage → all labs LOCKED
@@ -7770,7 +7779,7 @@ function loadGame(slot){
     for(const row of lockEpicInv) row.fill(null);          // v6: a corrupt load must not leave stale lockbox contents in memory
     for(const row of lockLegInv) row.fill(null);
     for(const row of pocketsGrid) row.fill(null);
-    _hazedPOIs=[]; _gateOpen=false; _lockOpen={}; _poiRot=0;   // v6: corrupt slot → no haze, gate + labs LOCKED, rotation reset (sane defaults)
+    _hazedPOIs=[]; _gateOpen=false; _lockOpen={}; _poiRot=0; _crateRot=0;   // v6: corrupt slot → no haze, gate + labs LOCKED, rotations reset (sane defaults)
     for(const t in LOCKBOX) LOCKBOX[t].own=false;              // P4: corrupt = an empty identity — no boxes
     syncLockCrates();                                          // and the LIVE hideout sheds them
     zombiesKilled=0; outskirtsTime=0;                      // v6: corrupt slot reads as an empty identity → PR counters zero too
