@@ -195,6 +195,48 @@ sits after Phase 1.
    respirator that stacks with a tier-2 helmet (keeps 3-shot), 1 filter slot. Gas
    safety vs head armor is the build choice. *(All 7 gaps now resolved.)*
 
+## OPEN QUESTIONS — the build wave's owner-decision ledger (2026-07-15)
+
+The audit's 17-call decision batch was answered in the owner's absence with
+conservative, spec-aligned defaults (each individually veto-able; the applied
+ones are cited in their commits). **FLAG-ONLY calls — no code was changed;
+these wait on the owner:**
+
+- **Ring depth persistence (call 4):** current semantics KEPT — depth is
+  run-state, resets on load; area1 deaths reset it. Persisting it in the blob
+  is save-shape churn and waits for an explicit owner call.
+- **Brute roam (call 10):** current mid-map waypoint roam KEPT. The flagged
+  alternative if it reads samey in the playtest (PLAYTEST.md §10): true far
+  treks via far-anchor bias + trip-scaled waypoint hold.
+- **CROWD dial vs the outskirts (call 13):** dial LEFT ALONE — it is a perf
+  lifeline for low-end users, and the dormant-lunge fix removed the
+  invisible-biter harm that motivated touching it. Flagged options if SPARSE
+  reads as free difficulty: floor dormancy at OUTSK_MAX in the outskirts, or
+  scale spawn pressure with the dial.
+- **Wording (call 14):** NO owner-voice text was changed — 'ZOMBIES KILLED',
+  the 'MEMORY (SAVE / LOAD)' row, and centered hitmarker audio all stand as
+  written. UI TEXT LAW governed only text new features HAD to add.
+- **TEETH v2 line (call 16):** the "rig kept BY THE VALLEY" reading stands as
+  written — confirm the read or reword; nobody touched it.
+
+**Approved in the batch but NOT BUILT this wave** (open entries in
+KNOWN_BUGS.md carry the specs): hideout reap exemption (call 5 → #13) ·
+corrupt-LOAD snapshot rollback (call 17 → #10) · the BUILD-NOW starter kit
+(call 3 → #14) · the ITEM_DEFS hunt-reward comments (call 15 → #11).
+
+**Resolved by the wave itself:** call 1 (gas burn) built in P3 as decided — no
+resequencing was needed; call 2 (dead loot registries) PARTIALLY wired —
+regionLoot is live via the P4 caches, `lootRegions`/`lootTable`/`MOD_KEYS`
+still await wire-or-delete (KNOWN_BUGS #11).
+
+**New owner calls the builders flagged while building:** free-aim on GLASS
+optics is a ~2-line reticle uv-offset shader change, deliberately unspent
+against the failed shader budget (b9ccf28) · the Rig Helmet's HEAVY headshot
+tier is owner-tunable (0c0dc37) · the brute keeping ×4 instead of the
+instakill protects the lockbox hunt — confirm (0c0dc37) · silent enemy melee
+tells: want an audible wind-up? (4842abb) · glue globs can locally soften the
+wall-climb refusal — priced verb or veto (16318d6).
+
 ---
 
 ## Scope-creep guardrails
