@@ -7763,8 +7763,20 @@ function loadGame(slot){
   const ls=_ls(); const meta=saveMeta(slot);
   if(!ls||!meta){ toast('EMPTY SLOT'); return; }
   _retuneOrphans.length=0;
-  try{                                                    // field-level rot can slip past saveMeta — a throw mid-rebuild
-    const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));       // must read as EMPTY, never crash over a half-wiped rig
+  // PRE-LOAD SNAPSHOT (owner call 17): field-level rot can slip past saveMeta and throw
+  // mid-rebuild — the catch rolls the RUNNING SESSION back instead of wiping it; the corrupt
+  // SLOT itself still reads as empty (invariant #4). Row-copies suffice: itemFromJSON builds
+  // NEW objects, so a failed rebuild never mutates the old graph; grids restore IN PLACE
+  // (the crate registry holds these arrays).
+  const _snap={eq:{},tool:activeTool,st:stashInv.map(r=>r.slice()),pk:pocketsGrid.map(r=>r.slice()),
+    le:lockEpicInv.map(r=>r.slice()),ll:lockLegInv.map(r=>r.slice()),pr:{},
+    fl:{god:FLAGS.god,noclip:FLAGS.noclip,seeAll:FLAGS.seeAll},rot:_poiRot,crot:_crateRot,
+    hz:_hazedPOIs.slice(),gt:_gateOpen,lk:Object.assign({},_lockOpen),
+    own:Object.keys(LOCKBOX).filter(t=>LOCKBOX[t].own),zk:zombiesKilled,ot:outskirtsTime};
+  for(const k of EQUIP_SLOTS) _snap.eq[k]=equip[k];
+  for(const k in PARAMS) _snap.pr[k]=PARAMS[k].v;
+  try{
+    const b=JSON.parse(ls.getItem(SAVE_KEY(slot)));
     for(const k of EQUIP_SLOTS) equip[k]=null;
     activeTool=null;
     for(const k of EQUIP_SLOTS){ if(!b.equip[k]) continue; const it=itemFromJSON(b.equip[k]); if(it instanceof Armor) equip[k]=it; }   // saveGame's own whitelist — a foreign blob key can't invent an equip slot
@@ -7807,21 +7819,22 @@ function loadGame(slot){
     zombiesKilled=Number.isFinite(b.zombiesKilled)?Math.max(0,b.zombiesKilled):0;   // v6 PR (System I); older/absent/garbage → 0, negatives clamp — the record never counts backward
     outskirtsTime=Number.isFinite(b.outskirtsTime)?Math.max(0,b.outskirtsTime):0;   // v6 PR (System I); same clamp
   }catch(e){
-    for(const k of EQUIP_SLOTS) equip[k]=null;
-    activeTool=null;
-    for(const row of stashInv) row.fill(null);
-    for(const row of lockEpicInv) row.fill(null);          // v6: a corrupt load must not leave stale lockbox contents in memory
-    for(const row of lockLegInv) row.fill(null);
-    for(const row of pocketsGrid) row.fill(null);
-    _hazedPOIs=[]; _gateOpen=false; _lockOpen={}; _poiRot=0; _crateRot=0;   // v6: corrupt slot → no haze, gate + labs LOCKED, rotations reset (sane defaults)
-    for(const t in LOCKBOX) LOCKBOX[t].own=false;              // P4: corrupt = an empty identity — no boxes
-    syncLockCrates();                                          // and the LIVE hideout sheds them
-    zombiesKilled=0; outskirtsTime=0;                      // v6: corrupt slot reads as an empty identity → PR counters zero too
+    // ROLLBACK (owner call 17): put the pre-load session back — a bad slot costs NOTHING live
+    for(const k of EQUIP_SLOTS) equip[k]=_snap.eq[k]||null;
+    activeTool=_snap.tool;
+    const _fill=(g,s)=>g.forEach((row,r)=>{ for(let c=0;c<row.length;c++) row[c]=s[r][c]; });
+    _fill(stashInv,_snap.st); _fill(lockEpicInv,_snap.le); _fill(lockLegInv,_snap.ll); _fill(pocketsGrid,_snap.pk);
+    for(const k in PARAMS) PARAMS[k].v=_snap.pr[k];
+    FLAGS.god=_snap.fl.god; FLAGS.noclip=_snap.fl.noclip; FLAGS.seeAll=_snap.fl.seeAll;
+    resize(); syncDebugPanel();                            // applyDebugTuning's own tail — scale/knobs un-stale either way
+    _poiRot=_snap.rot; _crateRot=_snap.crot; _hazedPOIs=_snap.hz; _gateOpen=_snap.gt; _lockOpen=_snap.lk;
+    for(const t in LOCKBOX) LOCKBOX[t].own=_snap.own.indexOf(t)>=0;
+    syncLockCrates();                                      // the LIVE hideout re-derives the boxes it had
+    zombiesKilled=_snap.zk; outskirtsTime=_snap.ot;
     _retuneOrphans.length=0;
-    reloadTimer=0; holsterCur=-1; holsterDir=0; _lastReloadT=-9; _lastSwap=null;   // the onDeath idiom — no combat transient survives a rig swap
+    reloadTimer=0; holsterCur=-1; holsterDir=0; _lastReloadT=-9; _lastSwap=null;   // the onDeath idiom — no combat transient survives the churn
     syncBagAlias(); clampZone();
-    applyDebugTuning(null,null);                          // a corrupt slot is an empty one — stock knobs
-    toast('SLOT '+(slot+1)+' CORRUPT — READ AS EMPTY'); playSound('empty');
+    toast('SLOT '+(slot+1)+' CORRUPT — SESSION KEPT'); playSound('empty');
     refreshInvUI();
     return;
   }
