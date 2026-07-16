@@ -9527,6 +9527,14 @@ function updatePlayer(dt){
       }
     } }
 
+  // walking OFF a container closes it (owner): menus allow movement now — but the box stays
+  // where it is. Footprint-face distance mirrors nearestCrate's open math (0.9m) + hysteresis.
+  if(isCrateOpen&&lootCrate){
+    const _hw=(lootCrate.size||1)*0.55;
+    const _fdx=Math.max(0,Math.abs(playerPos.x-lootCrate.x)-_hw), _fdz=Math.max(0,Math.abs(playerPos.z-lootCrate.z)-_hw);
+    if(Math.hypot(_fdx,_fdz)>2.2){ closeAllInv(); toast('OUT OF REACH'); playSound('click'); }
+  }
+
   // viewmodel sway/bob + recoil recovery
   if(moving&&playerPos.onGround) playerPos.walkCycle+=speed*dt*2.6;
   const bobAmt=(moving&&playerPos.onGround&&!(slideT>0)?1:0)*(playerPos.isSprinting?1.5:1)*(1-playerPos.aimAmt*0.8);   // a slide GLIDES — no gait
@@ -9942,7 +9950,7 @@ function frame(){
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
   let _ks=0; for(const _ek of EQUIP_SLOTS){ const _ea=equip[_ek]; if(_ea&&_ea.invCols>0) _ks+=_ea.invCols*_ea.invRows; }   // EVERY equipped slot counts (owner), not just the pack
-  gl.uniform1f(U.uBagH,Math.min(0.625,0.5+_ks*0.0025));   // growth halved AGAIN: +0.0025 per kit slot, caps at 1.25x base — naked 0.5 · starter ~0.52 · full kit 0.625
+  gl.uniform1f(U.uBagH,Math.min(0.75,0.5+_ks*0.005));   // growth DOUBLED back (owner): +0.005 per kit slot, caps at 1.5x base — naked 0.5 · starter ~0.55 · full kit 0.75
   gl.uniform1f(U.uBagW,Math.max(0.7,1-0.075*(5-(equip.rucksack?equip.rucksack.invCols:1))));  // columns breathe X — Day 0.85 · Patrol 0.925 · Field 1.0 · bagless 0.7
   // rack presentation: menu prop AND the held viewmodel share this data
   let _mzTip=0.34;                                     // the barrel's local tip z — the free-aim PIVOT + the bare dot's anchor (suppressor/column may push it out)
