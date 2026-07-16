@@ -2489,14 +2489,14 @@ LEVELS.area1={
       common:['ammo9','ammo9','magStd','powderMag',                 // BALLISTICS
               'boltCore','sparkCore','dmgPlus','velPlus',           // ENERGY
               'lantern','pulse','beltFeeder','lantern',             // UTILITIES
-              'beltBasic','holster1','helmetCap','harnessL',        // ARMOR
+              'beltBasic','holster1','helmetCap','harnessL','ruckS', // ARMOR (pack tiers: S common · M gear · L rare)
               'ration','ration','gummies','bandAid',                // CONSUMABLES
               'barrelC','battS','ironSights','watch',               // frame/attach
               'maskFace','gasFilter','gasFilter'],                  // GAS KIT (P3): the face mask + cartridges ride the common stream
       gear:  ['ammo762','ammoBuck','pistolMag','smgMagI',
               'emberCore','pickCore','twin','beamCore',
               'beltFeeder','lantern','pulse','beltFeeder',
-              'holster2','harnessM','platesL','goggles',
+              'holster2','harnessM','platesL','goggles','ruckM',
               'gummies','bandAid','aloe','ration',
               'barrelU','battM','platS','reflex',
               'maskHelm','gasFilter'],                              // GAS KIT (P3): the respirator helm sits one shelf up
@@ -3441,7 +3441,12 @@ const ITEM_DEFS={
   bandAid:    ()=>{ const it=new Item('Band-Aid',1,1,'#c9b78f'); it.bandAid=true; return it; },
   aloe:       ()=>{ const it=new Item('Aloe Vera',1,1,'#57764a'); it.aloe=true; return it; },
   // ---- armor (stats provisional) ----
-  rucksack:   ()=>new Armor('Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6,zoneOpen:true}),
+  // PACK TIERS: one 2x2 worn footprint, the GRID is the progression (9 · 20 · 30 cells).
+  // 'rucksack' IS the large — that key is save-load-bearing (itemFromJSON drops unknown
+  // keys, bag AND contents), so it keeps its key forever; only the display name tiers up.
+  ruckS:      ()=>new Armor('Day Pack',2,2,'#4f4a3c','rucksack',{invCols:3,invRows:3,zoneOpen:true}),
+  ruckM:      ()=>new Armor('Patrol Pack',2,2,'#554d3f','rucksack',{invCols:4,invRows:5,zoneOpen:true}),
+  rucksack:   ()=>new Armor('Field Rucksack',2,2,'#5a5142','rucksack',{invCols:5,invRows:6,zoneOpen:true}),
   beltBasic:  ()=>new Armor('Web Belt',2,1,'#4a4436','belt',{invCols:1,invRows:1,slotMode:true}),
   holster1:   ()=>new Armor('Hip Holster',1,2,'#4e4030','holster',{invCols:1,invRows:1,slotMode:true,zoneOpen:true}),
   holster2:   ()=>new Armor('Twin Holster',1,2,'#54432c','holster',{invCols:2,invRows:1,slotMode:true,zoneOpen:true}),
@@ -6520,7 +6525,10 @@ class Zealot{
     // 2-4 finds: chow · lead · glass — deeper rings pack stranger glass.
     // same tier lists the crates seed from (seedLevelSpawns' roll idiom)
     const TIERS=(activeLevel&&activeLevel.spawn&&activeLevel.spawn.lootTiers)||LEVELS.area1.spawn.lootTiers;
-    const bag=ITEM_DEFS.rucksack();
+    // pack tier rides depth: day packs at the door (65/30/5), the deep rings hump the
+    // big bags (25/50/25 by ring VI) — the 5x6 is a hunt now, not every soldier's spine
+    const rb=runRng();
+    const bag=ITEM_DEFS[rb<0.65-0.40*q?'ruckS':rb<0.95-0.20*q?'ruckM':'rucksack']();
     const n=2+Math.floor(runRng()*3);
     for(let i=0;i<n;i++){
       const r=runRng(); let it;
@@ -7213,8 +7221,8 @@ function resetLevel(){
 }
 function seedStashKit(){                       // the kit waits in the STASH now, not on the body. NEW GAME and first
   if(stashInv.flat().some(Boolean)) return;    // boot seed it; a stash that still holds ANYTHING is never stomped
-  const rk=ITEM_DEFS.rucksack();               // (so a hard-death restart keeps whatever home kept)
-  for(let i=0;i<2;i++){ const m=ITEM_DEFS.magStd(); m.loaded=8;
+  const rk=ITEM_DEFS.ruckS();                  // (so a hard-death restart keeps whatever home kept)
+  for(let i=0;i<2;i++){ const m=ITEM_DEFS.magStd(); m.loaded=8;   // starter bag = the SMALL tier: its 3x3 seats both 1x2 mags (5 cells spare) — bigger packs are found, not given
     autoPlace(m,rk.inv,rk.invCols,rk.invRows); }   // two more mags ride INSIDE the bag — grab it, find them
   const kit=[rk];
   for(let i=0;i<2;i++){ const t=ITEM_DEFS.tool(); t.customName='FOUNDLING TOOL'; kit.push(t); }   // bare frames — no rack
@@ -7226,6 +7234,7 @@ function seedStashKit(){                       // the kit waits in the STASH now
   // lead for the 9mm mags, heals, a lid + plates, a holster to draw from, one barrel to teach
   // the rack. Balance-priced: one raid's find, not an armory. Big footprints lead — autoPlace
   // is first-fit row-major: the fixed dozen packs rows 0-3 exactly 24/24, these fill rows 4-7.
+  // (Re-simulated for the Day Pack swap: same 2x2 footprint, identical layout — still 44/48, no spill.)
   kit.push(ITEM_DEFS.helmetCap(),ITEM_DEFS.platesL(),ITEM_DEFS.holster1(),ITEM_DEFS.barrelC());
   kit.push(ITEM_DEFS.boltCore(),ITEM_DEFS.boltCore(),ITEM_DEFS.sparkCore(),ITEM_DEFS.battS(),ITEM_DEFS.dmgPlus());
   kit.push(ITEM_DEFS.ammo9(),ITEM_DEFS.ammo9(),ITEM_DEFS.bandAid(),ITEM_DEFS.bandAid(),ITEM_DEFS.ration());
