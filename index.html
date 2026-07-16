@@ -115,8 +115,6 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   border:1px solid rgba(215,220,230,.14);border-radius:5px;background:rgba(60,64,58,.22);
   margin:12px 0 0;pointer-events:auto;cursor:pointer;}          /* a folded container keeps its dock — click opens it */
 .zoneBlock{margin-bottom:10px;}
-#invTip{position:fixed;z-index:60;pointer-events:none;background:rgba(8,10,12,.93);border:1px solid rgba(215,220,230,.25);
-  border-radius:6px;padding:7px 10px;font-size:14px;line-height:1.35;max-width:280px;color:#cfd2c8;text-align:left;}
 .equipCell{position:relative;}
 .slotGhost{font-size:11px;letter-spacing:.1em;color:#4a4a42;}
 .lockedCell{background:rgba(60,70,60,.12);}
@@ -191,7 +189,7 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   filter:drop-shadow(0 2px 3px rgba(0,0,0,.85));}
 .itemSpan .lbl2{font-size:11px;letter-spacing:.05em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 4px #000;
   white-space:nowrap;overflow:hidden;max-width:100%;}
-#inspectUI{position:absolute;right:4vw;top:50%;transform:translateY(-50%);z-index:45;width:250px;padding:14px;}
+#inspectUI{position:absolute;left:46%;top:58%;transform:none;z-index:45;width:250px;padding:14px;}   /* MIDDLE-aligned (owner sketch): opened lockboxes/mags/tool pockets dock by the middle group */
 #inspectUI .gridWrap{margin:10px auto 0;}
 .seqReadout{margin-top:14px;padding:10px;border:1px dashed var(--line);font-size:13px;letter-spacing:.1em;color:var(--dust);}
 .seqChip{display:inline-block;border:1px solid var(--line);padding:2px 6px;margin:2px 3px 2px 0;color:var(--bone);background:#000;}
@@ -286,7 +284,6 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 <div id="backpackUI" class="hidden">
   <div id="zoneStack"></div>
 </div>
-<div id="invTip" class="hidden"></div>
 
 <!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
 <div id="toolUI" class="hidden">
@@ -3912,8 +3909,6 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 // Shift+LMB quick-moves, Shift+RMB / LT+□ splits stacks, hover names everything.
 // ============================================================
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
-let _tipT=null, _mx=0, _my=0;
-document.addEventListener('mousemove',e=>{ _mx=e.clientX; _my=e.clientY; });
 function stackInto(it,grid){                       // pour a held pile onto same-caliber stacks in a grid (banking merges before it claims a cell)
   for(const row of grid) for(const ch of row){
     if(ch&&ch instanceof Ammunition&&ch.ammoType===it.ammoType&&ch.count<AMMO_STACK){
@@ -3934,7 +3929,6 @@ function quickMoveHeld(){                          // □□ / double-LMB: the h
   else { toast('NO ROOM'); playSound('empty'); }
 }
 function quickMoveAtCursor(){                      // Shift+LMB: quick-move the cell under the cursor, no pick-place dance
-  hideInvTip();
   if(heldWorld){ playSound('empty'); return; }
   const f=focusGrid(); if(!f){ return; }
   clampCursor(f);
@@ -3969,7 +3963,6 @@ function quickMoveAtCursor(){                      // Shift+LMB: quick-move the 
   }
 }
 function splitAtCursor(){                          // Shift+RMB / LT+□: half the pile into the empty hand
-  hideInvTip();
   if(heldWorld){ playSound('empty'); return; }
   const f=focusGrid(); if(!f||!f.grid||f.locked){ playSound('click'); return; }
   clampCursor(f);
@@ -3979,26 +3972,11 @@ function splitAtCursor(){                          // Shift+RMB / LT+□: half t
   const half=ITEM_DEFS[cell.defKey](); half.count=take;
   handHold(half); refreshInvUI();
 }
-function armInvTip(it){                            // hover ~a beat and the item names itself — no inspect needed
-  clearTimeout(_tipT);
-  const tip=document.getElementById('invTip');
-  if(!it||it.widget){ if(tip) tip.classList.add('hidden'); return; }
-  _tipT=setTimeout(()=>{
-    if(!tip||(!uiMenusOpen()&&!isCrateOpen)) return;
-    const extra=it instanceof Ammunition?' ×'+it.count:(it instanceof Magazine?' '+it.loaded+'/'+it.maxCapacity:'');
-    const d=(it.desc&&it.desc())||'';
-    tip.innerHTML='<b>'+dispName(it)+extra+'</b>'+(d?'<div style="opacity:.8;margin-top:3px">'+d+'</div>':'');
-    tip.classList.remove('hidden');
-    tip.style.left=Math.min(innerWidth-300,_mx+16)+'px';
-    tip.style.top =Math.min(innerHeight-90,_my+14)+'px';
-  },300);
-}
-function hideInvTip(){ clearTimeout(_tipT); const t=document.getElementById('invTip'); if(t) t.classList.add('hidden'); }
+// (the hover card is syncTip's tooltipEl — ONE system for mouse and pad, rest-timed, exclusive positioning)
 function interactInventory(){
   const f=focusGrid(); if(!f.grid&&!f.rack&&!f.equipCol) return;
   clampCursor(f);
   const cell=cellAt(f);
-  hideInvTip();
   // DOUBLE-TAP QUICK-MOVE (□□ / double-LMB): the pick verb again on the SAME cell right after
   // a hands-pick sends the held item to its smartest home instead of setting it back down
   if(heldWorld&&heldWorld.mode==='hands'&&_hpick&&runClock-_hpick.t<0.35
@@ -8059,10 +8037,11 @@ function tipBrief(it){                                  // the info square's row
   return {kind:it.constructor.name.toUpperCase(), rows:[]};
 }
 // the floating item card: content from cursor state, position from the focused cell
+let _tipItem=null, _tipShown=false, _tipTmr=null;   // ONE card, both inputs: it shows only after the cursor RESTS ~0.3s on the same item (owner: exclusive + timed)
 function syncTip(){
   const open=uiMenusOpen();
   tipPanelEl.classList.toggle('hidden',!open||menuMode!==2);
-  if(!open){ tooltipEl.style.display='none'; return; }
+  if(!open){ tooltipEl.style.display='none'; _tipItem=null; _tipShown=false; return; }
   const f=focusGrid();
   if(menuMode===2) paintToolStats();
   if(!f.grid&&!f.rack&&!f.equipCol){ tooltipEl.style.display='none'; return; }   // rig items carry a tip too — fold state lives there
@@ -8070,20 +8049,31 @@ function syncTip(){
   clampCursor(f); const it=cellAt(f);
   const ref=f.rack?refAt(f):null;
   cursorX=sx; cursorY=sy;
-  if(!it){ tooltipEl.style.display='none'; tooltipEl.innerHTML=''; return; }
+  if(!it){ tooltipEl.style.display='none'; tooltipEl.innerHTML=''; _tipItem=null; _tipShown=false; return; }
+  if(it!==_tipItem){                                   // a NEW item under the cursor — hide and re-arm the rest timer (mouse and d-pad alike)
+    _tipItem=it; _tipShown=false; tooltipEl.style.display='none';
+    clearTimeout(_tipTmr);
+    _tipTmr=setTimeout(()=>{ _tipShown=true; syncTip(); },300);
+    return;
+  }
+  if(!_tipShown){ tooltipEl.style.display='none'; return; }   // still resting — the timer re-enters when it's time
   const b=tipBrief(it);
   tooltipEl.innerHTML='<div class="tt-name">'+dispName(it)+'</div>'
     +'<div class="tt-cat">'+b.kind+'</div>'
     +b.rows.map(r=>'<div>'+r+'</div>').join('')
     +'<div class="tt-cat" style="margin-top:4px;">'+(it.desc?it.desc():'')+'</div>';
   tooltipEl.style.display='block';
-  // the card rides the mouse when the mouse is driving; the d-pad anchors it to the cell
+  // EXCLUSIVE positioning: the card rides the mouse when the mouse drove last; the d-pad anchors it to the cell
   if(tipMouseT>=tipPadT){ positionTipAtMouse(); return; }
-  const host=document.querySelector?document.querySelector('.cellFocus'):null;
-  if(host&&host.getBoundingClientRect){
+  let host=null;                                       // first VISIBLE focused cell — a stale .cellFocus in a hidden menu reports a 0×0 rect (the old "card at 0,0" bug)
+  if(document.querySelectorAll) for(const el of document.querySelectorAll('.cellFocus')){ const rc=el.getBoundingClientRect(); if(rc.width>0){ host=el; break; } }
+  if(host){
     const rc=host.getBoundingClientRect();
     tooltipEl.style.left=Math.min(window.innerWidth-260, rc.left+rc.width+10)+'px';
     tooltipEl.style.top=Math.max(8, rc.top-6)+'px';
+  }else{                                               // no visible anchor at all — park it center-right, never at the corner
+    tooltipEl.style.left=(window.innerWidth-290)+'px';
+    tooltipEl.style.top=Math.round(window.innerHeight*0.4)+'px';
   }
 }
 // the docked square: the whole Tool, resolved — dmg, rate, spread, zoom, charge, columns
@@ -8247,18 +8237,20 @@ const CELL_PITCH=47, GRID_PAD=6;      // 44px cell + 3px gap · 6px wrap padding
 function renderZones(){
   const host=document.getElementById('zoneStack');
   host.innerHTML='';
-  // STABLE LAYOUT (owner): fixed left-anchored columns — [RIG] [POCKETS] [worn containers] [STASH/CRATE].
-  // The rig column NEVER moves; each worn container is a detached panel docked in a FIXED slot order
-  // (folded = a slim stub in the same dock, click to open), and the stash/crate sits in its own
-  // column to the RIGHT of the kit. Zone nav indices (zoneIdx over invZones) are untouched.
-  const left=document.createElement('div');  left.className='zoneCol';
-  const mid=document.createElement('div');   mid.className='zoneCol';
-  const cont=document.createElement('div');  cont.className='zoneCol';
-  const side=document.createElement('div');  side.className='zoneCol';
-  host.appendChild(left); host.appendChild(mid); host.appendChild(cont); host.appendChild(side);
-  const CONT_ORDER=['rucksack','harness','holster','belt','goggles','headphones'];
-  const contSlot={};                                   // one dock per armor slot — panel or stub, the order never shuffles
-  CONT_ORDER.forEach(id=>{ const d=document.createElement('div'); contSlot[id]=d; cont.appendChild(d); });
+  // THREE-ANCHOR LAYOUT (owner sketch): fixed left-anchored columns —
+  //   [RIG] · LEFT: pockets + belt/holsters/settings · MIDDLE: rucksack + harness · RIGHT: stash/loot crate.
+  // The rig never moves; each worn container is a detached panel docked in a FIXED slot order
+  // (folded = a slim stub in the same dock, click to open). Zone nav indices are untouched.
+  const rig=document.createElement('div');   rig.className='zoneCol';
+  const colL=document.createElement('div');  colL.className='zoneCol';
+  const colM=document.createElement('div');  colM.className='zoneCol';
+  const colR=document.createElement('div');  colR.className='zoneCol';
+  host.appendChild(rig); host.appendChild(colL); host.appendChild(colM); host.appendChild(colR);
+  const LEFT_DOCK=['belt','holster','goggles','headphones'], MID_DOCK=['rucksack','harness'];
+  const dock={};                                       // one dock per armor slot — panel or stub, the order never shuffles
+  const pkSlot=document.createElement('div'); colL.appendChild(pkSlot);   // pockets pin the top of the LEFT group
+  LEFT_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; colL.appendChild(d); });
+  MID_DOCK.forEach(id=>{ const d=document.createElement('div'); dock[id]=d; colM.appendChild(d); });
   const zl=invZones();
   zl.forEach((z,zi)=>{
     const blk=document.createElement('div'); blk.className='zoneBlock'+(z.equipCol||z.id==='pockets'?'':' zonePanel');
@@ -8267,14 +8259,14 @@ function renderZones(){
     if(z.equipCol){
       EQUIP_SLOTS.forEach((slot,r)=>{
         const div=document.createElement('div'); div.className='cell equipCell';
+        div.dataset.nv='0,'+zi+',0,'+r;                            // spatial-nav identity: focus,zone,x,y
         const it=equip[slot];
         if(currentFocus===0&&zoneIdx===zi&&cursorY===r) div.classList.add('cursor','cellFocus');
         if(!it) div.innerHTML='<span class="slotGhost">'+slot.slice(0,4).toUpperCase()+'</span>';
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus===0&&zoneIdx===zi&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
-          currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); armInvTip(equip[slot]); });
-        div.addEventListener('mouseleave',hideInvTip);
+          currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
         div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r;
           if(e.shiftKey){ quickMoveAtCursor(); return; }             // Shift+LMB: strip straight into storage
           interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press so a DOM rebuild can't eat it (trackpad tap may emit button 1)
@@ -8287,6 +8279,7 @@ function renderZones(){
     }else{
       for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++){
         const div=document.createElement('div'); div.className='cell';
+        div.dataset.nv='0,'+zi+','+c+','+r;                        // spatial-nav identity
         if(z.locked) div.classList.add('lockedCell');
         const item=z.grid[r][c];
         if(item){
@@ -8304,8 +8297,7 @@ function renderZones(){
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
           if(currentFocus===0&&zoneIdx===zi&&cursorX===c&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
-          currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); armInvTip(z.grid?z.grid[r][c]:null); });
-        div.addEventListener('mouseleave',hideInvTip);
+          currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
         div.addEventListener('mousedown',e=>{ if(e.button>0) return; currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r;
           if(e.shiftKey){ quickMoveAtCursor(); return; }             // Shift+LMB: quick-move to the smartest home
           interactInventory(); });   // LMB = E (pick·place); primary = any non-right button (RMB=2 handled by contextmenu), fires at press (trackpad-robust)
@@ -8355,15 +8347,15 @@ function renderZones(){
       });
     }
     blk.appendChild(g);
-    (z.equipCol?left : z.id==='pockets'?mid : (z.id==='stash'||z.id==='crate')?side : (contSlot[z.id]||cont)).appendChild(blk);
+    (z.equipCol?rig : z.id==='pockets'?pkSlot : (z.id==='stash'||z.id==='crate')?colR : (dock[z.id]||colM)).appendChild(blk);
   });
   // folded containers hold their dock as a slim stub — click = the same open verb as X on the item
-  CONT_ORDER.forEach(id=>{ const it=equip[id];
+  [...LEFT_DOCK,...MID_DOCK].forEach(id=>{ const it=equip[id];
     if(it&&it.inv&&it.invCols>0&&zoneShut(it)){
       const st=document.createElement('div'); st.className='zoneStub';
       st.innerHTML='<span class="slotGhost">'+id.slice(0,4).toUpperCase()+'</span>';
       st.addEventListener('mousedown',e=>{ if(e.button>0) return; it.zoneOpen=true; clampZone(); playSound('click'); refreshInvUI(); });
-      contSlot[id].appendChild(st);
+      dock[id].appendChild(st);
     }
   });
 }
@@ -8373,6 +8365,7 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
     const div=document.createElement('div');
     div.className='cell';
+    div.dataset.nv=focusIdx+',0,'+c+','+r;                         // spatial-nav identity (zone unused off focus 0)
     const item=grid?grid[r][c]:null;
     if(item){
       if(item===inspectItem) div.style.borderColor='var(--gate)';
@@ -8390,9 +8383,8 @@ function renderGrid(containerId,grid,cols,rows,focusIdx){
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       if(isDebugOpen) return;
       currentFocus=focusIdx; cursorX=c; cursorY=r;
-      refreshInvUI(); armInvTip(grid?grid[r][c]:null);
+      refreshInvUI();
     });
-    div.addEventListener('mouseleave',hideInvTip);
     div.addEventListener('mousedown',e=>{ if(e.button>0) return;
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       currentFocus=focusIdx; cursorX=c; cursorY=r;
@@ -8546,6 +8538,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
   const d=document.createElement('div');
   d.className='rcell'+(opts.muz?' muz':'')+(opts.structural?' seg0':'')
     +(opts.vent?' vent':'')+(opts.nextCore?' nextCore':'');
+  d.dataset.nv=focusIdx+',0,'+ci+','+ri;                           // spatial-nav identity (rack)
   if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) d.classList.add('cursor','cellFocus');
   if(item){
     const img=document.createElement('img'); img.src=makeIcon(item); img.draggable=false; d.appendChild(img);
@@ -9313,6 +9306,31 @@ function menuNav(){
   let moved=false;
   if(f.grid||f.rack||f.equipCol){
     clampCursor(f);
+    // SPATIAL NAV (owner): stepping off a grid's edge jumps to the NEAREST visible slot in the
+    // pressed direction — screen distance across BOTH axes, weighted toward the axis of travel —
+    // so left/right crosses columns and up/down crosses stacked panels, no hand-mapped hops.
+    // Every cell carries data-nv="focus,zone,x,y"; hidden menus report 0-width rects and drop out.
+    const spatialHop=(dx,dy)=>{
+      const cur=document.querySelector('.cellFocus');
+      if(!cur) return false;
+      const cr=cur.getBoundingClientRect(); if(!cr.width) return false;
+      const cx=cr.left+cr.width/2, cy=cr.top+cr.height/2;
+      let best=null,bd=1e9;
+      for(const el of document.querySelectorAll('[data-nv]')){
+        if(el===cur) continue;
+        const rc=el.getBoundingClientRect(); if(!rc.width) continue;
+        const ex=rc.left+rc.width/2-cx, ey=rc.top+rc.height/2-cy;
+        const fwd=dx?ex*dx:ey*dy;                        // progress along the pressed axis
+        if(fwd<4) continue;                              // must actually advance that way
+        const d=fwd+(dx?Math.abs(ey):Math.abs(ex))*2.2;  // nearest across BOTH axes, biased on-axis
+        if(d<bd){ bd=d; best=el; }
+      }
+      if(!best) return false;
+      const nv=best.dataset.nv.split(',').map(Number);
+      if(currentFocus!==nv[0]||(nv[0]===0&&zoneIdx!==nv[1])) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
+      currentFocus=nv[0]; if(nv[0]===0) zoneIdx=nv[1];
+      cursorX=nv[2]; cursorY=nv[3]; moved=true; return true;
+    };
     const step=(dx,dy)=>{
       // racks draw slot 0 at the BOTTOM: screen-down must move toward the grip (index 0)
       let nx=cursorX+dx, ny=cursorY+(f.rack?-dy:dy);
@@ -9323,52 +9341,12 @@ function menuNav(){
           nx+=dx; ny+=(f.rack?-dy:dy); scan++;
         }
         if(f.at(nx,ny)){ cursorX=nx; cursorY=ny; moved=true; return; }
-        nx=cursorX+dx; ny=cursorY+(f.rack?-dy:dy);   // fall through to crossing/clamp
       }
-      // ---- zone stack crossings (focus 0): down past the floor / up past the ceiling
-      if(currentFocus===0 && !f.rack){
-        const zl=invZones();
-        if(dy>0 && ny>=f.rows && zoneIdx<zl.length-1){
-          zoneIdx++; const nz=zl[zoneIdx];
-          cursorX=clamp(cursorX,0,nz.cols-1); cursorY=0; moved=true; return;
-        }
-        if(dy<0 && ny<0 && zoneIdx>0){
-          zoneIdx--; const nz=zl[zoneIdx];
-          cursorX=clamp(cursorX,0,nz.cols-1); cursorY=nz.rows-1; moved=true; return;
-        }
-        if(dx>0 && f.equipCol && zl.length>1){                   // out of the rig, into the pockets
-          zoneIdx=1; const nz=zl[1];
-          cursorX=0; cursorY=clamp(cursorY,0,nz.rows-1); moved=true; return;
-        }
-        if(dx<0 && nx<0 && !f.equipCol){                          // left edge of any pocket -> the rig
-          zoneIdx=0; cursorX=0; cursorY=clamp(cursorY,0,EQUIP_SLOTS.length-1); moved=true; return;
-        }
-      }
-      // the pockets panel sits to the RIGHT — Tool racks AND plain pockets take the cursor
-      // (Tool-only here left pouch/spare-container panels enterable once, by X, and never again)
-      const inspGrid=inspectItem instanceof Tool||!!(inspectItem&&inspectItem.inv);
-      if(dx>0 && nx>=f.cols && inspGrid && currentFocus!==2){
-        if(inspectItem instanceof Tool){
-          const tz=rackZone(inspectItem);
-          const rows=tz.rowsOf(0);
-          const entry=f.rack?cursorY:(rows-1-clamp(cursorY,0,rows-1));   // grid rows are top-origin
-          setFocus(2, 0, clamp(entry,0,rows-1));
-        }else setFocus(2, 0, clamp(cursorY,0,inspectItem.invRows-1));    // plain pockets: top-origin both sides
-        moved=true; return;
-      }
-      if(dx<0 && nx<0 && currentFocus===2){
-        const back=isToolMenuOpen?1:0;
-        if(back===0){ const cz=clampZone();
-                      const ey=f.rack?(f.rowsOf?f.rowsOf(cursorX):cz.rows)-1-cursorY:cursorY;   // racks invert to top-origin; plain pockets go straight across
-                      setFocus(0, cz.cols-1, clamp(ey,0,cz.rows-1)); }
-        else{ const tz=activeTool?rackZone(activeTool):null;
-              const bc=tz?tz.cols:1;
-              setFocus(1, bc-1, clamp(cursorY,0,tz?tz.rowsOf(bc-1)-1:0)); }            // rack -> rack: same origin
-        moved=true; return;
-      }
-      cursorX=clamp(nx,0,f.cols-1);
-      // ragged racks: clamp Y against the DESTINATION column's height
-      cursorY=clamp(ny,0,(f.rack?f.rowsOf(cursorX):f.rows)-1); moved=true;
+      else if(!f.rack && nx>=0&&nx<f.cols && ny>=0&&ny<f.rows){ cursorX=nx; cursorY=ny; moved=true; return; }
+      // EDGE: leave the grid — cross-grid continuity on BOTH axes (the old one-way hand-mapped hops retired)
+      if(spatialHop(dx,dy)) return;
+      // nowhere that way: pin inside the grid
+      if(!f.rack){ cursorX=clamp(nx,0,f.cols-1); cursorY=clamp(ny,0,f.rows-1); moved=true; }
     };
     const nav=navEdges();
     if(nav.left)  step(-1,0);
