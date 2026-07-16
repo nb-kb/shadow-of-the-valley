@@ -3961,7 +3961,10 @@ function menuInspect(item){
   Menus.inspect=item; inspectItem=item;
   // pockets are pockets — but a world-side open (menus closed, carried item) has
   // no cursor to send: the panel is for the eyes until a menu comes up under it
-  if((item instanceof Tool || (item && item.inv)) && uiMenusOpen()) setFocus(2);
+  if((item instanceof Tool || (item && item.inv)) && uiMenusOpen()){
+    if(item instanceof Tool) setFocus(2);              // the rack keeps its remembered cursor
+    else setFocus(2,0,0);                              // pockets/seats open ON slot 0 — stale FOCUS_MEM coords missed a 1x1 mag on first open (the cursor-glitch fix)
+  }
   else if(!item && currentFocus===2) setFocus(Menus.view==='tool'?1:0);
   refreshInvUI();
 }
@@ -4409,6 +4412,7 @@ function activateAtCursor(){
   const cell=cellAt(f);
   if(f.locked && cell && cell.widget){ adjustWidget(cell,-1); refreshInvUI(); return; }   // SECONDARY (RMB · ✕/pad0 · X) steps the dial DOWN; interact (LMB · □/pad2 · E) steps it UP
   if(currentFocus===2){                       // inside detached pockets — X on emptiness steps back out
+    if(bareInspect(inspectItem) && !heldWorld){ closeInspect(); return; }   // in a BARE seat, X anywhere just CLOSES it (owner)
     if(!cell && !heldWorld){ closeInspect(); return; }
     if(f.locked){ playSound('click'); return; }   // a locked WIDGET cell already returned above (secondary = DOWN-step) — only the dead click can land here
     if(!f.inspectGrid){ playSound('click'); return; }   // tool pockets keep their old manners
