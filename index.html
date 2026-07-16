@@ -30,10 +30,13 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #freeAim.dot::before{content:'';position:absolute;left:-0.35vh;top:-0.35vh;width:0.7vh;height:0.7vh;border-radius:50%;background:rgba(232,236,240,0.85);box-shadow:0 0 0.7vh rgba(232,236,240,0.45);}
 #freeAim.iron::before{content:'';position:absolute;left:-0.16vh;top:0;width:0.32vh;height:5.5vh;background:rgba(219,224,230,0.7);}  /* the post rises to center from below — shader twin: uv.y in [-0.055,0] */
 #freeAim.iron::after{content:'';position:absolute;left:-3.16vh;top:-1.2vh;width:0.32vh;height:2.4vh;background:rgba(219,224,230,0.7);box-shadow:6vh 0 rgba(219,224,230,0.7);}  /* notch shoulders at ±0.030·H, box-shadow paints the right one */
-#interactPrompt{position:absolute;left:50%;top:57%;transform:translateX(-50%);pointer-events:none;z-index:5;
-  font-size:15px;letter-spacing:.14em;color:var(--bone);text-shadow:0 1px 2px #000;opacity:0;transition:opacity .12s;}
+#interactPrompt{position:absolute;left:50%;top:57%;transform:translateX(-50%);pointer-events:none;z-index:5;text-align:center;
+  font-size:15px;letter-spacing:.14em;color:var(--bone);text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9);opacity:0;transition:opacity .12s;}
 #interactPrompt.show{opacity:.95;}
 #interactPrompt b{color:var(--exposed);}
+/* world prompts wear the INVENTORY tooltip conventions (owner): bold name + one dim verb row, transparent */
+#interactPrompt .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;display:block;}
+#interactPrompt .tt-cat{color:var(--dust);font-size:12.5px;letter-spacing:.1em;display:block;margin-top:2px;}
 
 /* ---------- panels: stenciled crate look ---------- */
 .panel{background:var(--panel);border:1px solid var(--line);position:relative;
@@ -303,7 +306,8 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
 
 /* floating item card */
 #tooltip{display:none;position:absolute;z-index:60;pointer-events:none;max-width:250px;padding:9px 11px;font-size:14px;
-  letter-spacing:.06em;line-height:1.5;background:var(--panel);border:1px solid var(--dust);color:var(--bone);display:none;}
+  letter-spacing:.06em;line-height:1.5;background:transparent;color:var(--bone);display:none;
+  text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9),0 0 3px #000;}   /* TRANSPARENT (owner): the card floats — the shadow stack carries the contrast */
 #tooltip .tt-name{color:var(--exposed);font-weight:bold;letter-spacing:.14em;}
 #tooltip .tt-cat{color:var(--dust);font-size:12px;}
 
@@ -4689,24 +4693,32 @@ function setPrompt(prompt,html,show){
   if(show){ prompt.innerHTML=html; prompt.classList.add('show'); }
   else prompt.classList.remove('show');
 }
+// WORLD PROMPTS = the inventory tooltip conventions (owner): a bold name line + one dim,
+// device-flavored verb row (+ an optional note) — concise, transparent, glyphs when the pad drove last
+function promptCard(name,verb,note){
+  return (name?'<div class="tt-name">'+name+'</div>':'')
+        +(verb?'<div class="tt-cat">'+verb+'</div>':'')
+        +(note?'<div class="tt-cat">'+note+'</div>':'');
+}
+const _ik=()=>tipPadT>tipMouseT?'□':'E';               // the interact key, as the last device spells it (KeyE ↔ pad2)
 function updateInteract(dt){
   const _pr=document.getElementById('interactPrompt');
   const _lvl=activeLevel;                                 // the exfil verb runs in EVERY world now — liveExfils gates it
   const ex=updateExfil(dt);
   if(activeLevel!==_lvl){ setPrompt(_pr,'',false); return; }  // exfil completed — extraction tore the world down mid-frame
   if(ex){ setPrompt(_pr, _exfilHold>0
-      ? 'EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s — keep holding <b>E</b>'
-      : ex.label+' — hold <b>E</b> to extract', true); return; }
+      ? promptCard('EXTRACTING · '+(3-_exfilHold).toFixed(1)+'s','keep holding '+_ik())
+      : promptCard(ex.label,'hold '+_ik()+' extract'), true); return; }
   if(activeLevel){
     const cr = isPlayable() ? nearestCrate(0.9) : null;   // arm's reach of a box FACE — home boxes open too, the stash lives there
     if(cr && !uiOpen()){
-      setPrompt(_pr, cr.stash?(cr.label||'THE STASH')+' — <b>E</b>':'A SUPPLY CRATE — <b>E</b>', true);
+      setPrompt(_pr, promptCard(cr.stash?(cr.label||'THE STASH'):'SUPPLY CRATE',_ik()+' open'), true);
       if(pressed('interact')){ openCrate(cr); }
       return;
     }
     const dr=nearStubDoor();
     if(dr){ if(pressed('interact')){ toast('SEALED. IT DOES NOT OPEN. YET.'); playSound('empty'); }
-      setPrompt(_pr,'A DOOR INTO THE FACILITY — SEALED',true); return; }
+      setPrompt(_pr,promptCard('FACILITY DOOR','sealed'),true); return; }
     // (the stolen terminal is AUTO-ON by proximity in the main loop now — no interact-to-open branch here)
     // AREA-1 HORDE GATE — card-locked control panel at the north incline (x≈gateX, inner face).
     // Reads LOCKED without a keycard; UNLOCK with one sets _gateOpen (v6 save blob) so the
@@ -4721,8 +4733,8 @@ function updateInteract(dt){
           if(_card){ _gateOpen=true; toast('HORDE GATE UNLOCKED'); playSound('pickup'); }
           else { toast('HORDE KEYCARD REQUIRED'); playSound('empty'); }
         }
-        setPrompt(_pr, _card?'GATE TERMINAL — <b>E</b> UNLOCK'
-                            :'GATE TERMINAL — <span style="color:var(--exposed)">LOCKED</span> · HORDE KEYCARD REQUIRED', true);
+        setPrompt(_pr, _card?promptCard('GATE TERMINAL',_ik()+' unlock')
+                            :promptCard('GATE TERMINAL','<span style="color:var(--exposed)">locked</span>','horde keycard required'), true);
         return;
       }
     }
@@ -4738,8 +4750,8 @@ function updateInteract(dt){
         if(_card){ _lockOpen[dg.rid]=true; levelTexDirty=true; toast(lk.label+' UNLOCKED'); playSound('pickup'); }
         else { toast(lk.cardName+' REQUIRED'); playSound('empty'); }
       }
-      setPrompt(_pr, _card?lk.label+' — <b>E</b> UNLOCK'
-                          :lk.label+' — <span style="color:var(--exposed)">LOCKED</span> · <span style="color:'+lk.col+'">'+lk.cardName+'</span> REQUIRED', true);
+      setPrompt(_pr, _card?promptCard(lk.label,_ik()+' unlock')
+                          :promptCard(lk.label,'<span style="color:var(--exposed)">locked</span>','<span style="color:'+lk.col+'">'+lk.cardName.toLowerCase()+'</span> required'), true);
       return;
     }
   }
@@ -4763,12 +4775,16 @@ function updateInteract(dt){
   const hover=_hoverCache;
   const prompt=document.getElementById('interactPrompt');
   if(heldWorld){
+    const _pd=tipPadT>tipMouseT;
     const stowing=heldUseArm&&heldWorld.w.item instanceof Tool
-      ?' · <b>△</b> stowing '+'▮'.repeat(Math.min(4,1+(heldUseArm.t/0.35*4|0)))+'▯'.repeat(Math.max(0,3-(heldUseArm.t/0.35*4|0))):'';
-    setPrompt(prompt,'<b>E</b> set down · <b>LMB</b> hurl · <b>wheel</b> distance'+stowing,true);
+      ?' · '+(_pd?'△':'F')+' stowing '+'▮'.repeat(Math.min(4,1+(heldUseArm.t/0.35*4|0)))+'▯'.repeat(Math.max(0,3-(heldUseArm.t/0.35*4|0))):'';
+    setPrompt(prompt,promptCard(dispName(heldWorld.w.item),
+      (_pd?'□ set down · R2 hurl · d↕ distance':'E set down · LMB hurl · wheel distance')+stowing),true);
   }else if(hover.idx>=0 && worldItems[hover.idx]){
     const it=worldItems[hover.idx].item;
-    setPrompt(prompt,'<b>E</b> '+(!activeTool&&it instanceof Tool?'take up ':'grab ')+dispName(it)+(canSipFrom(it)?' <span style="color:var(--gate)">— feeds the Tool</span>':''),true);
+    setPrompt(prompt,promptCard(dispName(it),
+      _ik()+(!activeTool&&it instanceof Tool?' take up':' grab'),
+      canSipFrom(it)?'<span style="color:var(--gate)">feeds the Tool</span>':''),true);
   }else setPrompt(prompt,'',false);
 
   if(pressed('interact')){
