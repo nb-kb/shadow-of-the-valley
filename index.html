@@ -929,7 +929,7 @@ uniform vec4  uRadZone[5];                   // xy center · z radius (<=0.5 = e
 uniform int   tracerCount;
 uniform vec3  tracerA[${RLIM.TRACERS}];
 uniform vec3  tracerB[${RLIM.TRACERS}];
-uniform vec3  tracerCol[${RLIM.TRACERS}];
+uniform vec4  tracerCol[${RLIM.TRACERS}];   // rgb + w = radius OVERRIDE (0 = the csum tier law) — the whip cord TAPERS with it
 
 uniform int   decalCount;
 uniform vec4  decalPos[${RLIM.DECALS}];      // xyz + size
@@ -1594,7 +1594,7 @@ vec2 map(vec3 p){
     float las = step(2.8, csum);                 // laser-class threads draw a single ray:
     // 0.004 is safe — past ~5m the march eps (0.0007t) exceeds it and rules the
     // visible width exactly as it did at 0.011, so thinner buys no new shimmer
-    float d = sdCapsule(p, tracerA[i], tracerB[i], mix(mix(0.035, 0.011, hot), 0.004, las));
+    float d = sdCapsule(p, tracerA[i], tracerB[i], tracerCol[i].w>0.0001?tracerCol[i].w:mix(mix(0.035, 0.011, hot), 0.004, las));
     if(d < res.x) res = vec2(d, ${40+RLIM.ENEMIES}.0 + float(i));   // tracer band starts at 40+RLIM.ENEMIES; enemy band is [40, 40+RLIM), so raising the cap never overflows into tracers
   }
 
@@ -1887,7 +1887,7 @@ void main(){
     }
     else{
       int ti=int(m-${40+RLIM.ENEMIES}.0+0.5);
-      matCol=tracerCol[ti]; emiss=1.0;
+      matCol=tracerCol[ti].xyz; emiss=1.0;
     }
 
     // scorch decals
@@ -5476,14 +5476,14 @@ function drawWhip(dt){
   let px=hx,py=hy,pz=hz;
   for(let i=1;i<=6;i++){ const t=i/6, u=1-t;
     const qx=u*u*hx+2*u*t*cx+t*t*tx, qy=u*u*hy+2*u*t*cy+t*t*ty, qz=u*u*hz+2*u*t*cz+t*t*tz;
-    beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(qx,qy,qz), col:[0.55,0.42,0.28], ttl:dt+0.001});
+    beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(qx,qy,qz), col:[0.55,0.42,0.28], ttl:dt+0.001, r:0.032-0.026*(i/6)});   // the cord TAPERS hand→tip (owner)
     px=qx; py=qy; pz=qz;
   }
   if(!meleeHit&&meleeT+dt>=0.19){                                // the CRACK lands next tick — light pop + a small RANDOMIZED spark spray
     addDyn(px,py,pz,[1.0,0.85,0.55],2.6,0.09);
     const n=4+(runRng()*4|0);
     for(let k=0;k<n;k++){ const a2=runRng()*6.2832, rr=0.10+runRng()*0.14;
-      beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(px+Math.cos(a2)*rr,py+(runRng()-0.3)*rr,pz+Math.sin(a2)*rr), col:[1.0,0.9,0.6], ttl:0.04+runRng()*0.05});
+      beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(px+Math.cos(a2)*rr,py+(runRng()-0.3)*rr,pz+Math.sin(a2)*rr), col:[1.0,0.9,0.6], ttl:0.04+runRng()*0.05, r:0.006});   // needle sparks off the tapered tip
     }
   }
 }
@@ -10048,14 +10048,14 @@ function bagFrame(){
   const _vy=(0.105-0.20*dk)-rise;                                    // the pinned mouth line — the duck digs deeper (owner), mirrors the model exactly
   const px=innerWidth/2;
   const py=Math.max(8,H/2-((_vy/0.276)/fovU)*H + H*0.045);
-  const sc=((innerWidth<=1100||innerHeight<=880)?0.86:Math.min(1.22,Math.max(1,innerHeight/920)))*_bsc;   // big windows: the kit scales UP to fit (owner: readability)
+  const sc=Math.min(1.30,Math.max(1.0,innerHeight/860))*_bsc;   // the UI never shrinks below natural (slots always ≥ the stash's) and scales UP more on big windows (owner: readability)
   const scy=sc*(1-0.10*dk);                                          // the squash — a touch flatter as it tucks away
   const rot=Math.sin(gameTime*0.5)*1.4*(1-dk);                       // the sway calms while ducked
   if(ui.style.left!=='0px'){ ui.style.left='0px'; ui.style.top='0px'; ui.style.transformOrigin='50% 0'; }   // position rides the TRANSFORM — zero per-frame layout writes (the menu lag fix)
   ui.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px) translate(-50%,0) perspective(900px) rotateX(-6deg) scale('+sc.toFixed(3)+','+scy.toFixed(3)+') rotate('+rot.toFixed(2)+'deg)';   // rotateX hinges at the pinned mouth: the UI TAPERS toward the bottom, matching the pack's perspective (owner)
   if(su){ if(_uiW<=0||_uiVw!==innerWidth){ _uiW=ui.offsetWidth||1; _uiH=ui.offsetHeight||1; _uiVw=innerWidth; }   // measured ONLY when the DOM (refreshInvUI) or the viewport changed — no per-frame getBoundingClientRect reflow
-    if(su.style.left!=='0px'){ su.style.left='0px'; su.style.top='0px'; su.style.right='auto'; }
-    su.style.transform='translate('+(px+_uiW*sc/2+34).toFixed(1)+'px,'+py.toFixed(1)+'px)'; }   // flush with the bag's right, top edges level
+    if(su.style.left!=='0px'){ su.style.left='0px'; su.style.top='0px'; su.style.right='auto'; su.style.transformOrigin='0 0'; }
+    su.style.transform='translate('+(px+_uiW*sc/2+34).toFixed(1)+'px,'+py.toFixed(1)+'px) scale('+sc.toFixed(3)+')'; }   // flush with the bag's right, top edges level — SAME scale, so the slot sizes always MATCH (owner)
 }
 
 const FRAME_MS=1000/60;
@@ -10183,8 +10183,8 @@ function frame(){
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
   gl.uniform2f(U.uMenuLook,_mlDuck*_mlDuck*(3-2*_mlDuck),0);   // .x = the DUCK factor, smoothstepped to match the DOM exactly: activity tucks the props small toward bottom-center
-  { const _bhT=Math.max(0.45,Math.min(0.9,((_uiH||560)/560)*0.75));   // TIED TO THE UI (owner): the model's height follows the kit box's measured height (full kit ~560px → 0.75)...
-    const _bwT=Math.max(0.65,Math.min(1.1,(_uiW||620)/620));          // ...and its width the kit's width — panels folding/opening, bigger packs, all of it grows AS ONE
+  { const _bhT=Math.max(0.45,Math.min(0.80,0.68*(0.55+0.45*((_uiH||560)/560))));   // TIED TO THE UI, SOFTENED (owner): full kit ~0.68, and UI changes move the model at LESS than 1:1 — the proportion tweak
+    const _bwT=Math.max(0.65,Math.min(1.05,0.70+0.30*((_uiW||620)/620)));          // width softened the same way — panels folding/opening still breathe, gently
     _bagHS+=(_bhT-_bagHS)*Math.min(1,8*dt); _bagWS+=(_bwT-_bagWS)*Math.min(1,8*dt); }   // eased, so zone toggles breathe instead of snapping
   gl.uniform1f(U.uBagH,_bagHS);
   gl.uniform1f(U.uBagW,_bagWS);
@@ -10327,14 +10327,14 @@ function frame(){
     if(pr.stuck) gl.uniform3f(U.trB[ti],pr.pos.x,pr.pos.y-0.05,pr.pos.z);   // zero-vel segment NaNs sdCapsule
     else gl.uniform3f(U.trB[ti],pr.pos.x-pr.vel.x/vl*0.8,pr.pos.y-pr.vel.y/vl*0.8,pr.pos.z-pr.vel.z/vl*0.8);
     }
-    gl.uniform3f(U.trC[ti],pr.col[0],pr.col[1],pr.col[2]);
+    gl.uniform4f(U.trC[ti],pr.col[0],pr.col[1],pr.col[2],0);
     ti++;
   }
   for(const b of beamSegs){
     if(ti>=RLIM.TRACERS) break;
     gl.uniform3f(U.trA[ti],b.a.x,b.a.y,b.a.z);
     gl.uniform3f(U.trB[ti],b.b.x,b.b.y,b.b.z);
-    gl.uniform3f(U.trC[ti],b.col[0],b.col[1],b.col[2]);
+    gl.uniform4f(U.trC[ti],b.col[0],b.col[1],b.col[2],b.r||0);   // .w = radius override — 0 keeps the tier law
     ti++;
   }
   gl.uniform1i(U.tracerCount,ti);
