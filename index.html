@@ -104,10 +104,53 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
   box-shadow:0 0 0 6px #14150f, 0 0 0 7px rgba(200,205,190,.25), 0 0 0 100vmax rgba(4,5,3,.55);}
 #scopeGlass[data-optic="1"]::before{background:radial-gradient(circle, rgba(190,70,70,.03) 0%, rgba(170,60,60,.07) 62%, rgba(150,50,50,.10) 100%);}
 
-/* ---------- stylized inventories — slots float over the 3D prop ---------- */
-#backpackUI{position:absolute;left:5%;top:11%;transform:none;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves */
+/* ---------- THE OPEN RUCKSACK — the whole kit menu sits inside the bag (owner sketch).
+     Pure CSS canvas: flap folded up/back over the mouth · trapezoid gusset flare · olive body ·
+     dark lining that the interior panels sit in. Decoration wraps the layout; it never repositions it. */
+#backpackUI{position:absolute;left:5%;top:11%;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves (base transform stays none; short viewports scale from origin 0 0 below) */
   text-align:center;pointer-events:none;}
-#zoneStack{display:flex;gap:18px;align-items:flex-start;justify-content:flex-start;}
+#backpackUI:not(.hidden){animation:bagOpen .18s ease-out;}
+@keyframes bagOpen{from{opacity:0;}to{opacity:1;}}
+/* the flap, seen folded back: underside lining at the top, curved stitched hem — pokes up behind the body */
+#bagFlap{position:absolute;left:-10px;right:-10px;top:-26px;height:64px;z-index:-1;pointer-events:none;
+  background:
+    repeating-linear-gradient(97deg, rgba(255,255,255,.025) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(7deg, rgba(0,0,0,.06) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg,#242417 0%,#31301f 34%,#403e2b 72%,#46442f 100%);
+  border:2px solid #191910;border-radius:14px 14px 42px 42px/14px 14px 30px 30px;
+  box-shadow:0 6px 14px rgba(0,0,0,.5), inset 0 -8px 12px -6px rgba(0,0,0,.55), inset 0 2px 0 rgba(220,210,170,.05);
+  transform-origin:50% 100%;animation:flapUp .26s ease-out;}
+@keyframes flapUp{from{transform:translateY(12px) scaleY(.4);}to{transform:none;}}
+/* gusset: the mouth flares trapezoidal behind the body and casts the bag's shadow onto the valley */
+#bagGusset{position:absolute;inset:-8px -18px 10px;z-index:-2;pointer-events:none;
+  clip-path:polygon(0 0,100% 0,95.5% 100%,4.5% 100%);border-radius:12px;
+  background:linear-gradient(180deg,#3a3826 0%,#2c2b1a 55%,#1f1e10 100%);
+  filter:drop-shadow(0 18px 30px rgba(0,0,0,.55));}
+/* the body: worn olive canvas, warm top light, leather-dark binding */
+#bagBody{position:relative;padding:14px 14px 16px;border-radius:10px 10px 26px 26px;border:2px solid #1c1b10;
+  background:
+    repeating-linear-gradient(97deg, rgba(255,255,255,.03) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(7deg, rgba(0,0,0,.06) 0 2px, transparent 2px 5px),
+    linear-gradient(176deg,#4c4936 0%,#403e2c 34%,#343223 74%,#2b2a1a 100%);
+  box-shadow:0 20px 40px rgba(0,0,0,.55), 0 3px 9px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(233,220,180,.14), inset 0 -2px 0 rgba(0,0,0,.4);}
+/* strap tongues + brass keepers hanging over the rim from the flap — rim band only, clear of the slots */
+#bagBody::before,#bagBody::after{content:'';position:absolute;top:-14px;width:20px;height:30px;z-index:1;pointer-events:none;
+  background:
+    linear-gradient(180deg, transparent 58%, rgba(20,14,6,.9) 58%, rgba(20,14,6,.9) 62%, #b3924e 62%, #8a6c38 78%, rgba(20,14,6,.9) 78%, rgba(20,14,6,.9) 82%, transparent 82%),
+    linear-gradient(92deg,#33271a 0%,#5b4730 46%,#46351f 100%);
+  border:1px solid #170f07;border-radius:2px 2px 6px 6px;box-shadow:0 3px 6px rgba(0,0,0,.5);}
+#bagBody::before{left:26px;} #bagBody::after{right:26px;}
+/* the lining: the interior everything sits in — the bag lip shades the panel tops (vignette) */
+#zoneStack{display:flex;gap:18px;align-items:flex-start;justify-content:flex-start;position:relative;
+  padding:12px;border-radius:7px 7px 20px 20px;
+  outline:1px dashed rgba(214,205,180,.17);outline-offset:-6px;
+  background:
+    radial-gradient(130% 70% at 50% 0%, rgba(0,0,0,.5) 0%, rgba(0,0,0,.14) 42%, transparent 62%),
+    repeating-linear-gradient(45deg, rgba(0,0,0,.045) 0 3px, transparent 3px 6px),
+    linear-gradient(180deg,#181a0f 0%,#1d1f12 55%,#191a0e 100%);
+  box-shadow:inset 0 10px 16px -6px rgba(0,0,0,.8), inset 0 -6px 12px -8px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.6);}
+@media (max-height:820px){ #backpackUI{top:6%;transform:scale(.86);transform-origin:0 0;} }   /* short viewports: the whole bag scales from the fixed anchor — nothing inside re-flows, nothing scrolls */
 .zoneCol{display:flex;flex-direction:column;align-items:flex-start;}
 .zoneCol .gridWrap{margin:12px 0 0;}                            /* left-aligned in the column — a neighbor folding never re-centers the rest */
 .zonePanel .gridWrap{background:rgba(8,10,12,.5);border-color:rgba(215,220,230,.26);}   /* worn containers + stash read as their own detached panels */
@@ -281,9 +324,12 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 </div>
 <div id="banner"></div>
 
-<!-- Rucksack -->
+<!-- Rucksack — the kit menu IS the open bag: flap folded back, gusset mouth, canvas body, dark lining.
+     All of it pure CSS (gradients + borders); the wrappers are decoration only — renderZones owns #zoneStack -->
 <div id="backpackUI" class="hidden">
-  <div id="zoneStack"></div>
+  <div id="bagFlap"></div>
+  <div id="bagGusset"></div>
+  <div id="bagBody"><div id="zoneStack"></div></div>
 </div>
 
 <!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
