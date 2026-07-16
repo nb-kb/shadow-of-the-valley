@@ -623,8 +623,7 @@ const ACTIONS = [
   {id:'interact', label:'Grab / reload / place',kb:'KeyE',       pad:2},   // square
   {id:'throwHeld',label:'Hurl carried (alt)',  kb:'KeyG',        pad:null},
   {id:'flash',    label:'Lantern / use · open held', kb:'KeyF',  pad:3},   // triangle
-  {id:'leanL',    label:'Lean left',           kb:'KeyQ',        pad:4},   // L1
-  {id:'leanR',    label:'Lean right',          kb:'KeyX',        pad:5},   // R1
+  // (lean mappings RETIRED — owner: leaning is fully cover-contextual now; Q/X and L1/R1 are free)
   {id:'cycleL',   label:'Holster · prev tool', kb:null,          pad:14},  // d-left
   {id:'cycleR',   label:'Holster · next tool', kb:'KeyT',        pad:15},  // d-right (Q is spoken for — lean)
   {id:'reelIn',  label:'Wheel up (reel · carry)',   kb:null, pad:12},  // d-up  = mouse-wheel up
@@ -2390,7 +2389,7 @@ const playerPos={
   flashlightOn:false,
   noiseLevel:0.2, exposure:0.5, muzzleGlow:0,
   camYawOffset:0,camPitchOffset:0,
-  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, yawPend:0, wallPush:0, walkCycle:0,
+  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, yawPend:0, wallPush:0, autoLean:0, walkCycle:0,
   velX:0, velZ:0, swinging:false, launched:false,   // velX/velZ = the ONLY horizontal velocity state (rope swing + slide-hop launch)
 };
 let cameraYaw=0.6, cameraPitch=0;
@@ -3548,9 +3547,9 @@ const ITEM_DEFS={
   holster1:   ()=>new Armor('Hip Holster',1,2,'#4e4030','holster',{invCols:1,invRows:1,slotMode:true,zoneOpen:true}),
   holster2:   ()=>new Armor('Twin Holster',1,2,'#54432c','holster',{invCols:2,invRows:1,slotMode:true,zoneOpen:true}),
   holster3:   ()=>new Armor('Chest Holster',2,2,'#5a4628','holster',{invCols:3,invRows:1,slotMode:true,zoneOpen:true}),
-  harnessL:   ()=>new Armor('Light Harness',2,2,'#3f4a3a','harness',{invCols:3,invRows:3}),   // +a row (owner): PLATES ride IN the harness now — the rig slot is retired
-  harnessM:   ()=>new Armor('Field Harness',2,2,'#44503c','harness',{invCols:3,invRows:4}),
-  harnessH:   ()=>new Armor('Assault Harness',2,3,'#4a5640','harness',{invCols:4,invRows:5}),
+  harnessL:   ()=>new Armor('Light Harness',2,2,'#3f4a3a','harness',{invCols:3,invRows:2}),   // 3×2 → 4×3 → 5×4 (owner) — cargo only: plates ride the harness's OWN seat, not the grid
+  harnessM:   ()=>new Armor('Field Harness',2,2,'#44503c','harness',{invCols:4,invRows:3}),
+  harnessH:   ()=>new Armor('Assault Harness',2,3,'#4a5640','harness',{invCols:5,invRows:4}),
   platesL:    ()=>new Armor('Scrap Plates',2,2,'#5c5c60','plates',{damageMult:0.75,dur:20}),
   platesH:    ()=>new Armor('Ceramic Plates',2,2,'#6a6a70','plates',{damageMult:0.6,dur:30}),
   // P5 HEADSHOT TIERS (spec F): hs = headSHOTS the dome eats before it shatters — LIGHT/tier-1 eats
@@ -3737,9 +3736,11 @@ function adjustWidget(wd,dir){
 }
 const EQUIP_SLOTS=['helmet','face','harness','holster','rucksack'];   // CONSOLIDATED (owner): 'face' seats masks AND goggles; 'holster' seats holsters AND belts; headphones ride IN the helmet; PLATES ride IN the harness. loadGame migrates every retired slot.
 let equip={helmet:null,face:null,harness:null,holster:null,rucksack:null};
-function wornPlates(){                          // plates WORK worn-in-harness now: the first plates item seated in the worn harness is the live armor
-  const h=equip.harness; if(!h||!h.inv) return null;
-  for(const row of h.inv) for(const it of row) if(it&&it.armorType==='plates') return it;
+function wornPlates(){                          // plates ride a DEDICATED seat on the harness (owner) — they never eat cargo space
+  const h=equip.harness; if(!h) return null;
+  if(h.plates) return h.plates;
+  if(h.inv) for(const row of h.inv) for(let i=0;i<row.length;i++){ const it=row[i];   // self-heal: an older save seated plates IN the grid — lift them to the seat
+    if(it&&it.armorType==='plates'){ row[i]=null; h.plates=it; return it; } }
   return null;
 }
 let BAG_COLS=5,BAG_ROWS=6;
@@ -4028,11 +4029,9 @@ let _whipSeed={cx:0.6,ov:0.5,lag:1};// per-swing whip character — rolled fresh
 const SLOT_KIN={face:['face','goggles'],holster:['holster','belt']};   // consolidated seats (owner): FACE takes masks+goggles, HOLSTER takes holsters+belts — the goggles/belt slots are retired
 function quickEquip(it){                           // □□/Shift+LMB on ARMOR with a free seat: it goes ON, not away (owner)
   if(!(it instanceof Armor)) return false;
-  if(it.armorType==='plates'){                     // plates seat INTO the worn harness
+  if(it.armorType==='plates'){                     // plates seat INTO the harness's own seat — never the cargo grid
     const h=equip.harness;
-    if(h&&h.inv&&!wornPlates()&&autoPlace(it,h.inv,h.invCols,h.invRows)){
-      toast('PLATES SEATED'); playSound('place'); return true;
-    }
+    if(h&&!wornPlates()){ h.plates=it; toast('PLATES SEATED'); playSound('place'); return true; }
     return false;
   }
   for(const s of EQUIP_SLOTS){
@@ -4087,9 +4086,9 @@ function quickMoveAtCursor(){                      // Shift+LMB: quick-move the 
     if(cursorY===EQUIP_SLOTS.length){              // the plates proxy: strip the seated plates out of the harness
       const _pl=wornPlates(), _h=equip.harness;
       if(!_pl||!_h){ playSound('click'); return; }
-      for(const row of _h.inv) for(let i=0;i<row.length;i++) if(row[i]===_pl) row[i]=null;
+      _h.plates=null;
       if(autoPlaceAny(_pl)){ playSound('place'); refreshInvUI(); }
-      else { autoPlace(_pl,_h.inv,_h.invCols,_h.invRows); toast('NO ROOM'); playSound('empty'); }
+      else { _h.plates=_pl; toast('NO ROOM'); playSound('empty'); }
       return;
     }
     const slot=EQUIP_SLOTS[cursorY], it=equip[slot];
@@ -4161,14 +4160,14 @@ function interactInventory(){
       if(heldWorld){
         const it=heldWorld.w.item;
         if(!(it instanceof Armor)||it.armorType!=='plates'){ toast('PLATES ONLY'); playSound('empty'); return; }
-        if(!h||!h.inv){ toast('NEEDS A HARNESS'); playSound('empty'); return; }
+        if(!h){ toast('NEEDS A HARNESS'); playSound('empty'); return; }
         if(wornPlates()){ toast('PLATES ALREADY SEATED'); playSound('empty'); return; }
-        if(!autoPlace(it,h.inv,h.invCols,h.invRows)){ toast('HARNESS FULL'); playSound('empty'); return; }
+        h.plates=it;                                     // the harness's OWN seat — cargo space untouched
         consumeHeld(); toast('PLATES SEATED'); playSound('place'); refreshInvUI(); return;
       }
       const _pl=wornPlates();
-      if(_pl&&h&&h.inv){
-        for(const row of h.inv) for(let i=0;i<row.length;i++) if(row[i]===_pl) row[i]=null;
+      if(_pl&&h){
+        h.plates=null;
         handHold(_pl);
         _hpick={t:runClock,f:currentFocus,zi:zoneIdx,x:cursorX,y:cursorY,ext:false,srcId:undefined,live:true};
         refreshInvUI(); return;
@@ -6504,8 +6503,7 @@ function applyStatus(t,pr){
 function armorWear(slot){
   const a=slot==='plates'?wornPlates():equip[slot]; if(!a||!a.durMax) return;   // plates live in the harness now
   if(--a.dur>0) return;
-  if(slot==='plates'){ const h=equip.harness;                                   // broken plates leave their harness seat
-    if(h&&h.inv) for(const row of h.inv) for(let i=0;i<row.length;i++) if(row[i]===a) row[i]=null; }
+  if(slot==='plates'){ if(equip.harness) equip.harness.plates=null; }           // broken plates leave their harness seat
   else equip[slot]=null;
   if(a.inv){ const seen=new Set();                        // a broken container SPILLS its cargo at your feet — seated filters survive the mask (P3)
     for(let r=0;r<a.invRows;r++) for(let c=0;c<a.invCols;c++){ const ch=a.inv[r][c];
@@ -8015,6 +8013,7 @@ function itemToJSON(it){
   if(it.filter) j.lf=Math.round(it.life);                 // gas filter: remaining breath rides the slot (additive — old blobs lack it, reads full)
   if(it instanceof Armor && it.durMax){ j.dur=it.dur; j.rs=[it.resist.burn,it.resist.bleed]; }
   if(it instanceof Armor && it.hs!==undefined) j.hs=it.hs;   // P5: headshot cracks ride the item (additive v6 field — old blobs just read fresh)
+  if(it instanceof Armor && it.plates) j.pl=itemToJSON(it.plates);   // the harness's dedicated plates seat rides the item (additive)
   if(it instanceof Barrel){ j.slots=it.slots.map(itemToJSON); j.muzzle=itemToJSON(it.muzzle); }
   if(it instanceof Platform){ j.slots=it.slots.map(itemToJSON); j.cycles=it.cycles.slice(); }
   if(it instanceof Tool){ j.slots=it.base.slots.map(itemToJSON); j.muzzle=itemToJSON(it.base.muzzle);
@@ -8044,6 +8043,7 @@ function itemFromJSON(j){
     if(j.rs){ it.resist.burn=Math.min(0.6,Math.max(0,+j.rs[0]||0)); it.resist.bleed=Math.min(0.6,Math.max(0,+j.rs[1]||0)); }
   }
   if(it.hs!==undefined&&j.hs!==undefined) it.hs=Math.min(Math.max(1,j.hs|0),it.hs);   // P5: clamp to the def's tier — garbage never over-crowns a cap (dur idiom)
+  if(j.pl){ const _p=itemFromJSON(j.pl); if(_p instanceof Armor&&_p.armorType==='plates') it.plates=_p; }   // the harness seat restores its plates (garbage drops)
   if(it instanceof Barrel){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } }); it.muzzle=itemFromJSON(j.muzzle); }   // pre-retune saves ran longer — tail mods salvage, never vanish
   if(it instanceof Platform){ j.slots.forEach((c,i)=>{ if(i<it.slots.length) it.slots[i]=itemFromJSON(c); else{ const o=itemFromJSON(c); if(o) _retuneOrphans.push(o); } });   // same clamp as the Barrel — overlong saves salvage, never overrun
     if(j.cycles) it.cycles=j.cycles.slice(); }
@@ -8152,9 +8152,9 @@ function loadGame(slot){
       if(!b.equip[_mk[0]]) continue; const _mi=itemFromJSON(b.equip[_mk[0]]);
       if(_mi instanceof Armor && !equip[_mk[1]]) equip[_mk[1]]=_mi; else if(_mi) _retuneOrphans.push(_mi);
     }
-    if(b.equip&&b.equip.plates){ const _pp=itemFromJSON(b.equip.plates);                        // RETIRED plates slot: seat into the worn harness, else re-home
+    if(b.equip&&b.equip.plates){ const _pp=itemFromJSON(b.equip.plates);                        // RETIRED plates slot: seat on the worn harness, else re-home
       if(_pp){ const _h=equip.harness;
-        if(!(_h&&_h.inv&&autoPlace(_pp,_h.inv,_h.invCols,_h.invRows))) _retuneOrphans.push(_pp); } }
+        if(_h&&!_h.plates&&_pp instanceof Armor) _h.plates=_pp; else _retuneOrphans.push(_pp); } }
     syncBagAlias(); clampZone();
     if(b.wield){ const t=itemFromJSON(b.wield); if(t instanceof Tool){ activeTool=t; } }
     for(const row of stashInv) row.fill(null);            // in place — the crate registry holds this array. v2 reads empty.
@@ -9342,7 +9342,7 @@ function updatePlayer(dt){
   if(FLAGS.noclip){
     playerPos.velY=0;
     if(down('jump')) playerPos.y+=4*dt;
-    if(down('leanL')&&down('leanR')) playerPos.y-=4*dt;
+    if(down('crouch')) playerPos.y-=4*dt;   // (lean binds retired — noclip descends on crouch now)
   }else{
     const _sw0x=playerPos.x, _sw0y=playerPos.y, _sw0z=playerPos.z;   // pre-flight pose — the swept resolve below walks from here. Captured BEFORE the gravity step: a plain fast fall (>20 m/s at 30fps = 0.7m a frame) must sweep too, or it tunnels the 0.3m watchtower deck
     playerPos.velY-=P('gravity')*dt;
@@ -9478,7 +9478,7 @@ function updatePlayer(dt){
   const _pkR=(playerPos._peek&&playerPos._peek.on&&playerPos.isCrouching)?Math.min(playerPos._peek.rise,0.6):0;   // the peek's variable un-crouch — capped at standing
   const targetH=playerPos.isCrouching?0.72+_pkR:1.32;
   playerPos.baseHeight+=(targetH-playerPos.baseHeight)*Math.min(1,(slideT>0?22:10)*dt);   // the slide ducks NOW
-  const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5;   // (the peek moves the BODY now — the lean channel is the player's alone)
+  const targetLean=menus?0:(playerPos.autoLean||0)*0.5;   // ENTIRELY context-sensitive (owner): the cover peek drives the lean — no manual mappings
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
   // aim fov
@@ -9489,8 +9489,8 @@ function updatePlayer(dt){
   // WALL AHEAD (owner): the gun COLLIDES instead of carving — probe half a metre out; the
   // viewmodel pulls the stock back and pitches the muzzle up as the wall closes in (uWallPush)
   { const _o=camPos(), _f=camForward();
-    const _wd=activeTool?mapWorldJS(_o.x+_f.x*0.5,_o.y+_f.y*0.5,_o.z+_f.z*0.5):1;
-    const _wt=activeTool?clamp(1-_wd/0.28,0,1):0;      // tighter trigger (owner): the gun tolerates a closer wall before it's forced up
+    const _wd=activeTool?mapWorldJS(_o.x+_f.x*0.4,_o.y+_f.y*0.4,_o.z+_f.z*0.4):1;
+    const _wt=activeTool?clamp(1-_wd/0.22,0,1):0;      // TIGHT trigger (owner): the collide/peek engages only close to the wall edge
     playerPos.wallPush+=(_wt-playerPos.wallPush)*Math.min(1,14*dt);
     // PHYSICAL PEEK (owner): aiming with the muzzle OBSTRUCTED moves the BODY — first rise out
     // of the crouch (variable height, just enough), then STEP past the cover's open edge (left
@@ -9502,18 +9502,22 @@ function updatePlayer(dt){
     const _obstr=playerPos.wallPush>0.45;
     if(_aimHold&&(pk.on||_obstr)){
       if(!pk.on){ pk.on=true; pk.ax=playerPos.x; pk.az=playerPos.z; pk.rise=0; }
+      let _lnT=0;
       if(_obstr){                                       // still blocked → keep working the problem
         const _b2=camBasis();
-        const _dl=mapWorldJS(playerPos.x-_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z-_b2.right.z*0.45+_f.z*0.55);
-        const _dr=mapWorldJS(playerPos.x+_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z+_b2.right.z*0.45+_f.z*0.55);
+        const _dl=mapWorldJS(playerPos.x-_b2.right.x*0.6+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z-_b2.right.z*0.6+_f.z*0.55);   // wider reach — the edge is FOUND more, so the rise fires less (owner)
+        const _dr=mapWorldJS(playerPos.x+_b2.right.x*0.6+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z+_b2.right.z*0.6+_f.z*0.55);
         const _open=Math.max(_dl,_dr)>0.45, _room=Math.hypot(playerPos.x-pk.ax,playerPos.z-pk.az)<0.9;
-        if(_open&&_room){                               // 1) LEFT/RIGHT FIRST (owner): step past the open edge
+        if(_open&&_room){                               // 1) LEFT/RIGHT FIRST (owner): step past the open edge — the lean rides with it
           const _sd=(_dr>_dl?1:-1);
           playerPos.x+=_b2.right.x*_sd*0.9*dt; playerPos.z+=_b2.right.z*_sd*0.9*dt;
+          _lnT=_sd;
         }
-        else if(playerPos.isCrouching&&pk.rise<0.6) pk.rise=Math.min(0.6,pk.rise+1.6*dt);   // 2) no side clears → rise instead
+        else if(playerPos.isCrouching&&pk.rise<0.6) pk.rise=Math.min(0.6,pk.rise+0.9*dt);   // 2) LAST resort: rise, gently (de-prioritized per owner)
       }                                                 // clear → HOLD here while the aim is held
+      playerPos.autoLean+=(_lnT-playerPos.autoLean)*Math.min(1,8*dt);
     } else if(pk.on){                                   // released → ease home
+      playerPos.autoLean+=(0-playerPos.autoLean)*Math.min(1,8*dt);
       if(moving||!playerPos.onGround){ pk.on=false; pk.rise=0; }   // walking off breaks the tether
       else{
         pk.rise=Math.max(0,pk.rise-2.2*dt);
