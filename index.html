@@ -1616,12 +1616,13 @@ vec2 map(vec3 p){
     vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
     if(uMenu>0.001 && uMenuMode==1){   // the raised BAG (bag/crate/stash views) — mode 0 on close keeps the ease for the worn tool (bug #7)
       float rise=(1.0-uMenu)*(1.0-uMenu)*0.16;         // ease-out: the prop settles, no lunge
-      vec3 va=rotX(rotY(vl,uMenuLook.x),uMenuLook.y);  // ANCHORED (owner): counter the free-look — the bag stays where it OPENED while you glance around
-      vec3 bp=va-vec3(0.0,-0.03-rise,0.34);            // FORCED PERSPECTIVE (owner): tiny and CLOSE — nearer than any wall, it can never lose to the world (bagFrame mirrors these numbers)
+      float dk=uMenuLook.x;                            // the DUCK: free-looking tucks the bag small toward the bottom, back on release (owner)
+      vec3 bp=vl-vec3(0.0,-0.03-rise-dk*0.14,0.34);    // FORCED PERSPECTIVE: tiny and CLOSE — camera-locked (stable), ducking below the eyeline under the look
       bp=rotX(bp, 0.45);                               // OPENED TO THE PLAYER
       bp=rotY(bp, sin(iTime*0.5)*0.08);                // the shared sway — the UI swings with it
       bp.y/=uBagH;                                     // taller pack = taller model (owner: watch it physically upgrade)
-      float d=sdBackpack(bp/0.42)*0.42*min(1.0,uBagH); // scaled small — forced perspective does the rest (conservative march under the stretch)
+      float bsc=0.42*(1.0-0.35*dk);                    // the duck shrinks it smoothly
+      float d=sdBackpack(bp/bsc)*bsc*min(1.0,uBagH);   // conservative march under the stretch
       if(d<vmD){ vmD=d; vmM=22.0; }
     }else if(uHasTool>0.5 && uMenuMode!=1){            // the WORN gun — in play AND in the tool menu (owner: same gun, it just MOVES)
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
@@ -1629,8 +1630,8 @@ vec2 map(vec3 p){
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
       if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
-        vl=mix(vl, rotX(rotY(vl,uMenuLook.x),uMenuLook.y), mm);  // the presented gun is ANCHORED against the free-look; the rest pose stays hand-locked
-        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.55)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.55)
+        float dk2=uMenuLook.x;                                   // free-looking DUCKS the inspection low and away (camera-locked = stable, never unhinged)
+        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20+dk2*0.14)*mm, (gz-uBob.z-0.55-dk2*0.22)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.55), tucked under the look
         vl=rotX(vl, (1.25 + sin(iTime*0.31)*0.05)*mm);           // muzzle pitched well away — inspection; a slow breathing pitch
         vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
         vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
@@ -4024,6 +4025,7 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
 let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a sub-inventory cell = quick-swap it out)
 let _mlY=0,_mlP=0,_mlVy=0,_mlVp=0,_mlHold=false;   // menu free-look: direct-drive offsets while pushing, spring (velocity) home on release
+let _mlDuck=0;                                     // 0..1: free-looking DUCKS the inventories — smoothly shrunk + squashed toward bottom-center, back on release (owner)
 let _propMode=0,_propPhase=0;        // the raised prop's OWN eased life (1 bag · 2 tool): the leaving prop drains before the arriving one rises — real ease-out + crossfade
 let _whipSeed={cx:0.6,ov:0.5,lag:1};// per-swing whip character — rolled fresh every crack (random unfurl)
 const SLOT_KIN={face:['face','goggles'],holster:['holster','belt']};   // consolidated seats (owner): FACE takes masks+goggles, HOLSTER takes holsters+belts — the goggles/belt slots are retired
@@ -9239,6 +9241,8 @@ function updatePlayer(dt){
       _mlY+=_dY; _mlP+=_dP;
       cameraYaw+=_dY; cameraPitch=clamp(cameraPitch+_dP,-1.5,1.5);
     }
+    const _dkT=clamp(Math.max(Math.abs(_mlY)/0.5,Math.abs(_mlP)/0.4),0,1);   // any real look-away ducks the kit out of the eyeline
+    _mlDuck+=(_dkT-_mlDuck)*Math.min(1,10*dt);
   }
   // the TRAIL — the camera chases the aim on a small delay, eating the lead as it goes; the
   // aim (camera+lead) holds still in the world while the view glides on. Runs unconditionally:
@@ -9790,34 +9794,26 @@ function bagFrame(){
   ui.classList.toggle('hidden',!showBag);
   ui.style.opacity=showBag?_propPhase.toFixed(2):'';
   if(su){ su.classList.toggle('hidden',!showBag); su.style.opacity=showBag?_propPhase.toFixed(2):''; }
-  if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):''; }
+  if(tu){ tu.classList.toggle('hidden',!showTool); tu.style.opacity=showTool?_propPhase.toFixed(2):'';
+    if(showTool) tu.style.transform='translate(-50%,'+(-44+16*_mlDuck).toFixed(1)+'%) scale('+(1-0.30*_mlDuck).toFixed(3)+')'; }   // the rack UI ducks with its gun
   if(!showBag) return;
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  // TRUE ANCHOR (owner): project the mouth point of the OPEN-time camera frame through the
-  // CURRENT camera — exact at any free-look angle, so the bag is PLANTED, never head-following.
-  const _oy=cameraYaw-_mlY, _op=cameraPitch-_mlP;                    // the frame the menu opened in (free-look is the only in-menu look)
+  // THE DUCK (owner): the kit is camera-locked (dead stable), and free-looking smoothly SHRINKS,
+  // SQUASHES, and tucks it toward bottom-center, below the eyeline — released, it eases back up.
   const _sy2=0.55+(equip.rucksack?equip.rucksack.invRows:1)*0.075;   // mirrors uBagH — the mouth line rides the pack's height
-  const _vy=(-0.03+0.135*_sy2)-rise, _vz=0.276;
-  const _ofx=Math.sin(_oy)*Math.cos(_op), _ofy=Math.sin(_op), _ofz=Math.cos(_oy)*Math.cos(_op);
-  const _oux=-Math.sin(_op)*Math.sin(_oy), _ouy=Math.cos(_op), _ouz=-Math.sin(_op)*Math.cos(_oy);
-  const _wx=_oux*_vy+_ofx*_vz, _wy=_ouy*_vy+_ofy*_vz, _wz=_ouz*_vy+_ofz*_vz;
-  const _cfx=Math.sin(cameraYaw)*Math.cos(cameraPitch), _cfy=Math.sin(cameraPitch), _cfz=Math.cos(cameraYaw)*Math.cos(cameraPitch);
-  const _crx=Math.cos(cameraYaw), _crz=-Math.sin(cameraYaw);
-  const _cux=-Math.sin(cameraPitch)*Math.sin(cameraYaw), _cuy=Math.cos(cameraPitch), _cuz=-Math.sin(cameraPitch)*Math.cos(cameraYaw);
-  const _fd=_wx*_cfx+_wy*_cfy+_wz*_cfz;
-  let px,py;
-  if(_fd>0.05){
-    px=innerWidth/2+((_wx*_crx+_wz*_crz)/_fd/fovU)*H;
-    py=H/2-((_wx*_cux+_wy*_cuy+_wz*_cuz)/_fd/fovU)*H + H*0.045;
-  } else { px=innerWidth/2; py=H*0.2; }                              // spun fully away: park it top-center until the look returns
-  const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
-  const rot=Math.sin(gameTime*0.5)*1.4;                              // swing WITH the model's rotY sway — hung from the pinned mouth seam
+  const dk=_mlDuck, _bsc=1-0.35*dk;                                  // mirrors the model's duck-shrink exactly
+  const _vy=(-0.03-0.14*dk+0.135*_sy2*_bsc)-rise;                    // the mouth line follows the ducked, shrunken model down
+  const px=innerWidth/2;
+  const py=H/2-((_vy/0.276)/fovU)*H + H*0.045;
+  const sc=((innerWidth<=1100||innerHeight<=880)?0.86:1)*_bsc;
+  const scy=sc*(1-0.10*dk);                                          // the squash — a touch flatter as it tucks away
+  const rot=Math.sin(gameTime*0.5)*1.4*(1-dk);                       // the sway calms while ducked
   ui.style.left=px.toFixed(1)+'px';
   ui.style.top=Math.max(8,py).toFixed(1)+'px';
   ui.style.transformOrigin='50% 0';                                  // scale + sway hang from the pinned top edge — the mouth seam never drifts
-  ui.style.transform='translate(-50%,0) scale('+sc+') rotate('+rot.toFixed(2)+'deg)';
+  ui.style.transform='translate(-50%,0) scale('+sc.toFixed(3)+','+scy.toFixed(3)+') rotate('+rot.toFixed(2)+'deg)';
   const r=ui.getBoundingClientRect();                                // the OUTSIDE box rides flush with the bag: top edges level, hugging the bag's right
   if(su&&showBag){ su.style.left=(r.right+34).toFixed(1)+'px'; su.style.top=Math.max(8,r.top).toFixed(1)+'px'; su.style.right='auto'; }
 }
@@ -9946,7 +9942,7 @@ function frame(){
   gl.uniform1f(U.fov,playerPos.currentFov*(1-0.07*menuAnim));
   gl.uniform1f(U.uMenu,_propPhase);                    // the PROP's own eased phase (crossfade-aware) — menuAnim keeps fov/damp/DOM duty
   gl.uniform1i(U.uMenuMode,_propMode);
-  gl.uniform2f(U.uMenuLook,_mlY,_mlP);                 // free-look offsets — the props COUNTER them to stay anchored where they opened
+  gl.uniform2f(U.uMenuLook,_mlDuck,0);                 // .x = the DUCK factor: free-looking tucks the props small toward bottom-center (the anchoring counters are retired — they went wild at full range)
   gl.uniform1f(U.uBagH,0.55+(equip.rucksack?equip.rucksack.invRows:1)*0.075);   // Day 3 rows→0.78 · Patrol 5→0.93 · Field 6→1.0 · bagless→0.62
   // rack presentation: menu prop AND the held viewmodel share this data
   if(activeTool){
