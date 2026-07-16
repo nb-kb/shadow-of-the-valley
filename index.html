@@ -1623,12 +1623,13 @@ vec2 map(vec3 p){
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:(uReticle>=3?0.13:0.0));   // iron/red-dot/holo pull ~0.18 closer at full ADS; the scope pulls 0.13 so its aperture (~0.073 rad) fills the eye
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
-      if(uWallPush>0.001 && uMenuMode==0){ vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — pulled well back, muzzle STRAIGHT UP at full press (bullets fly the muzzle too)
+      if(uWallPush>0.001 && uMenuMode==0){ vl.x-=uWallPush*0.14; vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — drifts ASIDE out of the eyeline, pulled well back, muzzle straight up (bullets fly the muzzle too)
       if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to an INSPECTION pose — close to the face, centered, muzzle angled well away — and back to rest on close
         vl=mix(vl, rotX(rotY(vl,uMenuLook.x),uMenuLook.y), mm);  // the presented gun is ANCHORED against the free-look; the rest pose stays hand-locked
         vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.20)*mm, (gz-uBob.z-0.55)*mm);   // un-mix the rest offsets toward the inspection seat (0,-0.20,0.55)
-        vl=rotX(vl, 1.25*mm);                                    // muzzle pitched well away — inspection, the rack UI fits over it neatly
-        vl=rotY(vl, sin(iTime*0.5)*0.05*mm);                     // the gentle live sway
+        vl=rotX(vl, (1.25 + sin(iTime*0.31)*0.05)*mm);           // muzzle pitched well away — inspection; a slow breathing pitch
+        vl=rotY(vl, (sin(iTime*0.5)*0.09 + sin(iTime*0.23)*0.045)*mm);   // layered slow turns — inspecting hands are never quite still
+        vl.x+=sin(iTime*0.41)*0.009*mm; vl.y+=sin(iTime*0.27)*0.007*mm;  // and a gentle drift — more motion, same calm (owner)
       }
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
@@ -9185,12 +9186,12 @@ function updatePlayer(dt){
         if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;
         if(ey<B) ely=-(1-ey/B); else if(ey>1-B) ely=(ey-(1-B))/B;
       } else { elx=INPUT.padAxes[2]||0; ely=INPUT.padAxes[3]||0; }
-      _mlVy+=elx*9*dt; _mlVp+=-ely*7*dt;                         // more freedom (owner)
+      _mlVy+=elx*12*dt; _mlVp+=-ely*9*dt;                        // MUCH more freedom (owner)
     }
     const _w0=9, _zt=0.5;                                        // underdamped — the satisfying bounce home
     _mlVy+=(-2*_zt*_w0*_mlVy-_w0*_w0*_mlY)*dt; _mlVp+=(-2*_zt*_w0*_mlVp-_w0*_w0*_mlP)*dt;
     const _dY=_mlVy*dt, _dP=_mlVp*dt;
-    _mlY=clamp(_mlY+_dY,-1.1,1.1); _mlP=clamp(_mlP+_dP,-0.75,0.75);   // wider range (owner)
+    _mlY=clamp(_mlY+_dY,-2.4,2.4); _mlP=clamp(_mlP+_dP,-1.2,1.2);   // near-full look-around (owner)
     cameraYaw+=_dY; cameraPitch=clamp(cameraPitch+_dP,-1.5,1.5);
   }
   // the TRAIL — the camera chases the aim on a small delay, eating the lead as it goes; the
@@ -9443,7 +9444,7 @@ function updatePlayer(dt){
   // viewmodel pulls the stock back and pitches the muzzle up as the wall closes in (uWallPush)
   { const _o=camPos(), _f=camForward();
     const _wd=activeTool?mapWorldJS(_o.x+_f.x*0.5,_o.y+_f.y*0.5,_o.z+_f.z*0.5):1;
-    const _wt=activeTool?clamp(1-_wd/0.4,0,1):0;
+    const _wt=activeTool?clamp(1-_wd/0.28,0,1):0;      // tighter trigger (owner): the gun tolerates a closer wall before it's forced up
     playerPos.wallPush+=(_wt-playerPos.wallPush)*Math.min(1,14*dt);
     // PHYSICAL PEEK (owner): aiming with the muzzle OBSTRUCTED moves the BODY — first rise out
     // of the crouch (variable height, just enough), then STEP past the cover's open edge (left
@@ -9456,16 +9457,15 @@ function updatePlayer(dt){
     if(_aimHold&&(pk.on||_obstr)){
       if(!pk.on){ pk.on=true; pk.ax=playerPos.x; pk.az=playerPos.z; pk.rise=0; }
       if(_obstr){                                       // still blocked → keep working the problem
-        if(playerPos.isCrouching&&pk.rise<0.6) pk.rise=Math.min(0.6,pk.rise+1.6*dt);   // 1) rise first
-        else{                                           // 2) then sidestep toward the open edge
-          const _b2=camBasis();
-          const _dl=mapWorldJS(playerPos.x-_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z-_b2.right.z*0.45+_f.z*0.55);
-          const _dr=mapWorldJS(playerPos.x+_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z+_b2.right.z*0.45+_f.z*0.55);
-          if(Math.max(_dl,_dr)>0.45&&Math.hypot(playerPos.x-pk.ax,playerPos.z-pk.az)<0.9){
-            const _sd=(_dr>_dl?1:-1);
-            playerPos.x+=_b2.right.x*_sd*0.9*dt; playerPos.z+=_b2.right.z*_sd*0.9*dt;
-          }
+        const _b2=camBasis();
+        const _dl=mapWorldJS(playerPos.x-_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z-_b2.right.z*0.45+_f.z*0.55);
+        const _dr=mapWorldJS(playerPos.x+_b2.right.x*0.45+_f.x*0.55,_o.y+_f.y*0.55,playerPos.z+_b2.right.z*0.45+_f.z*0.55);
+        const _open=Math.max(_dl,_dr)>0.45, _room=Math.hypot(playerPos.x-pk.ax,playerPos.z-pk.az)<0.9;
+        if(_open&&_room){                               // 1) LEFT/RIGHT FIRST (owner): step past the open edge
+          const _sd=(_dr>_dl?1:-1);
+          playerPos.x+=_b2.right.x*_sd*0.9*dt; playerPos.z+=_b2.right.z*_sd*0.9*dt;
         }
+        else if(playerPos.isCrouching&&pk.rise<0.6) pk.rise=Math.min(0.6,pk.rise+1.6*dt);   // 2) no side clears → rise instead
       }                                                 // clear → HOLD here while the aim is held
     } else if(pk.on){                                   // released → ease home
       if(moving||!playerPos.onGround){ pk.on=false; pk.rise=0; }   // walking off breaks the tether
@@ -9745,9 +9745,22 @@ function bagFrame(){
   const m=clamp(_propPhase,0,1), rise=(1-m)*(1-m)*0.16;              // mirrors the scaled prop's settle — the SAME phase the shader eases with
   const fovU=(playerPos.currentFov*(1-0.07*menuAnim))||1;            // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  let py=H/2-(((0.105-rise)/0.276)/fovU)*H + H*0.045;                // the mouth line of the SCALED close prop, +4.5%H past the lip
-  let px=innerWidth/2;
-  px-=(_mlY/fovU)*H; py+=(_mlP/fovU)*H;                              // ANCHORED vs the free-look: the UI counter-slides with the world (mirrors the prop's counter-rotation)
+  // TRUE ANCHOR (owner): project the mouth point of the OPEN-time camera frame through the
+  // CURRENT camera — exact at any free-look angle, so the bag is PLANTED, never head-following.
+  const _oy=cameraYaw-_mlY, _op=cameraPitch-_mlP;                    // the frame the menu opened in (free-look is the only in-menu look)
+  const _vy=0.105-rise, _vz=0.276;
+  const _ofx=Math.sin(_oy)*Math.cos(_op), _ofy=Math.sin(_op), _ofz=Math.cos(_oy)*Math.cos(_op);
+  const _oux=-Math.sin(_op)*Math.sin(_oy), _ouy=Math.cos(_op), _ouz=-Math.sin(_op)*Math.cos(_oy);
+  const _wx=_oux*_vy+_ofx*_vz, _wy=_ouy*_vy+_ofy*_vz, _wz=_ouz*_vy+_ofz*_vz;
+  const _cfx=Math.sin(cameraYaw)*Math.cos(cameraPitch), _cfy=Math.sin(cameraPitch), _cfz=Math.cos(cameraYaw)*Math.cos(cameraPitch);
+  const _crx=Math.cos(cameraYaw), _crz=-Math.sin(cameraYaw);
+  const _cux=-Math.sin(cameraPitch)*Math.sin(cameraYaw), _cuy=Math.cos(cameraPitch), _cuz=-Math.sin(cameraPitch)*Math.cos(cameraYaw);
+  const _fd=_wx*_cfx+_wy*_cfy+_wz*_cfz;
+  let px,py;
+  if(_fd>0.05){
+    px=innerWidth/2+((_wx*_crx+_wz*_crz)/_fd/fovU)*H;
+    py=H/2-((_wx*_cux+_wy*_cuy+_wz*_cuz)/_fd/fovU)*H + H*0.045;
+  } else { px=innerWidth/2; py=H*0.2; }                              // spun fully away: park it top-center until the look returns
   const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
   const rot=Math.sin(gameTime*0.5)*1.4;                              // swing WITH the model's rotY sway — hung from the pinned mouth seam
   ui.style.left=px.toFixed(1)+'px';
