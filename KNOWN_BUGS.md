@@ -6,8 +6,10 @@ editing.
 
 Last reviewed: 2026-07-15 (the Containment wave on `feat/containment` — the P2
 fix-up, the systems-audit sweep, and P3–P7 landed; 61 commits). #0/#4/#6a/#6b/
-#7/#8 closed this wave — see Recently fixed. **One consolidated browser pass
-gates all of it: `docs/PLAYTEST.md`.**
+#7/#8 closed this wave; the closeout batch then closed #9/#10/#11/#13/#14 —
+see Recently fixed. #12 and #15 stay open ON PURPOSE (the gate-terminal prim
+awaits the Chrome compile-budget checkpoint; uniform batching is backlog-grade).
+**One consolidated browser pass gates all of it: `docs/PLAYTEST.md`.**
 
 ## Open
 
@@ -79,63 +81,7 @@ gates all of it: `docs/PLAYTEST.md`.**
   preset. Preset tradeoff vs a jitter experiment — judgment call in the
   browser (PLAYTEST.md §7), nothing committed.
 
-### 9. Hideout supply crates are an infinite free-loot faucet  (audit — NOT landed this wave)
-- The C13 empty-crate floor in `seedLevelSpawns` (~L7412-22) reseeds all 7
-  non-stash hideout crates on EVERY `deployTo('hideout')` — every death,
-  exfil, and boot — because hideout `lootTiers` falls back to area1's and
-  `lootN:0` only skips the scatter. Die-loot-bank-repeat is zero-cost
-  sustained income — the accounting-error class the BALANCE LAW forbids.
-- Fix per the law (price/gate, never delete): guard the floor loop with the
-  scatter dial — `if(L.spawn.lootN)` — leaving the guaranteed
-  photometer/compass loop untouched. Owner alternative if a home trickle is
-  wanted: reseed only on exfil ARRIVAL.
-
-### 10. Save-restore integrity bundle  (audit — NOT landed this wave)
-Six guards in one diff area (`itemFromJSON`/`loadGame`, ~L7650-7830), plus one
-approved owner call:
-- The `Tool` branch (~L7667) lacks the overlong-`j.slots` clamp its Barrel /
-  Platform siblings got — an oversized blob silently GROWS `base.slots` past 4
-  into phantom rack cells. Mirror the Barrel idiom; salvage tails into
-  `_retuneOrphans`.
-- Clamp garbage scalars on read: `Ammunition.count` → [0,stack]; `Battery`
-  cap→capMax, charge→[0,cap]; `magType` validated vs acceptedTypes/anyCaliber;
-  `opticSel>=0`.
-- Equip restore iterates blob keys (`for(const k in b.equip)`, ~L7767) —
-  iterate `EQUIP_SLOTS` instead (saveGame's own whitelist).
-- Ignored `autoPlace` fallbacks (stash/lockboxes/pockets/armor-inv) → route
-  into `_retuneOrphans` so overflow reports 'N LOST' instead of vanishing.
-- Reset transient combat state on load success AND catch (the onDeath idiom:
-  `reloadTimer`/`holsterCur`/`holsterDir`/`_lastReloadT`/`_lastSwap`).
-- Exclude `maxEnemies` from the params blob walk — deploy code owns it
-  (seedLevelSpawns sets 20 per raid).
-- **Owner call 17 (approved, unbuilt):** ~10-line pre-load snapshot ROLLBACK in
-  `loadGame`'s catch — a corrupt LOAD restores the running session instead of
-  wiping it; a corrupt SLOT still reads as an empty slot (invariant #4 intact).
-
-### 11. Loot coverage gaps  (audit — partially landed)
-- `regionLoot` is LIVE now (P4 wired it: lab/testing caches + the P6 POI
-  clusters). Still dead config: `lootRegions` (~L2519 — its own comment says
-  "still inert"), the hideout's empty `lootTable`, and `MOD_KEYS` (~L3481 —
-  defined, ZERO consumers). Wire or delete per the remainder of owner call 2;
-  if deleted, also rewrite the two comments citing MOD_KEYS for safety
-  properties nothing enforces.
-- **Unobtainable finished items** — defined, fully wired, reachable through NO
-  loot tier or enemy roll: `contactMod`, `slowFuse`, `boomerangMod`
-  (~L3452-55), `refundMod` (~L3457), `barrelMagII` (~L3360). Registry
-  one-liners into `lootTiers` per the data-driven invariant ('cores'/'rare'
-  per the audit's split).
-- **Permadeath-losable settings gadgets:** hideout `guaranteed` is still
-  `['photometer','compass']` (~L2543) — extend with
-  `'opticsDial','volumeKnob','manual'`. Those three seed exactly once via
-  seedStashKit; a death while carrying one permanently removes
-  settings/rebind/volume access from that save. The promise-kept dedupe
-  already suppresses re-gifts.
-- **Enemy-only five** (`serrated`/`splinter`/`homingMod`/`chaoticMod`/
-  `sniperMagI` — enemy rolls only, loot them off corpses): owner call 15 says
-  COMMENT them in ITEM_DEFS as hunt-rewards so the intent is recorded. Pending
-  — rides the comment-debt commit (Backlog).
-
-### 12. Horde gate has no diegetic terminal body  (spec-gap — NOT landed this wave)
+### 12. Horde gate has no diegetic terminal body  (spec-gap — DEFERRED on purpose)
 - The spec locks "a terminal controls it — the same diegetic terminal", but
   the gate control is still an invisible ~6m interact disc on blank concrete
   (~L4374). The prompt/card-match/dead-zone fixes landed (d4a1989); the
@@ -145,33 +91,11 @@ approved owner call:
   entry riding the LEVEL-PRIM twin path in BOTH regionSdf implementations — no
   special-case code; a distinct material/decal panel is the cheaper fallback.
   Chrome-budget check on merge (KNOWN_BUGS #2).
+- **DEFERRED (2026-07-15 closeout):** stays open on purpose — the prim is TWIN
+  geometry riding the Chrome/ANGLE compile budget (#2), so it lands with its
+  own budget checkpoint, not in a JS-only batch.
 
-### 13. worldItem lifetime guards  (audit — NOT landed this wave)
-- `w.age` accumulates across the item's whole life and only PAUSES while
-  held/frozen/armed (~L9090): gear that sat 110s then was CARRIED ten minutes
-  despawns seconds after being set down. Add `else w.age=0` to the exemption
-  branch so release restarts the 2-minute clock.
-- The cap-64 eviction (~L4275) omits the reap's `w.frozen` exemption and tests
-  `_armT>0` vs the reap's `!=null` — a deliberately physgun-pinned (old) item
-  silently vanishes when the 65th item spawns. Match the reap's predicate
-  exactly.
-- **Owner call 5 (approved, unbuilt):** EXEMPT the hideout from the 120s/50m
-  reap — the safe-zone floor is de-facto storage and vanishing loot there
-  reads as a bug. The 64-cap backstop stays.
-
-### 14. Starter kit still can't showcase the game  (System J — owner said BUILD NOW, unbuilt)
-- `seedStashKit` (~L7072-84) seeds two bare frames, three mags, and the seven
-  settings utilities — zero cores, ammo boxes, heals, or armor vs the spec's
-  "a couple of cores + a mod or two, a mag + ammo, a piece of armor, a heal".
-  (Post-rework a racked mag DOES throw boltless plain lead — but nothing in
-  the kit teaches the rack, and the energy path is absent entirely.)
-- The constraining comment cites a 6×4 stash; `STASH_COLS/ROWS` is **6×8 = 48**
-  (~L7213) — half the stash sits free. Audit's concrete seed (~20 cells):
-  boltCore ×2, sparkCore + battS, dmgPlus, barrelC, ammo9 ×2, bandAid ×2 +
-  ration, helmetCap + platesL, holster1. Fix the stale 6×4 comment in the same
-  diff; playtest that autoPlace packs it.
-
-### 15. Uniform upload batching  (perf — backlog-grade, NOT landed)
+### 15. Uniform upload batching  (perf — backlog-grade, DEFERRED on purpose)
 - Worst case ~235 scalar `gl.uniform*` calls/frame: element-wise loops for
   items/enemies/tracers/decals/dyn plus static gate/seed data re-sent every
   frame — on Chrome/ANGLE roughly 0.1-0.3ms/frame of pure driver overhead.
@@ -179,6 +103,9 @@ approved owner call:
   Float32Array per uniform array, one `gl.uniform{3,4}fv` each, dirty-flag
   decals/vcrates/seed/gate. Mechanical but wide — convert ONE array per commit
   with a visual check between.
+- **DEFERRED (2026-07-15 closeout):** backlog-grade by design — each converted
+  array wants its own commit + visual check, so it never belonged in a batch
+  pass. Untouched.
 
 ## Backlog (future — low priority)
 
@@ -186,8 +113,8 @@ approved owner call:
   lockstep-grep trap BALANCE.md warns about; no code change): "brute keeps its
   300" ~L6860 (the ctor + reinforce set **800**); "RLIM.ENEMIES=16" ~L7334 and
   "revives to its full 16" ~L7361 (it is **20**; the horde math beside them
-  already assumes 20); seedStashKit's 6×4-stash claim (6×8 now — rides #14);
-  the ITEM_DEFS hunt-reward comments (owner call 15, see #11).
+  already assumes 20). (The 6×4-stash claim and the ITEM_DEFS hunt-reward
+  comments landed with #14 / owner call 15 — off this list.)
 - **ENEMY AI REWORK** (owner-requested, v22i) — **LARGELY DONE (beta 1.1.x).**
   Soldiers line-patrol, seek cover, lay covering fire, hold squad discipline,
   walk their POI together; a whole second faction (zombies + brute) with swarm
@@ -235,6 +162,48 @@ approved owner call:
   in behind it. Perceived first-load stall is gone.
 
 ## Recently fixed
+
+- **feat/containment closeout batch (2026-07-15)** — the audit's save/loot/
+  lifetime bundle: #9/#10/#11/#13/#14 closed.
+  1. **#9 hideout crate faucet CLOSED** — the C13 empty-crate floor is gated on
+     the scatter dial (`if(L.spawn.lootN)`): the hideout (lootN:0) stops
+     reseeding its 7 non-stash crates free loot on every boot/death/exfil;
+     area1/valley floors and the guaranteed loop are untouched (5500f18).
+  2. **#10 save-restore integrity CLOSED** — `itemFromJSON` clamps rotted
+     scalars (ammo count [0,AMMO_STACK] · battery cap≤capMax, charge≤cap ·
+     magType validated vs acceptedTypes/anyCaliber · opticSel≥0) and the Tool
+     branch gets the Barrel overlong-slots clamp (94b1807). `loadGame` iterates
+     EQUIP_SLOTS not blob keys; every autoPlace overflow salvages into
+     `_retuneOrphans` and the re-home pass DROPS the rest at the player's feet
+     with a LOADOUT REPACKED toast — never a silent vanish; combat transients
+     (reloadTimer/holsterCur/holsterDir/_lastReloadT/_lastSwap) reset on
+     success AND catch; PR counters clamp ≥0; maxEnemies is excluded from the
+     params blob both sides — deploy code owns it (6ad362e). Owner call 17: a
+     corrupt LOAD rolls the running session back from a pre-load snapshot
+     ('SESSION KEPT'); the slot still reads empty (fb288a8). startRun re-seals
+     `_lockOpen` beside the gate/haze reset (8300ee5).
+  3. **#11 loot coverage CLOSED** — contactMod/slowFuse/refundMod → 'cores',
+     barrelMagII → 'cores' ballistics beside rifleMagII, boomerangMod → 'rare':
+     all five once-unobtainables now drop (the lab/testing caches route
+     cores/rare via regionLoot — their natural homes); hideout `guaranteed`
+     extends with opticsDial/volumeKnob/manual so the settings gadgets are
+     never permadeath-lost (da4aabd). Owner call 2 remainder: dead
+     `lootRegions` / hideout `lootTable` / `MOD_KEYS` DELETED — zero consumers
+     by grep; MOD_KEYS had drifted from buildTool's live MAGS/CORES/MODS
+     allowlists, and the two comments citing it for safety now cite buildTool,
+     the real enforcement site (66eb7fc). Owner call 15: the enemy-only five
+     (serrated/splinter/homingMod/chaoticMod/sniperMagI) carry hunt-reward
+     comments in ITEM_DEFS (03435c0).
+  4. **#13 worldItem lifetime CLOSED** — release RESTARTS the 2-min reap clock
+     (`else w.age=0`); the cap-64 eviction matches the reap's predicate exactly
+     (frozen/physgun-held spared, `_armT!=null`); owner call 5: the hideout
+     floor never reaps — de-facto storage, the cap-64 backstop stays (128a251).
+  5. **#14 starter kit CLOSED (System J)** — the seed adds boltCore ×2,
+     sparkCore + battS, dmgPlus, barrelC, ammo9 ×2, bandAid ×2 + ration,
+     helmetCap + platesL + holster1 on top of the untouched fixed dozen — the
+     kit fires (lead AND energy) from raid one; the stale 6×4 comment corrected
+     (stash is 6×8=48); packing verified against autoPlace's exact first-fit:
+     26 items, 44/48, rows 0-3 exactly full (4cad0c6).
 
 - **feat/containment wave (2026-07-15)** — the P2 fix-up + audit sweep + P3–P7
   (61 commits). Every check the builders flagged is consolidated in
