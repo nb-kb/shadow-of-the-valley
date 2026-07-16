@@ -4,20 +4,12 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal + zombie-horde arc).
+Last reviewed: 2026-07-15 (the Containment wave on `feat/containment` — the P2
+fix-up, the systems-audit sweep, and P3–P7 landed; 61 commits). #0/#4/#6a/#6b/
+#7/#8 closed this wave — see Recently fixed. **One consolidated browser pass
+gates all of it: `docs/PLAYTEST.md`.**
 
 ## Open
-
-### 0. Carve-height twin drift family
-- **Found by the v22e hideout probe.** Same pattern as the fixed gate lintel:
-  FENCE gate carve JS y-center 1.2 vs GLSL 1.3, FACADE door recess JS 1.2 vs
-  GLSL 1.25 (area1) — sub-10cm invisible ledges, imperceptible today.
-- ~~**Latent landmine:** GLSL `mapStatic` early-returns `levelSDF` for authored
-  levels, skipping the `uEdits`/`uGlobs` loops JS still applies.~~ **RESOLVED**
-  (scope wave): `mapStatic` now branches `levelSDF`/`mapProc` for the base and
-  BOTH feed the shared uEdits→uGlobs pass, matching
-  `mapWorldJS = applyGlobsJS(applySdfEditsJS(base))` exactly — PICK carves
-  render indoors. The authored-primitive height drifts above stay open.
 
 ### 1. Chrome load crash — "cannot access gameState before initialization"
 - **Where:** initial top-level script exec (TDZ). Not the earlier `Menus`
@@ -25,115 +17,212 @@ Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal +
 - **Repro:** load in Chrome, often after a GPU overload. **Zen/Firefox run
   clean.** Chrome is the odd one out.
 - **Status:** guard landed in v22a — early handlers (`anyKeyGate`, `uiOpen`)
-  no-op until `engineReady` flips at BOOT, so the TDZ access path is closed by
-  inspection. Kept open until a Chrome load confirms the banner stays quiet;
-  the *why-does-init-abort* question is still unpinned.
+  no-op until `engineReady` flips at BOOT. Pre-boot handler sweep completed
+  2026-07-15 — guard coverage is total by inspection. Kept open until one
+  clean Chrome load post-GPU-overload confirms the banner stays quiet; the
+  *why-does-init-abort* question is still unpinned.
 
 ### 2. Enemy render cap 20 — Chrome/ANGLE compile budget UNVERIFIED  ⚠ potential showstopper
 - **The one to watch.** `RLIM.ENEMIES` went 10 → 16 → **20** for the horde. Both
-  per-fragment enemy loops (body SDF + shading) now unroll to 20 — on the
-  *chrome-shader-fix* branch, which exists precisely because the fragment shader
-  was already near Chromium's ANGLE→D3D compile ceiling (black screen).
+  per-fragment enemy loops (body SDF + shading) unroll to 20 — on the branch
+  family that exists precisely because the fragment shader was already near
+  Chromium's ANGLE→D3D compile ceiling (black screen).
 - **Tested clean at 16 on the owner's machine; 20 is UNCONFIRMED,** and the
   low-end/Optimus tester hasn't loaded any of it.
-- **Dial:** `RLIM.ENEMIES` (one line ~L687) — the material band + every enemy
-  array now DERIVE from it, so lowering it is safe + self-consistent. Drop to
-  12–14 if Chrome/Edge black-screens.
 - **OWNER OBSERVED (2026-07-14):** the build is functional but throws a BRIEF
-  black screen *sometimes* — consistent with a cap-20 shader recompile/hitch, or
-  the progressive preview→full shader hot-swap. NOT the full showstopper. Needs a
-  browser repro: is it at LOAD (likely the preview→full swap) or mid-PLAY (a
-  recompile/hitch)? Watch it; dial `RLIM.ENEMIES` back if it worsens or the
-  Optimus tester hits it hard.
+  black screen *sometimes*. NOT the full showstopper.
+- **Best code-grounded hypothesis (2026-07-15):** ANGLE defers the real D3D
+  compile to a program's FIRST DRAW, and `ensureFullProgram` rebinds +
+  `resize()` (clearing the canvas to black) when a full variant links — once
+  at boot (preview→full) and once at the first hideout↔valley swap.
+  **Mitigation landed** (654881b): both full programs get a 2×2-viewport
+  prewarm draw the moment they link, behind the loading screen. Needs the
+  browser: correlate any REMAINING brief-black with boot vs first-transition
+  via `__bootPhase` (bootDiag) — PLAYTEST.md §1.
+- **Dial:** `RLIM.ENEMIES` (one line, ~L737) — the material band + every enemy
+  array DERIVE from it, so lowering is safe + self-consistent. Drop to 12–14
+  if Chrome/Edge black-screens. NOTE: the goggles CROWD dial does NOT reduce
+  compile cost — it caps live bodies, not the compile-time unroll; only
+  `RLIM.ENEMIES` does.
+- The wave's GLSL deltas (gas fog d73840b, menu-prop fix 9f5ada6) ride the
+  same pass — the SHADER-BUDGET audit returned null, so PLAYTEST.md §1 doubles
+  as the budget checkpoint.
 
-### 3. Powder synth round — three known gaps (all minor)
-- **HUD-invisible:** `describeSequence`/`updateToolReadout` walk `res.shots`,
-  which never holds the synth `powderShot`, so the readout gives no sign a powder
-  round will fire / self-detonate / twin. Mechanic works; the display lags it.
-- **Beam-fed powder + trigger HITSCANS** instead of self-detonating — `synthDet`
-  only rides the `emitProjectile` path; a laser-mod powder round takes the
-  hitscan pulse branch. Document as pulse-only or add an endpoint explode.
-- **Blast ≠ literal parity:** C1 self-detonation routes through `explode()`
-  (R2.4, `dmg×1.6`+falloff), so a point-blank contact round deals its direct hit
-  PLUS splash — reads as "the round's damage" but isn't exact.
-
-### 4. Brute head hitbox is coarse
-- The shader inflates the brute body (`d−=0.12`) but the JS hit radii are fixed,
-  so the outer shell of the brute's enlarged head registers as a body shot, not a
-  headshot. Twin-safe by design (the head *center* stays put) — just means the
-  visible head is bigger than the hittable one. Optional: bump `hd` for `_brute`.
+### 3. Powder/refund rework — browser verification owed  (rewritten 2026-07-15)
+- The **firing-resolver rework LANDED** just before the wave (3c2430b…bc4445e):
+  two-pool model (boltless lead fires PARALLEL to the energy cores), powder is
+  a MAG trait (`anyCaliber`+`powder:true`; its lane hitscans by design), the
+  coreless powder synth is RETIRED, and REFUND = base ⚡ only (`roundsFor`'s
+  lead-waiver removed). MODS.md's ⚠ CORRECTED MODEL is the spec and the code
+  now matches it.
+- Of the old three gaps: **(a)** the HUD-invisible synth round and **(b)**
+  beam-fed powder hitscanning are MOOT — the synth no longer exists and the
+  hitscan lane is the design. **(c) blast ≠ literal parity survives,
+  generalized:** a relayed CONTACT/TIMER delivery routes `explode()` (R2.4,
+  `dmg×1.6`+falloff), so a point-blank delivery deals its direct hit PLUS
+  splash — reads as "the round's damage" but isn't exact. Document as flavor
+  or flatten the ×1.6 for player-owned relays — owner call, low.
+- **Nobody has fired the new model in a browser yet.** The owed checks are
+  folded into PLAYTEST.md §14 (mint gate, pulse feel/converge, drum beats,
+  thread draw order, grapple, whip).
 
 ### 5. POI soldier-rotation needs ≥4 POIs
 - The disjoint opposite-quadrant pair `[c, c+half]` only rotates with **≥4 (even)**
   POIs. A 2–3 POI level would field the same `[0,1]` pair every raid (no crash,
-  no rotation). Fine for area-1's 6 POIs; a landmine only if a future level ships
-  fewer.
+  no rotation). Fine for area-1's 6 POIs; a landmine only if a future level
+  ships fewer. Cheap insurance when touched anyway: one `console.warn` in the
+  authoring path at `pois.length<4`.
 
-### 6. Screen flicker + long-run lag buildup (researched + partly FIXED 2026-07-14)
-- **Long-run lag — ROOT-CAUSED + FIXED:** dropped loot (`worldItems`) grew with no
-  cap all session (2–4 items/kill, kills infinite), paid for by 3 per-frame O(n)
-  sweeps + a per-item alloc. Fixed: reap loot >50m from the player or >2min old +
-  a 64 backstop cap. Every other collection audited BOUNDED.
-- **Flicker #1 — ROOT-CAUSED + FIXED:** the auto-resolution scaler pumped across
-  the 50/58 fps dead-band and called `resize()` AFTER `drawArrays`, reallocating +
-  clearing the drawing buffer → a dark flash + sharpness pump (worst on iGPU).
-  Fixed: defer the resize to the next frame's TOP + widen the dead-band (48/60) +
-  cadence (1s).
-- **Flicker — SECONDARY, still open (follow-up):** (a) dynamic-light 4-slot churn
-  (RLIM.DYN=4) — muzzle flashes evict steady lamps, sorted on RAW not effective
-  intensity → in-combat lighting strobe; fix = sort by `intensity*clamp(ttl*8,0,1)`
-  + temporal bias, or raise RLIM.DYN. (b) viewmodel exposure steps at 8Hz with no
-  smoothing → the HANDS flicker; fix = lerp toward the target every frame. (c)
-  raymarch structure-edge shimmer on the FAST preset. (Enemy nearest-N sort is NOT
-  a cause now — cap 20 = maxEnemies 20.)
+### 6. Raymarch structure-edge shimmer on the FAST preset  (#6c — the survivor)
+- #6a (dyn-light eviction strobe) and #6b (8Hz exposure steps) are FIXED — see
+  Recently fixed. What remains: thin structure edges shimmer on the FAST
+  preset. Preset tradeoff vs a jitter experiment — judgment call in the
+  browser (PLAYTEST.md §7), nothing committed.
 
-### 7. Backing out of inventory (B / SELECT) replays the gun raise animation
-- OWNER-reported (old bug). Closing the inventory with B / SELECT re-plays the tool
-  raise/ready animation as if re-equipping — it shouldn't (the tool never left the
-  hand). Find the inventory-close handler and skip the wield/ready trigger when
-  merely returning from a menu.
+### 9. Hideout supply crates are an infinite free-loot faucet  (audit — NOT landed this wave)
+- The C13 empty-crate floor in `seedLevelSpawns` (~L7412-22) reseeds all 7
+  non-stash hideout crates on EVERY `deployTo('hideout')` — every death,
+  exfil, and boot — because hideout `lootTiers` falls back to area1's and
+  `lootN:0` only skips the scatter. Die-loot-bank-repeat is zero-cost
+  sustained income — the accounting-error class the BALANCE LAW forbids.
+- Fix per the law (price/gate, never delete): guard the floor loop with the
+  scatter dial — `if(L.spawn.lootN)` — leaving the guaranteed
+  photometer/compass loop untouched. Owner alternative if a home trickle is
+  wanted: reseed only on exfil ARRIVAL.
 
-### 8. Audio is not spatial / directional
-- OWNER-reported: sounds play at the listener at full volume regardless of where
-  they happen — a zombie alerting a guard 40m away blasts "right on me." Needs
-  positional audio: distance attenuation + L/R pan by direction vs the player's
-  facing. `playSound()` should take an emitter position (default centered for UI);
-  gameplay sites (alerts, shots, footsteps, noise pings) pass the world position.
+### 10. Save-restore integrity bundle  (audit — NOT landed this wave)
+Six guards in one diff area (`itemFromJSON`/`loadGame`, ~L7650-7830), plus one
+approved owner call:
+- The `Tool` branch (~L7667) lacks the overlong-`j.slots` clamp its Barrel /
+  Platform siblings got — an oversized blob silently GROWS `base.slots` past 4
+  into phantom rack cells. Mirror the Barrel idiom; salvage tails into
+  `_retuneOrphans`.
+- Clamp garbage scalars on read: `Ammunition.count` → [0,stack]; `Battery`
+  cap→capMax, charge→[0,cap]; `magType` validated vs acceptedTypes/anyCaliber;
+  `opticSel>=0`.
+- Equip restore iterates blob keys (`for(const k in b.equip)`, ~L7767) —
+  iterate `EQUIP_SLOTS` instead (saveGame's own whitelist).
+- Ignored `autoPlace` fallbacks (stash/lockboxes/pockets/armor-inv) → route
+  into `_retuneOrphans` so overflow reports 'N LOST' instead of vanishing.
+- Reset transient combat state on load success AND catch (the onDeath idiom:
+  `reloadTimer`/`holsterCur`/`holsterDir`/`_lastReloadT`/`_lastSwap`).
+- Exclude `maxEnemies` from the params blob walk — deploy code owns it
+  (seedLevelSpawns sets 20 per raid).
+- **Owner call 17 (approved, unbuilt):** ~10-line pre-load snapshot ROLLBACK in
+  `loadGame`'s catch — a corrupt LOAD restores the running session instead of
+  wiping it; a corrupt SLOT still reads as an empty slot (invariant #4 intact).
+
+### 11. Loot coverage gaps  (audit — partially landed)
+- `regionLoot` is LIVE now (P4 wired it: lab/testing caches + the P6 POI
+  clusters). Still dead config: `lootRegions` (~L2519 — its own comment says
+  "still inert"), the hideout's empty `lootTable`, and `MOD_KEYS` (~L3481 —
+  defined, ZERO consumers). Wire or delete per the remainder of owner call 2;
+  if deleted, also rewrite the two comments citing MOD_KEYS for safety
+  properties nothing enforces.
+- **Unobtainable finished items** — defined, fully wired, reachable through NO
+  loot tier or enemy roll: `contactMod`, `slowFuse`, `boomerangMod`
+  (~L3452-55), `refundMod` (~L3457), `barrelMagII` (~L3360). Registry
+  one-liners into `lootTiers` per the data-driven invariant ('cores'/'rare'
+  per the audit's split).
+- **Permadeath-losable settings gadgets:** hideout `guaranteed` is still
+  `['photometer','compass']` (~L2543) — extend with
+  `'opticsDial','volumeKnob','manual'`. Those three seed exactly once via
+  seedStashKit; a death while carrying one permanently removes
+  settings/rebind/volume access from that save. The promise-kept dedupe
+  already suppresses re-gifts.
+- **Enemy-only five** (`serrated`/`splinter`/`homingMod`/`chaoticMod`/
+  `sniperMagI` — enemy rolls only, loot them off corpses): owner call 15 says
+  COMMENT them in ITEM_DEFS as hunt-rewards so the intent is recorded. Pending
+  — rides the comment-debt commit (Backlog).
+
+### 12. Horde gate has no diegetic terminal body  (spec-gap — NOT landed this wave)
+- The spec locks "a terminal controls it — the same diegetic terminal", but
+  the gate control is still an invisible ~6m interact disc on blank concrete
+  (~L4374). The prompt/card-match/dead-zone fixes landed (d4a1989); the
+  PHYSICAL slab did not — a player without the card in hand may never learn
+  the gate exists.
+- Fix: a small terminal-body prim near the inner face as a data-driven PROPS
+  entry riding the LEVEL-PRIM twin path in BOTH regionSdf implementations — no
+  special-case code; a distinct material/decal panel is the cheaper fallback.
+  Chrome-budget check on merge (KNOWN_BUGS #2).
+
+### 13. worldItem lifetime guards  (audit — NOT landed this wave)
+- `w.age` accumulates across the item's whole life and only PAUSES while
+  held/frozen/armed (~L9090): gear that sat 110s then was CARRIED ten minutes
+  despawns seconds after being set down. Add `else w.age=0` to the exemption
+  branch so release restarts the 2-minute clock.
+- The cap-64 eviction (~L4275) omits the reap's `w.frozen` exemption and tests
+  `_armT>0` vs the reap's `!=null` — a deliberately physgun-pinned (old) item
+  silently vanishes when the 65th item spawns. Match the reap's predicate
+  exactly.
+- **Owner call 5 (approved, unbuilt):** EXEMPT the hideout from the 120s/50m
+  reap — the safe-zone floor is de-facto storage and vanishing loot there
+  reads as a bug. The 64-cap backstop stays.
+
+### 14. Starter kit still can't showcase the game  (System J — owner said BUILD NOW, unbuilt)
+- `seedStashKit` (~L7072-84) seeds two bare frames, three mags, and the seven
+  settings utilities — zero cores, ammo boxes, heals, or armor vs the spec's
+  "a couple of cores + a mod or two, a mag + ammo, a piece of armor, a heal".
+  (Post-rework a racked mag DOES throw boltless plain lead — but nothing in
+  the kit teaches the rack, and the energy path is absent entirely.)
+- The constraining comment cites a 6×4 stash; `STASH_COLS/ROWS` is **6×8 = 48**
+  (~L7213) — half the stash sits free. Audit's concrete seed (~20 cells):
+  boltCore ×2, sparkCore + battS, dmgPlus, barrelC, ammo9 ×2, bandAid ×2 +
+  ration, helmetCap + platesL, holster1. Fix the stale 6×4 comment in the same
+  diff; playtest that autoPlace packs it.
+
+### 15. Uniform upload batching  (perf — backlog-grade, NOT landed)
+- Worst case ~235 scalar `gl.uniform*` calls/frame: element-wise loops for
+  items/enemies/tracers/decals/dyn plus static gate/seed data re-sent every
+  frame — on Chrome/ANGLE roughly 0.1-0.3ms/frame of pure driver overhead.
+- The batched pattern is proven in-file (`_colsBuf` → one uniform4fv): flat
+  Float32Array per uniform array, one `gl.uniform{3,4}fv` each, dirty-flag
+  decals/vcrates/seed/gate. Mechanical but wide — convert ONE array per commit
+  with a visual check between.
 
 ## Backlog (future — low priority)
 
+- **Comment-debt — one sanctioned comment-only commit** (exactly the
+  lockstep-grep trap BALANCE.md warns about; no code change): "brute keeps its
+  300" ~L6860 (the ctor + reinforce set **800**); "RLIM.ENEMIES=16" ~L7334 and
+  "revives to its full 16" ~L7361 (it is **20**; the horde math beside them
+  already assumes 20); seedStashKit's 6×4-stash claim (6×8 now — rides #14);
+  the ITEM_DEFS hunt-reward comments (owner call 15, see #11).
 - **ENEMY AI REWORK** (owner-requested, v22i) — **LARGELY DONE (beta 1.1.x).**
-  Soldiers now line-patrol, seek cover, lay covering fire, hold squad fire
-  discipline, and walk their POI together (cohesion). A whole second faction
-  (zombies + brute) with swarm AI + 3-way targeting landed on top. Still
-  direct-steer (no navmesh — waypoint discipline stands, by design). Remaining
-  polish if wanted: flanking, smarter cover rotation.
-- **Loot tables** should offer the full suite of available items — audit
-  `lootTable` / `lootRegions` for coverage.
+  Soldiers line-patrol, seek cover, lay covering fire, hold squad discipline,
+  walk their POI together; a whole second faction (zombies + brute) with swarm
+  AI + 3-way targeting landed on top; this wave added zealot morale
+  (flee/stand), faction-separated seeding, gas fear, and step-over parity.
+  Still direct-steer (no navmesh — by design). Remaining polish if wanted:
+  flanking, smarter cover rotation.
+- **Crouch is camera-only** — no crawl/prone vocabulary exists anywhere in the
+  movement code. Note it before designing anything that assumes one.
+- **area1 literals in the generic POI seeding path** — harmless today; fix
+  only when a second POI level is authored.
 - **Enemy-sourced burn WATCHED** (mod wave v1, deferred knob): the zealot spark
   roll doses the player 15 burn ≈ up to 15 hp over 7.5s — real early-game bump.
   If playtests say too hot, the one-liner is halving enemy-sourced doses in
   `applyStatus`. See docs/MODS.md balance ledger.
 - **ORB tracer-slot hoarding** — a live orb holds a tracer slot for its full 6s
-  aloft (cap 4 orbs). Capped, flagged "monitor" in MODS.md; revisit if tracers
-  starve during orb play.
+  aloft (cap 4 orbs). Capped, flagged "monitor" in MODS.md; NOTE the pool now
+  fills projectiles-first (6d9e498), so orbs starve pin needles before they
+  starve bullets. Revisit if tracers starve during orb play.
 - **v22m WATCHED knobs** (consciously deferred, all single-line fallbacks —
-  details in docs/MODS.md ledgers): enemy CHAOS heavy hand (+45%/stack rides
-  `MOD_KEYS` rolls; knob: halve `chaosMul` for non-player) · bolt-thread TTK
-  under the A5 burn=hurt law (knob: dose ×0.5) · boom-drum burn saturating the
-  30-pool in ~3s (⚡ deficit prices it) · enemy TIMER airbursts + DRILL
-  pass-through + relay extras = collective difficulty bump (knobs: drop
-  `slowFuse`/`pierce` from `MOD_KEYS`) · RETURN-arc TTK vs crowds behind low
-  cover (knob: W 2.5→2.0 or reach 14→11) · WAVE contact-drum tracer load
-  (knob: cadence 0.5→0.7s) · REFUND at 1⚡ collapses the lead economy where it
-  drops (knob: surcharge 2–3, never a mechanic change).
-- **Manual browser pass owed** (no browser in the loop this wave): burstCam+
-  POWDER+BEAM mint gate (mag −3/pull), hitscan pulse feel/converge, drum beats
-  landing at the dot, thread-degradation draw order (damage-follows-draw — no
-  invisible damage), grapple swing feel, whip takedown reads.
-- **Dead-code orphan** (pre-existing, harmless): `showTooltip_DEAD` calls
-  undefined `positionTooltip()` — the function is never invoked. Delete both
-  on the next tooltip pass.
+  details in docs/MODS.md ledgers): enemy CHAOS heavy hand (+45%/stack; knob:
+  halve `chaosMul` for non-player) · bolt-thread TTK under the A5 burn=hurt law
+  (knob: dose ×0.5) · boom-drum burn saturating the 30-pool in ~3s (⚡ deficit
+  prices it) · enemy TIMER airbursts + DRILL pass-through + relay extras =
+  collective difficulty bump (knobs: drop `slowFuse`/`pierce` from enemy
+  rolls) · RETURN-arc TTK vs crowds behind low cover (knob: W 2.5→2.0 or reach
+  14→11) · WAVE contact-drum tracer load (knob: cadence 0.5→0.7s). The old
+  "REFUND collapses the lead economy" watch is CLOSED — the corrected model
+  never waives lead (1b57cf9) and `surchargeHard` guards the rest (bc4445e).
+- **Manual browser pass owed** — repointed: every owed check now lives in
+  `docs/PLAYTEST.md` (§14 carries the firing-model list: mint gate, pulse
+  feel/converge, drum beats at the dot, thread-degradation draw order, grapple
+  swing, whip takedown reads).
+- **slideStand** — deleted as dead (82d367a). If a hold-crouch-to-slide /
+  release-to-stand verb is ever wanted, that commit marks the seam.
 
 ## Recently improved
 
@@ -146,6 +235,105 @@ Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal +
   in behind it. Perceived first-load stall is gone.
 
 ## Recently fixed
+
+- **feat/containment wave (2026-07-15)** — the P2 fix-up + audit sweep + P3–P7
+  (61 commits). Every check the builders flagged is consolidated in
+  `docs/PLAYTEST.md`. Highlights:
+  1. **#0 carve-height twin drift CLOSED** — JS aligned to the GLSL (FENCE
+     gate carve y 1.2→1.3, FACADE recess 1.2→1.25; was JS ~L2555-56/L2565-66
+     vs GLSL ~L1075/L1081): collision now matches what renders, zero visual
+     change (90aa1fd).
+  2. **#4 brute head hitbox CLOSED** — `enemyHeadR` (brute 0.30, rank 0.24)
+     covers the GLSL `d-=0.12` inflate at all five head-test sites (1c06127);
+     P5 finished the job: body hits test ONE capsule hugging the drawn flesh,
+     r 0.32 / brute 0.44 (2da355e).
+  3. **#7 "gun-raise replay" CLOSED — the proposed fix chased a trigger that
+     never existed.** Real mechanism: `menuSet('closed')` collapsed `uMenuMode`
+     to 0 while `menuAnim` eased 1→0 over ~0.77s, and the GLSL routed mode-0 to
+     the RACK-POSE gun prop settling down-screen with the worn gun gated
+     behind the same ease — the "raise" was a phantom rack prop, and the same
+     root drew a phantom rack gun behind the CRATE view. Fixed display-only in
+     GLSL: explicit prop branches per mode, worn gate on `uMenuMode==0`
+     (9f5ada6).
+  4. **#8 spatial audio CLOSED** — `spatialOut` (distance gain + StereoPanner)
+     shipped with `playSound(type,pos)`; the wave finished the coverage sweep:
+     enemy fire + reload (the owner's literal complaint), die() thud, grenade
+     tick, carve spark, LURE ping, ricochet/fuse clicks, item-drop bounce
+     (4842abb). Player hit-confirmation + crackHelm stay CENTERED by design
+     (hitmarker UX, owner call 14). One browser listen owed: pan SIGN + gain
+     curve (PLAYTEST.md §6).
+  5. **#6a lamp strobe CLOSED** — the 4-slot eviction now ranks by the same
+     faded term the upload sends, so a dying muzzle flash stops evicting a
+     steady lamp (947d3f2). **#6b exposure steps CLOSED** — a render-only
+     smoothed copy feeds `uExposure`; AI/photometer keep the stepped field
+     (0c40d2d).
+  6. **P2 had shipped broken three independent ways — all fixed:** the
+     outskirts spawner probed absolute y=1 inside 6-38m rim hills, so the
+     gauntlet was SILENT → probes local ground now, spawns ramp 3s→0.45s,
+     OUTSK_MAX=16 (c80d099); `stepOver` climbed 46-78° valley walls at full
+     speed (containment breach past the sealed gate) + standing sawtooth → a
+     vertical-gradient test refuses terrain at EVERY angle, ledges still
+     mount, enemies share the fix (16318d6); the desk terminal never slept
+     under other UIs — two E presses mid-bag could DEPLOY → sleeps under
+     bag/manual/debug, auto re-wakes (8f3fc88) + six-seam lifecycle hardening:
+     blind-confirm gate, snooze latch, world-swap close, cursor/prompt/facing
+     (49d7ffb).
+  7. **Containment seams:** horde gate re-locks every camp raid (4f00146);
+     guaranteed-card placement randomized + ownership dedupe walks two-deep —
+     no more duplicate compass/photometer (24facc5); gate matches its OWN card
+     by defKey, prompt names it, open-gate dead zone gone (d4a1989); the
+     gauntlet no longer drains the arena — wake bait is out-of-bounds corpses
+     only (owner call 9), `_home` restore, 30s stand-down reap (867217d); the
+     valley live far-yank was ALWAYS cap-blocked → cap gates dead respawns
+     only (72cbbb0).
+  8. **AI seams:** dormant zombie lunge gated — the invisible bite is gone
+     (77541a6); the undead read noisePings — LURE works on them, radius capped
+     at their 22m sense (7821c67, owner call 12); PERSONNEL RECORD counts only
+     player kills via `_lastBy` (0c676bd, owner call 11); zero-distance
+     retreat NaN guard (7364a41); `explode()` passes the source entity so
+     blast victims retaliate cross-faction (00bf683); Believers excluded from
+     the guaranteed-suppressor slot (ec43ecd); own-spot respawn defers while
+     the player camps it (98314f8); patrol blockage tested along the final
+     movement intent (e3c5fa9); soldier step-over equalized to the player's
+     ~0.46m + face-pogo latched out; undead keep the 0.9m clamber as flavor
+     (1de141f, owner call 6).
+  9. **Movement:** plain falls now swept — the anti-tunnel start pose is
+     captured before gravity, thin decks/roofs hold at 30fps (5640e5a); idle
+     stance planted on 28-45° slopes, clamp 0.06→0.12 (58b66f2, owner call 8);
+     a free-rope landing cashes into the armed slide — the momentum chain
+     closes (0ec21fd, owner call 7).
+  10. **Perf/render:** dormant enemies slow-tick 4:1 with banked dt (e55b2e9);
+     soldier sightline march range-gated (6696a47); dormancy ranking cached +
+     25m² hysteresis at the cap boundary (4704ea5); top hot-path allocations
+     onto the scratch idiom (ac45862); desk-terminal forced reflow killed
+     (2a989cf); HUD pips/scopeGlass DOM dedup (c22a4ac); world-item cull rides
+     the VIEW dial (77e42a5); auto-res recovers on 60Hz panels — grow at
+     fpsEma>58, wall-time cadence (b4f82c3); projectile tracers claim the
+     12-slot pool before pin needles (6d9e498); full-program prewarm draws
+     (654881b).
+  11. **UI truth:** terminal meta text to the 14px floor + diegetic scale
+     floor 0.55→0.8 (95126b5); enum dials show off-preset values raw instead
+     of masquerading as the first label (5afd480).
+  12. **Dead code out:** ground-scatter remnants (f9fdb0f), showTooltip_DEAD +
+     the unreachable locked-widget UP-step (33e4956), the never-true
+     slideStand flag (82d367a), the dead j.wielded/_wield save pair (ad235fd).
+  13. **Features landed (not fixes):** P3 gas — masks/filters/face slot
+     (47fdb31), radiation field + outskirts gas + brute aura + HUD (b65bb23),
+     soldier burn/fear + undead crowd the haze (2229606), green haze fog GLSL
+     (d73840b) · P4 — unique lab/testing keycards (fdedc19), regionLoot caches
+     (73a7499), death-proof lockboxes + brute drop (b7c6a1d) · P5 — capsule
+     hit tests (2da355e), symmetric tiered headshots (0c0dc37), spawn y-cap
+     (2a9d5b5), faction-separated seeding (054e5ed), zealot morale (c398faa) ·
+     P6 — five new POI crate clusters (833460b), per-raid crate rotation
+     (8ea4d3c) · P7 — free-aim lead/trail (b9ccf28), gun lean + DOM crosshair
+     + iron-glyph handoff (8318dfb), FREEAIM goggles row (b0af3a8, f4cb1bf).
+
+- **beta 1.1.x combat pass (2026-07-14, 3c2430b…bc4445e — pre-wave)** — the
+  powder/refund/ammo rework MODS.md spec'd: two-pool model (boltless mags fire
+  plain lead PARALLEL to energy cores), platform columns fire their own mags,
+  powder/refund corrected to the model (coreless synth + refund round-waiver
+  DROPPED), wing own-mag billing + powder `surchargeHard`. Browser pass owed —
+  PLAYTEST.md §14.
 
 - **beta 1.1.x (the horde arc)** — a run of fixes landed with the ballistics +
   zombie work: (1) **material-ID band overflow** — raising the enemy cap made
@@ -161,7 +349,8 @@ Last reviewed: 2026-07-13 (build beta 1.1.x — the ballistics/optics/terminal +
   bushes render now, so the cover is honest. (6) **Enemy night-vision over-nerf**
   — fog was blinding enemies after dark; fog no longer factors into enemy sight.
   (7) Powder **C3 refund waiver** was vacuous (never reached a real carrier) —
-  rewired onto the powder lane.
+  rewired onto the powder lane, then RETIRED with the corrected model (see the
+  combat pass above).
 
 - **v22r** — Fog translucency fixed at the blend target (diagnosed v22p). The
   one fog blend composited `skyColor(rayDir)` — the FULL directional sky, sun
