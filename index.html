@@ -45,7 +45,8 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 .stencil b{color:var(--bone);}
 
 /* ---------- HUD ---------- */
-#hud{position:absolute;top:14px;left:14px;z-index:10;pointer-events:none;padding:10px 12px;min-width:210px;}
+#hud{position:absolute;top:14px;left:14px;z-index:41;pointer-events:none;padding:10px 12px;min-width:210px;}   /* above the bag chrome (z40): the HP meter stays readable when the centered bag reaches the corner */
+#stashUI{position:absolute;right:4vw;top:12%;z-index:40;text-align:center;pointer-events:none;}   /* THE OTHER CONTAINER: stash/loot crate live OUTSIDE the bag, anchored right — you're reaching into a different box */
 #hud .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0;font-size:14px;letter-spacing:.14em;}
 .meter{width:110px;height:7px;background:#000;border:1px solid var(--line);overflow:hidden;}
 .meter>div{height:100%;width:100%;transition:width .15s linear;}
@@ -386,6 +387,8 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
   <div id="bagGusset"></div>
   <div id="bagBody"><div id="zoneStack"></div></div>
 </div>
+<div id="stashUI" class="hidden"></div>   <!-- stash/loot crate: its own box OUTSIDE the bag, right side -->
+
 
 <!-- Tool — the rack, centered; the tip panel reads whatever the cursor touches -->
 <div id="toolUI" class="hidden">
@@ -3909,6 +3912,7 @@ function menuSet(view){
   menuMode        = view==='bag'?1:view==='tool'?2:0;
   if(view!=='crate') lootCrate=null;                      // leaving the crate ends the crate
   document.getElementById('backpackUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));
+  document.getElementById('stashUI').classList.toggle('hidden',!(view==='bag'||view==='crate'));   // the outside box shows with the bag; renderZones re-toggles if it's empty
   document.body.classList.toggle('bagOpen',view==='bag'||view==='crate');   // the folded flap owns the top strip zone — compass/eye/rad step aside while the bag is up
   document.getElementById('toolUI').classList.toggle('hidden',view!=='tool');
   if(view==='closed'){
@@ -8395,7 +8399,10 @@ function renderZones(){
   const colM=document.createElement('div');  colM.className='zoneCol';
   const colR=document.createElement('div');  colR.className='zoneCol colStash';
   const setRow=document.createElement('div'); setRow.className='bagSettings';
-  host.appendChild(rig); host.appendChild(mid); mid.appendChild(colL); mid.appendChild(colM); mid.appendChild(colR); host.appendChild(setRow);
+  host.appendChild(rig); host.appendChild(mid); mid.appendChild(colL); mid.appendChild(colM); host.appendChild(setRow);
+  const stashHost=document.getElementById('stashUI');       // the OTHER container: stash/crate render OUTSIDE the bag, right-anchored (owner: "so it translates where we're interacting from")
+  stashHost.innerHTML=''; stashHost.appendChild(colR);
+  stashHost.classList.toggle('hidden', document.getElementById('backpackUI').classList.contains('hidden'));
   const LEFT_DOCK=['belt','holster'], SET_DOCK=['goggles','headphones'], MID_DOCK=['rucksack','harness'];
   const dock={};                                       // one dock per armor slot — panel or stub, the order never shuffles
   const pkSlot=document.createElement('div'); colL.appendChild(pkSlot);   // pockets pin the top of the LEFT group
@@ -9526,6 +9533,25 @@ let lastT=performance.now(), fpsEma=60, hudT=0, photoTick=0;
 const renderItemsBuf=[];
 const _liveEn=[];                            // reused live-enemy sort buffer (dormancy ranking) — no per-frame filter/sort alloc
 let _faEl=null;                              // #freeAim, same idiom (P7)
+let _bagEl=null;                             // #backpackUI, same idiom
+// DIEGETIC BAG: the inventory RIDES the raised backpack prop (uMenuMode 1) — the same project-to-
+// screen idiom as the terminal-on-the-slab. Mirrors the shader pose exactly: view-space anchor
+// (0, -0.04-rise, 0.85) with rise=(1-uMenu)^2*0.45 — so the UI climbs INTO place as the prop
+// settles, breathes with its yaw sway, and sits dead-center on the drawn bag. Analog by math.
+function bagFrame(){
+  const ui=_bagEl||(_bagEl=document.getElementById('backpackUI'));
+  if(!ui||ui.classList.contains('hidden')) return;
+  const m=clamp(menuAnim,0,1), rise=(1-m)*(1-m)*0.45;
+  const fovU=(playerPos.currentFov*(1-0.07*m))||1;                   // the exact fov the shader renders with this frame
+  const H=canvas.clientHeight||innerHeight;
+  const py=H/2-((-0.04-rise)/0.85/fovU)*H;                           // x offset is 0 → dead-center horizontally
+  const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
+  const rot=Math.sin(gameTime*0.5)*1.4;                              // the prop's rotY sway (±0.08 rad), echoed faintly in degrees
+  ui.style.left=(innerWidth/2)+'px';
+  ui.style.top=py.toFixed(1)+'px';
+  ui.style.transformOrigin='50% 50%';                                // the media-query 0 0 origin must not swing the rotate around a corner
+  ui.style.transform='translate(-50%,-54%) scale('+sc+') rotate('+rot.toFixed(2)+'deg)';
+}
 
 const FRAME_MS=1000/60;
 let lastRender=0, _pendingRes=false;
@@ -9557,6 +9583,7 @@ function frame(){
       else if(_tR.fd>1.4 || uiMenusOpen() || isManualOpen || isDebugOpen) closeTerminal(false);   // hysteresis: wake ≤0.9m, sleep >1.4m so it can't flicker at the edge — and ANY other UI puts the desk to sleep (E must never drive the bag and an invisible DEPLOY row at once; it re-wakes when the menu closes)
     }
     if(isTerminalOpen){ terminalFrame(); if(!uiMenusOpen()&&!isManualOpen&&!isDebugOpen) termNav(); }   // place the mini-display + crosshair-pick a row, then run nav/confirm (nav skipped under any other UI — belt for the sleep gate above)
+    bagFrame();                                          // DIEGETIC: the open bag UI rides the raised backpack prop every frame (no-op while hidden)
     if(INPUT.rawKey['Escape']){
       if(isManualOpen)closeManual(); else if(isDebugOpen)toggleDebug();
       else if(uiMenusOpen())closeAllInv();
