@@ -217,6 +217,7 @@ body.bagOpen #compassStrip, body.bagOpen #eyeWrap, body.bagOpen #radStrip{opacit
 .termRow.sel{border-color:var(--exposed);color:var(--exposed);background:rgba(80,200,120,.06);}
 .termRow .trMeta{color:var(--dust);font-size:14px;}
 .termHint{margin-top:12px;font-size:12px;letter-spacing:.12em;color:var(--dust);}
+#termTitle{text-transform:none;}   /* the logo keeps its own capitalization: ValleyOS */
 /* DIEGETIC: the terminal shrinks onto the slab's phosphor — positioned per-frame by terminalFrame() */
 #terminalUI.diegetic{min-width:0;width:340px;padding:14px 18px;transform-origin:50% 50%;will-change:left,top,transform;
   border-color:rgba(120,200,150,.55);background:rgba(4,12,8,.97);
@@ -736,6 +737,7 @@ function pollGamepad(){
     if(INPUT.padButtons[i]&&!INPUT.padPrevButtons[i]){
       if(listeningBind){ finishBind(i); return; }
       INPUT.rawPad[i]=true;
+      tipPadT=performance.now();               // pad activity claims input ownership (exclusivity)
       markEdges(i,true); anyKeyGate();
     }
   }
@@ -1620,9 +1622,10 @@ vec2 map(vec3 p){
       float gz=0.46 - uAim*((uSights>0.5||uReticle==1||uReticle==2)?0.18:(uReticle>=3?0.13:0.0));   // iron/red-dot/holo pull ~0.18 closer at full ADS; the scope pulls 0.13 so its aperture (~0.073 rad) fills the eye
       vl-=vec3(gxy.x+uBob.x, gxy.y+uBob.y, gz-uBob.z);
       if(uWallPush>0.001 && uMenuMode==0){ vl.z+=uWallPush*0.34; vl.y-=uWallPush*0.10; vl=rotX(vl, 1.5*uWallPush); }   // a wall ahead: the gun COLLIDES — pulled well back, muzzle STRAIGHT UP at full press (bullets fly the muzzle too)
-      if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases into a presented pose — closer, centered, a slight live turn — and eases back to rest on close
-        vl-=vec3(-0.16*mm, 0.10*mm, -0.14*mm);
-        vl=rotY(vl, (0.30+sin(iTime*0.5)*0.05)*mm);
+      if(uMenuMode==2){ float mm=uMenu*uMenu*(3.0-2.0*uMenu);   // TOOL MENU (owner): the SAME hand gun eases to the rack pose — VERTICAL and CENTERED under the columns — and back to rest on close
+        vl+=vec3((gxy.x+uBob.x)*mm, (gxy.y+uBob.y+0.26)*mm, (gz-uBob.z-0.85)*mm);   // un-mix the rest offsets toward the presented seat (0,-0.26,0.85)
+        vl=rotX(vl, 1.05*mm);                                    // muzzle up-screen, matching the vertical column layout
+        vl=rotY(vl, sin(iTime*0.5)*0.05*mm);                     // the gentle live sway
       }
       float g=sdGun(vl,true);
       // the rack, worn: same column data as the menu prop, first-person scale.
@@ -2378,7 +2381,7 @@ const playerPos={
   flashlightOn:false,
   noiseLevel:0.2, exposure:0.5, muzzleGlow:0,
   camYawOffset:0,camPitchOffset:0,
-  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, yawPend:0, wallPush:0, walkCycle:0,
+  aimAmt:0, bobX:0, bobY:0, viewKick:0, kickV:0, pitchPend:0, yawPend:0, wallPush:0, autoPeek:0, walkCycle:0,
   velX:0, velZ:0, swinging:false, launched:false,   // velX/velZ = the ONLY horizontal velocity state (rope swing + slide-hop launch)
 };
 let cameraYaw=0.6, cameraPitch=0;
@@ -4012,6 +4015,7 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 // ============================================================
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
 let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a sub-inventory cell = quick-swap it out)
+let _mlY=0,_mlP=0,_mlVy=0,_mlVp=0;   // menu free-look spring: offset + velocity per axis (bounces home on release)
 const SLOT_KIN={face:['face','goggles'],holster:['holster','belt']};   // consolidated seats (owner): FACE takes masks+goggles, HOLSTER takes holsters+belts — the goggles/belt slots are retired
 function quickEquip(it){                           // □□/Shift+LMB on ARMOR with a free seat: it goes ON, not away (owner)
   if(!(it instanceof Armor)) return false;
@@ -5370,7 +5374,7 @@ function tryFirePlayer(dt){
 // crack phase, then recoils to the hand; the crack itself is a warm light pop + a radial star burst.
 const WHIP_REACH=3.4;
 function drawWhip(dt){
-  const ph=Math.min(1,meleeT/0.3);
+  const ph=Math.min(1,meleeT/0.42);                    // slower, smoother swing (owner) — same curves, longer clock
   const o=camPos(), fw=aimForward(), b=camBasis();
   // the cord GROWS FROM THE HAND (owner): mirror the GLSL hand-arc END exactly —
   // hd = mix((0.20,-0.24,0.10) → (-0.04,-0.12,0.34), sw) in view space, sw = the same master ease
@@ -5391,10 +5395,11 @@ function drawWhip(dt){
     beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(qx,qy,qz), col:[0.55,0.42,0.28], ttl:dt+0.001});
     px=qx; py=qy; pz=qz;
   }
-  if(!meleeHit&&meleeT+dt>=0.135){                               // the CRACK lands next tick — light pop + star burst at the tip
+  if(!meleeHit&&meleeT+dt>=0.19){                                // the CRACK lands next tick — light pop + a small RANDOMIZED spark spray
     addDyn(px,py,pz,[1.0,0.85,0.55],2.6,0.09);
-    for(let k=0;k<5;k++){ const a2=k/5*6.2832, rr=0.30;
-      beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(px+Math.cos(a2)*rr,py+Math.sin(a2)*rr*0.7,pz+Math.sin(a2+2.1)*rr), col:[1.0,0.9,0.6], ttl:0.07});
+    const n=4+(runRng()*4|0);
+    for(let k=0;k<n;k++){ const a2=runRng()*6.2832, rr=0.10+runRng()*0.14;
+      beamSegs.push({a:new Vec3(px,py,pz), b:new Vec3(px+Math.cos(a2)*rr,py+(runRng()-0.3)*rr,pz+Math.sin(a2)*rr), col:[1.0,0.9,0.6], ttl:0.04+runRng()*0.05});
     }
   }
 }
@@ -5402,8 +5407,8 @@ function tickMelee(dt){
   if(meleeT<=0) return;
   meleeT+=dt;
   drawWhip(dt);                                        // the world-space cord — the GLSL hand arc stays the close half
-  if(!meleeHit && meleeT>=0.135){ meleeHit=true; meleeStrike(); }   // the CRACK lands mid-snap
-  if(meleeT>=0.3) meleeT=0;
+  if(!meleeHit && meleeT>=0.19){ meleeHit=true; meleeStrike(); }   // the CRACK lands mid-snap (slower swing: 0.42s clock)
+  if(meleeT>=0.42) meleeT=0;
 }
 function meleeStrike(){
   const o=camPos(), f=aimForward();                       // P7: the whip follows the visible marker (degrades to camForward at zero lead)
@@ -7936,6 +7941,8 @@ function renderTerminal(){
     d.addEventListener('mousedown',e=>{ if(e.button>0) return; termSel=i; termActivate(); });   // primary = any non-right button (RMB=2 handled by contextmenu); admit 0/1/-1/undefined — trackpad tap may emit button 1
     box.appendChild(d);
   });
+  const _th=document.querySelector('#terminalUI .termHint');   // FLUID hint (owner): device-sensitive, minimal — repainted with the rows
+  if(_th) _th.textContent=(tipPadT>tipMouseT)?'□ select · ○ back':(termScreen==='home'?'LMB select · Esc close':'LMB select · Esc back');
 }
 function termActivate(){
   const sc=TERM_SCREENS[termScreen]();
@@ -8363,6 +8370,7 @@ function positionTipAtMouse(){
 document.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;
   tipMouseT=performance.now();
   if(tooltipEl.style.display==='block') positionTipAtMouse();});
+document.addEventListener('mousedown',()=>{ tipMouseT=performance.now(); });   // clicks claim ownership too (exclusivity)
 function hideTooltip(){ }   // superseded by syncTip's open-state gate
 
 // ---- item thumbnails: little canvas paintings, cached by kind ----
@@ -8532,7 +8540,7 @@ function renderZones(){
         const it=equip[slot];
         if(currentFocus===0&&zoneIdx===zi&&cursorY===r) div.classList.add('cursor','cellFocus');
         if(!it) div.innerHTML='<span class="slotGhost">'+slot.slice(0,4).toUpperCase()+'</span>';
-        div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
+        div.addEventListener('mouseenter',()=>{ if(isDebugOpen||tipPadT>tipMouseT) return;   // pad owns the cursor: hover doesn't steal (move the mouse to take it back)
           if(currentFocus===0&&zoneIdx===zi&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; refreshInvUI(); });
@@ -8563,7 +8571,7 @@ function renderZones(){
         if(item&&item.widget){
           div.innerHTML='<div class="widg"><div class="widgLab">'+item.label+'</div><div class="widgVal">'+widgetValueText(item)+'</div></div>';
         }
-        div.addEventListener('mouseenter',()=>{ if(isDebugOpen) return;
+        div.addEventListener('mouseenter',()=>{ if(isDebugOpen||tipPadT>tipMouseT) return;   // pad owns the cursor: hover doesn't steal
           if(currentFocus===0&&zoneIdx===zi&&cursorX===c&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
           currentFocus=0; zoneIdx=zi; cursorX=c; cursorY=r; refreshInvUI(); });
@@ -8649,6 +8657,7 @@ function renderGrid(containerId,grid,cols,rows,focusIdx,ghosts){
       if(!f.locked) div.style.outline='2px solid '+(gridFits(heldWorld.w.item,c,r,f.grid,f.cols,f.rows)?'#57e0a3':'#e0492e');
     }
     div.addEventListener('mouseenter',()=>{
+      if(tipPadT>tipMouseT) return;                    // pad owns the cursor: hover doesn't steal
       if(currentFocus===focusIdx && cursorX===c && cursorY===r) return;
       if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
       if(isDebugOpen) return;
@@ -8820,6 +8829,7 @@ function mkRackCell(tool,focusIdx,ci,ri,item,opts){
     const lbl=document.createElement('div'); lbl.className='rlbl'; lbl.textContent='◆ muzzle'; d.appendChild(lbl);
   }
   d.addEventListener('mouseenter',()=>{
+    if(tipPadT>tipMouseT) return;                      // pad owns the cursor: hover doesn't steal
     if(currentFocus===focusIdx&&cursorX===ci&&cursorY===ri) return;
     if(currentFocus!==focusIdx) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
     if(isDebugOpen) return;
@@ -9137,8 +9147,12 @@ function updatePlayer(dt){
   // look
   // terminal: the camera stays LIVE — the crosshair IS the cursor (stick + mouse both drive row
   // selection; terminalFrame's hit-test only retargets when the look actually MOVED, so d-pad nav holds)
-  const lx=INPUT.mdx*0.0022*INPUT.sensMouse + INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1);
-  let ly=INPUT.mdy*0.0022*INPUT.sensMouse + INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1);
+  // INPUT EXCLUSIVITY (owner): the LAST device to act owns the camera — the other pauses, and
+  // acting again takes ownership back instantly (activity stamps tipMouseT/tipPadT).
+  if(Math.abs(INPUT.padAxes[2])>0.12||Math.abs(INPUT.padAxes[3])>0.12) tipPadT=performance.now();
+  const _mOwns=tipMouseT>=tipPadT;
+  const lx=(_mOwns?INPUT.mdx*0.0022*INPUT.sensMouse:0) + (!_mOwns?INPUT.padAxes[2]*INPUT.sensPad*2.4*dt*(playerPos.isAiming?0.45:1):0);
+  let ly=(_mOwns?INPUT.mdy*0.0022*INPUT.sensMouse:0) + (!_mOwns?INPUT.padAxes[3]*INPUT.sensPad*2.0*dt*(playerPos.isAiming?0.45:1):0);
   if(INPUT.invertY) ly=-ly;
   // ADS FREE-AIM (P7, QoL: ALL sights now): live for bare/iron AND glass — the glass glyphs ride
   // uAimOff to the lead, so dot/holo/2×/3× aim exactly where the marker sits. While live, look
@@ -9156,16 +9170,24 @@ function updatePlayer(dt){
       cameraPitch=clamp(cameraPitch-ly,-1.5,1.5);
     }
   }
-  // FREE-LOOK IN THE BAG (owner): the mouse riding the screen EDGE (off-UI) eases the camera
-  // around, and the right stick free-looks too — browse the kit and glance at the world at once.
-  // The bag prop is camera-locked, so the UI stays glued while the world turns behind it.
-  if(menus&&(isInventoryOpen||isCrateOpen)&&!listeningBind){
-    const B=0.12, ex=mouseX/innerWidth, ey=mouseY/innerHeight;
-    let elx=0, ely=0;
-    if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;     // proximity-scaled: harder at the very edge
-    if(ey<B) ely=-(1-ey/B); else if(ey>1-B) ely=(ey-(1-B))/B;
-    elx+=INPUT.padAxes[2]||0; ely+=INPUT.padAxes[3]||0;
-    if(elx||ely){ cameraYaw+=elx*1.5*dt; cameraPitch=clamp(cameraPitch-ely*1.1*dt,-1.5,1.5); }
+  // FREE-LOOK IN MENUS v2 (owner): bag/crate/stash AND the tool rack — a spring-loaded OFFSET.
+  // The edge-mouse or right stick pushes it out; releasing lets it BOUNCE home to origin.
+  {
+    const _on=menus&&(isInventoryOpen||isCrateOpen||isToolMenuOpen)&&!listeningBind;
+    if(_on){
+      const B=0.12, ex=mouseX/innerWidth, ey=mouseY/innerHeight;
+      let elx=0, ely=0;
+      if(tipMouseT>=tipPadT){                                    // the owning device pushes (exclusivity)
+        if(ex<B) elx=-(1-ex/B); else if(ex>1-B) elx=(ex-(1-B))/B;
+        if(ey<B) ely=-(1-ey/B); else if(ey>1-B) ely=(ey-(1-B))/B;
+      } else { elx=INPUT.padAxes[2]||0; ely=INPUT.padAxes[3]||0; }
+      _mlVy+=elx*7*dt; _mlVp+=-ely*5.5*dt;
+    }
+    const _w0=9, _zt=0.5;                                        // underdamped — the satisfying bounce home
+    _mlVy+=(-2*_zt*_w0*_mlVy-_w0*_w0*_mlY)*dt; _mlVp+=(-2*_zt*_w0*_mlVp-_w0*_w0*_mlP)*dt;
+    const _dY=_mlVy*dt, _dP=_mlVp*dt;
+    _mlY=clamp(_mlY+_dY,-0.7,0.7); _mlP=clamp(_mlP+_dP,-0.5,0.5);
+    cameraYaw+=_dY; cameraPitch=clamp(cameraPitch+_dP,-1.5,1.5);
   }
   // the TRAIL — the camera chases the aim on a small delay, eating the lead as it goes; the
   // aim (camera+lead) holds still in the world while the view glides on. Runs unconditionally:
@@ -9404,7 +9426,7 @@ function updatePlayer(dt){
   // stance & lean — leaning waits outside the menus
   const targetH=playerPos.isCrouching?0.72:1.32;
   playerPos.baseHeight+=(targetH-playerPos.baseHeight)*Math.min(1,(slideT>0?22:10)*dt);   // the slide ducks NOW
-  const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5;
+  const targetLean=menus?0:((down('leanR')?1:0)-(down('leanL')?1:0))*0.5+(playerPos.autoPeek||0)*0.4;   // auto-peek rides the lean channel
   playerPos.currentLean+=(targetLean-playerPos.currentLean)*10*dt;
 
   // aim fov
@@ -9417,7 +9439,17 @@ function updatePlayer(dt){
   { const _o=camPos(), _f=camForward();
     const _wd=activeTool?mapWorldJS(_o.x+_f.x*0.5,_o.y+_f.y*0.5,_o.z+_f.z*0.5):1;
     const _wt=activeTool?clamp(1-_wd/0.4,0,1):0;
-    playerPos.wallPush+=(_wt-playerPos.wallPush)*Math.min(1,14*dt); }
+    playerPos.wallPush+=(_wt-playerPos.wallPush)*Math.min(1,14*dt);
+    // AUTO-PEEK (owner): aim HELD with the muzzle blocked → lean toward the open side of the
+    // cover automatically (rides the lean channel: camera shifts, tilts, and clears the edge)
+    let _pkT=0;
+    if(playerPos.isAiming&&playerPos.wallPush>0.5){
+      const _b=camBasis();
+      const _dl=mapWorldJS(_o.x-_b.right.x*0.4+_f.x*0.55,_o.y+_f.y*0.55,_o.z-_b.right.z*0.4+_f.z*0.55);
+      const _dr=mapWorldJS(_o.x+_b.right.x*0.4+_f.x*0.55,_o.y+_f.y*0.55,_o.z+_b.right.z*0.4+_f.z*0.55);
+      if(Math.max(_dl,_dr)>0.5) _pkT=(_dr>_dl?1:-1);
+    }
+    playerPos.autoPeek+=((_pkT)-playerPos.autoPeek)*Math.min(1,8*dt); }
 
   // viewmodel sway/bob + recoil recovery
   if(moving&&playerPos.onGround) playerPos.walkCycle+=speed*dt*2.6;
@@ -9800,8 +9832,11 @@ function frame(){
   gl.uniform3f(U.ro,cp.x,cp.y,cp.z);
   gl.uniform3f(U.rd,rdx,rdy,rdz);
   const fcy=Math.cos(finalYaw),fsy=Math.sin(finalYaw),fcp=Math.cos(finalPitch),fsp=Math.sin(finalPitch);
-  gl.uniform3f(U.uRight,fcy,0,-fsy);
-  gl.uniform3f(U.uUp,-fsp*fsy,fcp,-fsp*fcy);
+  { const _roll=playerPos.currentLean*0.22;            // TILT with the lean (owner) — a render-only camera roll; aim math never rolls
+    const _cr=Math.cos(_roll), _sr=Math.sin(_roll);
+    const _ux=-fsp*fsy, _uy=fcp, _uz=-fsp*fcy;
+    gl.uniform3f(U.uRight, fcy*_cr+_ux*_sr, _uy*_sr, -fsy*_cr+_uz*_sr);
+    gl.uniform3f(U.uUp,   -fcy*_sr+_ux*_cr, _uy*_cr,  fsy*_sr+_uz*_cr); }
   gl.uniform1f(U.fov,playerPos.currentFov*(1-0.07*menuAnim));
   gl.uniform1f(U.uMenu,menuAnim);
   gl.uniform1i(U.uMenuMode,menuMode);
@@ -9873,7 +9908,7 @@ function frame(){
   gl.uniform1i(U.flashlightOn,(playerPos.flashlightOn&&resT&&resT.flashlight)?1:0);
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
-  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, (resT&&(resT.reticle===3||resT.reticle===4))?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.3):0);   // .y = the hollow scope TUBE, by reticle code (fovAim no longer distinguishes optics)
+  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, (resT&&(resT.reticle===3||resT.reticle===4))?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.42):0);   // .y = the hollow scope TUBE, by reticle code; .w = the whip phase (0.42s clock)
   _expVis+=(playerPos.exposure-_expVis)*Math.min(1,dt*10);   // smooth the 0.12s exposure steps for the viewmodel dim only
   gl.uniform1f(U.uExposure, _expVis);
 
