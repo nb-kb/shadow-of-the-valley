@@ -4273,8 +4273,8 @@ function spotDistance(){
 // ============================================================
 const WORLDITEM_CAP=64;   // dropped-loot pile bound: render only shows the nearest RLIM.ITEMS anyway, so evicting the oldest OFF-SCREEN drop is invisible — and it stops the all-session growth that fed 3 per-frame O(n) sweeps + a per-item alloc (the long-run lag)
 function spawnWorldItem(item,x,y,z,vel){
-  if(worldItems.length>=WORLDITEM_CAP){                 // over cap → drop the OLDEST evictable item (never a carried or armed one)
-    for(let i=0;i<worldItems.length;i++){ const w=worldItems[i]; if(!w.held && !(w.item&&w.item._armT>0)){ worldItems.splice(i,1); break; } }
+  if(worldItems.length>=WORLDITEM_CAP){                 // over cap → drop the OLDEST evictable item — the REAP's exact predicate: never a carried, PINNED, armed, or physgun-held one (a deliberately pinned old item used to vanish the moment the 65th spawned; _armT>0 also missed a core on its 0-tick frame)
+    for(let i=0;i<worldItems.length;i++){ const w=worldItems[i]; if(!w.held && !w.frozen && !(w.item&&w.item._armT!=null) && !(heldWorld&&heldWorld.w===w)){ worldItems.splice(i,1); break; } }
   }
   worldItems.push({item,pos:new Vec3(x,y,z),vel:vel||new Vec3(),ry:runRng()*6.28,rotVel:0,pitch:0,rotVelP:0,held:false,age:0});
 }
@@ -9101,17 +9101,19 @@ function tickInvArm(dt){
 }
 function updateWorldItems(dt){
   const gen=_worldGen;
+  const _safeFloor=activeLevel&&activeLevel.id==='hideout';   // owner call 5: the safe-zone floor is de-facto storage — it NEVER reaps (the cap-64 eviction stays its only bound)
   for(let wi=worldItems.length-1;wi>=0;wi--){
     if(gen!==_worldGen) return;              // the grenade below can kill its owner → teardown cleared this list mid-walk
     const w=worldItems[wi]; if(!w) continue;
     // LOOT DESPAWN (owner rule): reap loot the player has walked >50m from OR that
     // has sat >2min — bounds the drop pile that used to grow all session. Never a
-    // carried / pinned / armed item.
-    if(!w.held && !w.frozen && !(w.item&&w.item._armT!=null) && !(heldWorld&&heldWorld.w===w)){
+    // carried / pinned / armed item — and those RESTART the clock on release (age was
+    // lifetime-cumulative: gear carried ten minutes despawned seconds after set down).
+    if(!_safeFloor && !w.held && !w.frozen && !(w.item&&w.item._armT!=null) && !(heldWorld&&heldWorld.w===w)){
       w.age=(w.age||0)+dt;
       const _dx=w.pos.x-playerPos.x, _dz=w.pos.z-playerPos.z;
       if(w.age>120 || _dx*_dx+_dz*_dz>2500){ worldItems.splice(wi,1); continue; }
-    }
+    } else w.age=0;
     // ---- a LIT boom core counts down wherever it is — pinned, resting, or in
     // ---- hand (a POCKETED one ticks in tickInvArm, the walk above)
     const li=w.item;
