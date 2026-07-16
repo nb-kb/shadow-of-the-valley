@@ -3775,7 +3775,7 @@ const FOLD_SLOTS=['harness','goggles','headphones','holster','rucksack'];
 const zoneFolds=it=>!!it&&FOLD_SLOTS.includes(it.armorType);
 const zoneShut=it=>zoneFolds(it)&&!it.zoneOpen;
 function playerZones(all){
-  const z=[{id:'equip',label:'RIG',equipCol:true,cols:1,rows:EQUIP_SLOTS.length}];
+  const z=[{id:'equip',label:'RIG',equipCol:true,cols:1,rows:EQUIP_SLOTS.length+1}];   // +1: the PLATES home proxy (usable only with a harness worn)
   z.push({id:'pockets',label:'POCKETS',grid:pocketsGrid,cols:POCKET_COLS,rows:POCKET_ROWS,storage:true});   // ALWAYS present — before every equipped container; storage:true wires it into storageZones/autoPlaceAny/ammo-count for free
   const push=slot=>{ const it=equip[slot];
     if(it&&it.inv&&it.invCols>0&&(all||!zoneShut(it)))
@@ -3961,7 +3961,7 @@ function focusGrid(){
   if(currentFocus===2 && inspectItem instanceof Tool) return rackZone(inspectItem);
   if(currentFocus===0){
     const z=clampZone();
-    if(z.equipCol) return {...z, at:(x,y)=>equip[EQUIP_SLOTS[y]]};
+    if(z.equipCol) return {...z, at:(x,y)=>y<EQUIP_SLOTS.length?equip[EQUIP_SLOTS[y]]:wornPlates()};   // the last row is the plates proxy
     return z;
   }
   return activeTool?rackZone(activeTool):{grid:null,cols:1,rows:1};
@@ -4079,6 +4079,14 @@ function quickMoveAtCursor(){                      // Shift+LMB: quick-move the 
   const f=focusGrid(); if(!f){ return; }
   clampCursor(f);
   if(f.equipCol){                                  // on the rig: strip the piece straight into storage
+    if(cursorY===EQUIP_SLOTS.length){              // the plates proxy: strip the seated plates out of the harness
+      const _pl=wornPlates(), _h=equip.harness;
+      if(!_pl||!_h){ playSound('click'); return; }
+      for(const row of _h.inv) for(let i=0;i<row.length;i++) if(row[i]===_pl) row[i]=null;
+      if(autoPlaceAny(_pl)){ playSound('place'); refreshInvUI(); }
+      else { autoPlace(_pl,_h.inv,_h.invCols,_h.invRows); toast('NO ROOM'); playSound('empty'); }
+      return;
+    }
     const slot=EQUIP_SLOTS[cursorY], it=equip[slot];
     if(!it){ playSound('click'); return; }
     equip[slot]=null; syncBagAlias();
@@ -4143,6 +4151,25 @@ function interactInventory(){
 
   // ---- the rig column: equip / unequip / swap, type-locked --------------------------
   if(f.equipCol){
+    if(cursorY===EQUIP_SLOTS.length){                    // THE PLATES HOME (owner): a proxy over the worn harness's seat — grayed without a harness
+      const h=equip.harness;
+      if(heldWorld){
+        const it=heldWorld.w.item;
+        if(!(it instanceof Armor)||it.armorType!=='plates'){ toast('PLATES ONLY'); playSound('empty'); return; }
+        if(!h||!h.inv){ toast('NEEDS A HARNESS'); playSound('empty'); return; }
+        if(wornPlates()){ toast('PLATES ALREADY SEATED'); playSound('empty'); return; }
+        if(!autoPlace(it,h.inv,h.invCols,h.invRows)){ toast('HARNESS FULL'); playSound('empty'); return; }
+        consumeHeld(); toast('PLATES SEATED'); playSound('place'); refreshInvUI(); return;
+      }
+      const _pl=wornPlates();
+      if(_pl&&h&&h.inv){
+        for(const row of h.inv) for(let i=0;i<row.length;i++) if(row[i]===_pl) row[i]=null;
+        handHold(_pl);
+        _hpick={t:runClock,f:currentFocus,zi:zoneIdx,x:cursorX,y:cursorY,ext:false,srcId:undefined,live:true};
+        refreshInvUI(); return;
+      }
+      playSound('click'); return;
+    }
     const slot=EQUIP_SLOTS[cursorY];
     if(heldWorld){
       const it=heldWorld.w.item;
@@ -8539,12 +8566,13 @@ function renderZones(){
     const g=document.createElement('div'); g.className='gridWrap';
     g.style.gridTemplateColumns='repeat('+(z.equipCol?z.rows:z.cols)+',44px)';   // the RIG transposes to ONE ROW across the mouth — purely visual; nav ids + cursorY stay slot-indexed
     if(z.equipCol){
-      EQUIP_SLOTS.forEach((slot,r)=>{
-        const div=document.createElement('div'); div.className='cell equipCell';
+      for(let r=0;r<=EQUIP_SLOTS.length;r++){                      // +1: the PLATES home — a proxy over the worn harness's seat (owner)
+        const proxy=r===EQUIP_SLOTS.length, slot=proxy?'plates':EQUIP_SLOTS[r];
+        const div=document.createElement('div'); div.className='cell equipCell'+(proxy&&!equip.harness?' lockedCell':'');
         div.dataset.nv='0,'+zi+',0,'+r;                            // spatial-nav identity: focus,zone,x,y
-        const it=equip[slot];
+        const it=proxy?wornPlates():equip[slot];
         if(currentFocus===0&&zoneIdx===zi&&cursorY===r) div.classList.add('cursor','cellFocus');
-        if(!it) div.innerHTML='<span class="slotGhost">'+slot.slice(0,4).toUpperCase()+'</span>';
+        if(!it) div.innerHTML='<span class="slotGhost"'+(proxy&&!equip.harness?' style="opacity:.35"':'')+'>'+slot.slice(0,4).toUpperCase()+'</span>';   // grayed until a harness gives the plate a home
         div.addEventListener('mouseenter',()=>{ if(isDebugOpen||tipPadT>tipMouseT) return;   // pad owns the cursor: hover doesn't steal (move the mouse to take it back)
           if(currentFocus===0&&zoneIdx===zi&&cursorY===r) return;   // already on this cell — skip the refresh; its innerHTML='' rebuild thrashes the cell and eats the tap's mousedown on Chromium (Firefox tolerated it)
           if(currentFocus!==0||zoneIdx!==zi) FOCUS_MEM[currentFocus]={x:cursorX,y:cursorY};
@@ -8557,7 +8585,7 @@ function renderZones(){
         div.addEventListener('contextmenu',e=>{ e.preventDefault(); currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; activateAtCursor(); });        // RMB / two-finger tap = X (inspect·activate)
         div.addEventListener('auxclick',e=>{ if(e.button!==1) return; currentFocus=0; zoneIdx=zi; cursorX=0; cursorY=r; quickUse(); });               // MMB = F (wield·feed) — desktop-mouse bonus
         g.appendChild(div);
-      });
+      }
     }else{
       for(let r=0;r<z.rows;r++) for(let c=0;c<z.cols;c++){
         const div=document.createElement('div'); div.className='cell';
@@ -8619,14 +8647,14 @@ function renderZones(){
       }
     }
     if(z.equipCol){
-      EQUIP_SLOTS.forEach((slot,r)=>{
-        const it=equip[slot]; if(!it) return;
+      for(let r=0;r<=EQUIP_SLOTS.length;r++){
+        const it=r===EQUIP_SLOTS.length?wornPlates():equip[EQUIP_SLOTS[r]]; if(!it) continue;   // the proxy cell shows the seated plates
         const span=document.createElement('div'); span.className='itemSpan';
         span.style.left=(GRID_PAD+r*CELL_PITCH)+'px'; span.style.top=GRID_PAD+'px';   // transposed with the strip: the slot index walks X
         span.style.width=(CELL_PITCH-3)+'px'; span.style.height=(CELL_PITCH-3)+'px';
         const img=document.createElement('img'); img.src=makeIcon(it); img.draggable=false;
         span.appendChild(img); g.appendChild(span);
-      });
+      }
     }
     blk.appendChild(g);
     (z.equipCol?rig : z.id==='pockets'?pkSlot : (z.id==='stash'||z.id==='crate')?colR : (dock[z.id]||colM)).appendChild(blk);
