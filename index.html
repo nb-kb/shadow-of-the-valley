@@ -1486,6 +1486,29 @@ float sdGun(vec3 p, bool cfgd){
   }
   return d;
 }
+// per-kind WORLD ITEM MODELS (owner): one function, compiled ONCE — every drop reads at a glance.
+// Designs reuse freely; the material palette (30+t) tints each family its own way.
+float itemSdf(vec3 lp, float t){
+  if(t<0.5) return min(sdBox(lp, vec3(0.13,0.10,0.13)), sdBox(lp-vec3(0.0,0.10,0.0), vec3(0.14,0.015,0.14)));          // 0 crate: consumables, lockboxes
+  if(t<1.5) return sdGun(lp,false);                                                                                     // 1 the Tool
+  if(t<2.5) return min(sdBox(lp, vec3(0.030,0.085,0.048)), sdBox(lp-vec3(0.0,-0.075,0.028), vec3(0.030,0.040,0.048))); // 2 magazine
+  if(t<3.5) return min(sdBox(lp, vec3(0.09,0.052,0.07)), sdBox(lp-vec3(0.0,0.052,0.0), vec3(0.095,0.012,0.075)));      // 3 ammo box
+  if(t<4.5) return min(sdCylY(lp, 0.105, 0.040), sdSphere(lp-vec3(0.0,0.055,0.0), 0.030));                              // 4 cell/dial: battery, phones, goggles
+  if(t<5.5) return min(length(vec3(lp.x,lp.y*2.1,lp.z))-0.085, sdCylY(lp-vec3(0.0,0.05,0.0), 0.016, 0.024));            // 5 pocket gadget
+  if(t<6.5) return min(sdOcta(lp, 0.12), sdSphere(lp, 0.055));                                                          // 6 core/mod
+  if(t<7.5) return min(sdCapsule(lp, vec3(0.0,0.045,-0.15), vec3(0.0,0.045,0.15), 0.045),                               // 7 rack part: a barrel rod...
+                       sdBox(lp-vec3(0.0,0.045,-0.10), vec3(0.055,0.055,0.04)));                                        //   ...with its socket collar
+  if(t<8.5) return sdBox(lp-vec3(0.0,0.02,0.0), vec3(0.10,0.012,0.065))-0.008;                                          // 8 keycard: flat, unmistakable
+  if(t<9.5){ float d=max(sdSphere(lp-vec3(0.0,0.02,0.0), 0.155), 0.0-lp.y);                                             // 9 helmet: a dome...
+             return min(d, sdCylY(lp-vec3(0.0,0.015,0.0), 0.012, 0.175)); }                                             //   ...on a brim
+  if(t<10.5) return min(sdBox(lp-vec3(0.0,0.115,0.0), vec3(0.115,0.135,0.085))-0.025,                                    // 10 rucksack body...
+                        sdBox(lp-vec3(0.0,0.225,-0.015), vec3(0.095,0.035,0.075))-0.02);                                 //    ...and flap
+  if(t<11.5){ float d=sdBox(lp-vec3(0.0,0.10,0.045), vec3(0.135,0.13,0.030))-0.015;                                      // 11 rig/vest: chest slab,
+              d=min(d, sdBox(lp-vec3(0.0,0.10,-0.045), vec3(0.135,0.13,0.025))-0.015);                                   //    back slab,
+              return min(d, sdCapsule(lp, vec3(-0.09,0.23,0.045), vec3(-0.09,0.23,-0.045), 0.03)); }                     //    one shoulder strap
+  if(t<12.5) return min(sdCylY(lp-vec3(0.0,0.055,0.0), 0.075, 0.070), sdCylY(lp-vec3(0.0,0.13,0.0), 0.03, 0.028));       // 12 filter canister + neck
+  return sdBox(lp-vec3(0.0,0.045,0.0), vec3(0.135,0.045,0.095))-0.014;                                                   // 13 slab: plates, platforms
+}
 float sdBackpack(vec3 p){
   float d=sdBox(p, vec3(0.24,0.30,0.11))-0.05;                                   // body
   d=min(d, sdBox(p-vec3(0.0,-0.10,0.14), vec3(0.15,0.12,0.045))-0.03);           // front pouch
@@ -1511,20 +1534,7 @@ vec2 map(vec3 p){
     if(bd > 0.1){ gBound=min(gBound,bd); continue; }
     float t = worldItemData[i].x;
     vec3 lp = rotX(rotY(iPos, -worldItemData[i].y), -worldItemData[i].w);
-    float d = 1000.0;
-    if(t < 0.5){        d = sdBox(lp, vec3(0.13,0.10,0.13));
-                        d = min(d, sdBox(lp-vec3(0.0,0.10,0.0), vec3(0.14,0.015,0.14))); }
-    else if(t < 1.5){   d = sdGun(lp,false); }
-    else if(t < 2.5){   d = min(sdBox(lp, vec3(0.030,0.085,0.048)),
-                                sdBox(lp-vec3(0.0,-0.075,0.028), vec3(0.030,0.040,0.048))); }
-    else if(t < 3.5){   d = sdBox(lp, vec3(0.09,0.052,0.07));
-                        d = min(d, sdBox(lp-vec3(0.0,0.052,0.0), vec3(0.095,0.012,0.075))); }
-    else if(t < 4.5){   d = sdCylY(lp, 0.105, 0.040);
-                        d = min(d, sdSphere(lp-vec3(0.0,0.055,0.0), 0.030)); }
-    else if(t < 5.5){   d = length(vec3(lp.x,lp.y*2.1,lp.z))-0.085;
-                        d = min(d, sdCylY(lp-vec3(0.0,0.05,0.0), 0.016, 0.024)); }
-    else {              d = sdOcta(lp, 0.12);
-                        d = min(d, sdSphere(lp, 0.055)); }
+    float d = itemSdf(lp, t);                        // per-kind silhouettes, one shared function (owner: tell every drop apart)
     if(d < res.x) res = vec2(d, 30.0 + t);
   }
 
@@ -1837,7 +1847,14 @@ void main(){
       else if(it<3.5) matCol=vec3(0.62,0.48,0.20);
       else if(it<4.5) matCol=vec3(0.42,0.47,0.52);
       else if(it<5.5) matCol=vec3(0.55,0.45,0.28);
-      else {          matCol=vec3(0.55,0.34,0.90); emiss=0.30; }
+      else if(it<6.5){matCol=vec3(0.55,0.34,0.90); emiss=0.30; }   // core glow
+      else if(it<7.5) matCol=vec3(0.24,0.26,0.30);                 // rack rod: gunmetal
+      else if(it<8.5){matCol=vec3(0.72,0.56,0.18); emiss=0.22; }   // keycard: bright, findable
+      else if(it<9.5) matCol=vec3(0.32,0.34,0.30);                 // helmet: steel-olive
+      else if(it<10.5)matCol=vec3(0.38,0.33,0.21);                 // pack: canvas
+      else if(it<11.5)matCol=vec3(0.28,0.34,0.24);                 // rig: olive webbing
+      else if(it<12.5)matCol=vec3(0.47,0.49,0.36);                 // filter: drab tin
+      else            matCol=vec3(0.42,0.42,0.47);                 // plate/slab: gray
       float fr=pow(1.0-abs(dot(n,-rayDir)),2.0);
       matCol += vec3(0.22,0.35,0.42)*fr;
       emiss=max(emiss,0.16*fr);                                                    // loot shimmer
@@ -2661,7 +2678,7 @@ LEVELS.hideout={
      term:[-3.4,-0.6,0.4]},   // the stolen terminal's body — keep on LEVELS.hideout.terminal below
   ],
   exfils:[], doors:[], spawn:{zealots:[],lootN:0,minSpace:4,   // (dead lootTable/lootRegions stubs deleted — the generic path reads lootTiers/lootN/guaranteed only)
-    guaranteed:['photometer','compass','opticsDial','volumeKnob','manual']},   // the SETTINGS gadgets re-seed at home if lost to the teeth — a death carrying one must never permadeath settings/rebind/volume access (the promise-kept dedupe suppresses re-gifts)
+    guaranteed:['photometer','compass','manual']},   // the SETTINGS gadgets re-seed at home if lost to the teeth — a death carrying one must never permadeath settings/rebind access (the promise-kept dedupe suppresses re-gifts; opticsDial/volumeKnob retired)
   terminal:{x:-3.4,z:-0.6,yaw:0.4},   // interact point — keep x/z/yaw equal to clutter's `term`
 };
 LEVELS.valley={ id:'valley', name:'THE OPEN VALLEY', kind:'rings',
@@ -3180,7 +3197,7 @@ const generateId=()=>'it'+(itemIdCounter++);
 
 class Item{
   constructor(name,w,h,color){ this.id=generateId(); this.name=name; this.customName=null; this.w=w; this.h=h; this.color=color; this.x=0; this.y=0; }
-  get renderType(){ return 0; }
+  get renderType(){ return this.filter?12:0; }   // gas filters drop as canisters, everything plain as a little crate
   desc(){ return ''; }
 }
 // per-instance rename: show the custom name when set, else the type name
@@ -3265,7 +3282,7 @@ class Platform extends Item{
     this.slots=new Array(t.perSide*2).fill(null);   // [0..perSide) left, [perSide..) right
     this.cycles=new Array(t.perSide*2).fill(0);     // each slot roots its own lane
   }
-  get renderType(){ return 7; }
+  get renderType(){ return 13; }                    // a flat mounting slab on the ground
   desc(){ return 'Slots into a column · adds '+(this.perSide*2)+' side slots — each fires on its own, or roots a barrel'; }
 }
 
@@ -3283,7 +3300,7 @@ class Battery extends Item{
     this.cap=t.cap;           // every shot has a 1.5% chance of eating one of these
     this.charge=t.cap;
   }
-  get renderType(){ return 7; }
+  get renderType(){ return 4; }                     // a cell: cylinder + terminal nub
   desc(){ return battFunctional(this)
     ? this.charge.toFixed(0)+'/'+this.cap+'\u26a1'+(this.cap<this.capMax?' \u00b7 worn from '+this.capMax:'')
     : 'DEPLETED \u00b7 worn to nothing ('+this.cap+'/'+this.capMax+')'; }
@@ -3463,7 +3480,7 @@ function emptyMagSlot(tool){                      // first empty column slot to 
 }
 class Gadget extends Item{
   constructor(name,color,kind,blurb){ super(name,1,1,color); this.kind=kind; this.blurb=blurb; }
-  get renderType(){ return 5; }
+  get renderType(){ return this.kind==='keycard'?8:5; }   // keycards drop as flat cards — spottable at a glance
   desc(){ return this.blurb; }
 }
 
@@ -3592,9 +3609,8 @@ const ITEM_DEFS={
   watch:      ()=>new Gadget('Pocket Watch','#b0a67f','watch','Basic time-keeping.'),
   compass:    ()=>new Gadget('Compass','#7fa78f','compass','Marks the nearest passage.'),
   photometer: ()=>new Gadget('Light Meter','#a8925f','photometer','Reads how far out the light gives you away.'),
-  opticsDial: ()=>new Gadget('Optics Dial','#8f9fb0','optics','Right-click: cycle render fidelity.'),
-  volumeKnob: ()=>new Gadget('Volume Knob','#b08f7f','volume','Right-click: cycle sound level.'),
   manual:     ()=>new Gadget('Field Manual','#a09880','manual','Right-click: read — rebind every control.'),
+  // (opticsDial / volumeKnob RETIRED — owner: the goggles rows carry render fidelity, the phones carry volume; itemFromJSON drops the old keys from saves harmlessly)
   // --- keycards: identity-only Gadgets (kind read by locks; no per-kind behavior) ---
   gateCard:   ()=>new Gadget('Horde Keycard','#c8a12e','keycard','A scarred access card — trips the horde gate at the north incline.'),
   testCard:   ()=>new Gadget('Range Keycard','#2e86c8','keycard','A blue access card — opens the weapons-testing fence gates.'),   // P4: color matches its lock's prompt (LOCKS.testing)
@@ -3630,7 +3646,9 @@ class Armor extends Item{
       this.resist={burn:Math.round(runRng()*60)/100, bleed:Math.round(runRng()*60)/100}; }
     if(this.invCols){ this.inv=Array(this.invRows).fill(null).map(()=>Array(this.invCols).fill(null)); }
   }
-  get renderType(){ return 9; }
+  get renderType(){ const a=this.armorType;   // per-family WORLD MODELS (owner): every drop reads at a glance
+    return a==='helmet'||a==='face'?9 : a==='rucksack'?10 : a==='harness'||a==='holster'||a==='belt'?11
+         : a==='plates'?13 : a==='lockbox'?0 : a==='goggles'||a==='headphones'?4 : 9; }
   wearTag(){
     if(!this.durMax) return '';
     return ' · '+Math.max(0,this.dur)+'/'+this.durMax+' integrity · resists burn '
@@ -7492,7 +7510,7 @@ function seedStashKit(){                       // the kit waits in the STASH now
   const mag=ITEM_DEFS.magStd(); mag.loaded=8; kit.push(mag);   // one 9mm mag flat beside the bagged pair
   kit.push(ITEM_DEFS.goggles(),ITEM_DEFS.headphones(),        // every settings utility, exactly once
            ITEM_DEFS.watch(),ITEM_DEFS.compass(),ITEM_DEFS.photometer(),
-           ITEM_DEFS.opticsDial(),ITEM_DEFS.volumeKnob(),ITEM_DEFS.manual());
+           ITEM_DEFS.manual());
   // SYSTEM J (owner: BUILD NOW): the kit must FIGHT from raid one — cores so the frames fire,
   // lead for the 9mm mags, heals, a lid + plates, a holster to draw from, one barrel to teach
   // the rack. Balance-priced: one raid's find, not an armory. Big footprints lead — autoPlace
