@@ -1467,8 +1467,10 @@ vec2 mapStatic(vec3 p){
 
 // ---- hero props: the Tool and the rucksack ----
 float sdGun(vec3 p, bool cfgd){
-  float d=sdBox(p-vec3(0.0,0.045,0.02), vec3(0.035,0.045,0.17));                 // receiver
-  d=min(d, sdBox(p-vec3(0.0,0.100,0.05), vec3(0.007,0.005,0.13)));               // the top RAIL — thin, runs the receiver: bare ADS sights along it, the optics bolt to it (owner)
+  float tz=cfgd?uToolCfg.z:1.0;                                                  // packed: +1 magged · +2 HEAVY receiver · +4 drum (world guns read plain magged)
+  float hv=mod(floor(tz*0.5),2.0);                                               // the +2 bit
+  float d=sdBox(p-vec3(0.0,0.045+hv*0.008,0.02), vec3(0.035+hv*0.013,0.045+hv*0.010,0.17));   // receiver — a HEAVY build visibly bulks the body (owner)
+  d=min(d, sdBox(p-vec3(0.0,0.100+hv*0.018,0.05), vec3(0.007,0.005,0.13)));      // the top RAIL — thin, runs the receiver: bare ADS sights along it, the optics bolt to it (owner)
   d=min(d, sdCapsule(p, vec3(0.0,0.075,0.18), vec3(0.0,0.075,0.34), 0.021));     // barrel
   d=min(d, sdBox(p-vec3(0.0,-0.06,-0.05), vec3(0.026,0.075,0.036)));             // grip
   d=min(d, sdBox(p-vec3(0.0,0.02,-0.20), vec3(0.028,0.042,0.085)));              // stock
@@ -1481,7 +1483,11 @@ float sdGun(vec3 p, bool cfgd){
     if(uToolCfg.y>0.5){ float tb=sdCapsule(p, vec3(0.0,0.15,0.00), vec3(0.0,0.15,0.13), 0.046);    // scope TUBE — HOLLOW, beefy: outer wall (0.139 rad at the eye)
       tb=max(tb, -sdCapsule(p, vec3(0.0,0.15,-0.02), vec3(0.0,0.15,0.15), 0.034));                 // fully brackets the render window (0.115) past the bore (0.103),
       d=min(d, tb); }                                                                              // so the magnification reads INSIDE the glass; raised clear of the barrel
-    if(uToolCfg.z>0.5) d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));        // magazine
+    d=min(d, sdBox(p-vec3(0.0,-0.014,0.055), vec3(0.029,0.016,0.043)));                           // the mag WELL lip — always drawn, so a missing mag reads as an EMPTY well (owner)
+    if(mod(tz,2.0)>=1.0){
+      if(tz>=4.0) d=min(d, length(vec3(p.x*1.9,p.y+0.085,p.z-0.055))-0.052);                      // DRUM: a fat squashed round
+      else d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));                    // stick magazine
+    }
   }else{
     d=min(d, sdBox(p-vec3(0.0,-0.055,0.055), vec3(0.024,0.065,0.038)));
   }
@@ -1660,19 +1666,33 @@ vec2 map(vec3 p){
       // the rack, worn: same column data as the menu prop, first-person scale.
       // lengths compressed and clamped so a legendary chain reads long without
       // swallowing the screen; wing columns hug tighter than the menu fan.
+      float gems=1e9;
       for(int ci=0;ci<8;ci++){
         if(ci>=uColCount) break;
-        float side=uCols[ci].y*0.026;
+        float side=uCols[ci].y*0.030;                      // wings sit wider — platforms claim their SPACE (owner)
         float len=0.10+min(uCols[ci].x*0.022, 0.24);       // deeper column = longer gun
+        float rr2=ci==0?0.026:0.018;                       // CHUNKIER tubes — stylized, not wire
         vec3 a=vec3(side,0.075,0.18), b=vec3(side,0.075,0.18+len);
-        float bd=sdCapsule(vl, a, b, ci==0?0.021:0.014);
+        float bd=sdCapsule(vl, a, b, rr2);
+        bd=min(bd, sdCapsule(vl, vec3(side,0.075,0.18+len*0.5-0.010), vec3(side,0.075,0.18+len*0.5+0.010), rr2+0.011));   // the joint RING at mid-tube
         if(uCols[ci].w>0.5){                                // fitted muzzle: the collar
-          float mz=sdCapsule(vl, b, b+vec3(0.0,0.0,0.03), ci==0?0.029:0.021);
+          float mz=sdCapsule(vl, b, b+vec3(0.0,0.0,0.035), rr2+0.010);
           bd=min(bd,mz);
         }
         if(bd<g) g=bd;
+        if(uCols[ci].x>1.5){                                // slotted mods wear as GEMS riding the tube top — domain-repeated: ONE eval draws the row (budget)
+          vec3 gq=vec3(vl.x-side, vl.y-(0.075+rr2+0.013), mod(vl.z-0.20,0.055)-0.0275);
+          float gd=sdOcta(gq,0.015);
+          gd=max(gd, abs(vl.z-(0.19+len*0.5))-(len*0.5-0.02));   // clamp the row to this tube's span
+          if(gd<gems) gems=gd;
+        }
+      }
+      if(uColCount>1){                                      // the PLATFORM crossbar — the wings hang off a real mount
+        float bar=sdCapsule(vl, vec3(-0.030*3.2,0.075,0.205), vec3(0.030*3.2,0.075,0.205), 0.014);
+        if(bar<g) g=bar;
       }
       if(g<vmD){ vmD=g; vmM=20.0; }
+      if(gems<vmD){ vmD=gems; vmM=23.0; }                   // gem-purple, faintly lit — cores/mods fused into the tool (owner)
       float arm=sdCapsule(vl, vec3(0.14,-0.30,-0.36), vec3(0.005,-0.10,-0.055), 0.052);
       if(arm<vmD){ vmD=arm; vmM=21.0; }
     }
@@ -1681,14 +1701,11 @@ vec2 map(vec3 p){
       // the pose curves. 3 prims, the tool's own mats (20/21) — uExposure dims them free.
       float ph=uToolCfg.w;
       float sw=ph*ph*(3.0-2.0*ph);                                          // master ease
-      float snap=smoothstep(0.25,0.5,ph)*(1.0-smoothstep(0.55,1.0,ph));     // fling, then settle
       vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame
       float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050);
       if(warm<vmD){ vmD=warm; vmM=21.0; }
-      vec3 wtip=hd+mix(vec3(0.05,0.14,0.02), vec3(-0.02,-0.03,0.55), snap); // curled overhead → flung long
-      float lash=sdCapsule(vl, hd, wtip, mix(0.026,0.011,snap));
-      lash=min(lash, length(vl-wtip)-0.020);                                // the cracker bead
-      if(lash<vmD){ vmD=lash; vmM=20.0; }
+      // (the GLSL lash + cracker bead are RETIRED — the whip had TWO sources; the JS bezier cord,
+      //  which carries the per-swing unfurl, is THE whip now (owner), growing from this hand's end)
     }
   }
   if(vmD<1e8){
@@ -1840,6 +1857,7 @@ void main(){
                       matCol+=vec3(0.18,0.20,0.24)*fr; }                           // gunmetal
     else if(m<21.5){  matCol=vec3(0.36,0.31,0.24); }                               // sleeve
     else if(m<22.5){  matCol=vec3(0.36,0.31,0.20)*(0.85+0.3*vnoise(vec2(p.x+p.z,p.y)*9.0)); } // canvas
+    else if(m<23.5){  matCol=vec3(0.58,0.38,0.94); emiss=0.40; }                             // mod GEMS on the worn tool — the fused cores glint
     else if(m<40.0){
       float it=m-30.0;
       if(it<0.5)      matCol=vec3(0.42,0.33,0.20);
@@ -8473,7 +8491,7 @@ if(window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundR
 }
 const iconCache=new Map();
 function iconKey(it){                                 // one key per DISTINCT look — defKey carries identity (owner: tell everything apart)
-  if(it instanceof Tool) return 'tool:'+(it.color||'');
+  if(it instanceof Tool) return 'tool:'+it.id+':'+rackSig(it)+':'+(it.color||'');   // INSTANCED (owner): the icon is a PROFILE PICTURE of this tool's procedural build — re-painted on any rack edit
   if(it instanceof Magazine) return 'mag:'+(it.defKey||(it.maxCapacity>20?'drum':'std'))+':'+(it.color||'');
   if(it instanceof Ammunition) return 'ammo:'+it.ammoType;
   if(it instanceof ToolMod) return 'mod:'+it.cat+':'+((it.effect&&it.effect.kind)||'')+':'+it.color+':'+it.name;
@@ -8509,15 +8527,27 @@ function makeIcon(it){
   const gloss=()=>{ g.save(); g.globalAlpha=0.15; g.fillStyle='#fff'; g.translate(W*0.32,H*0.24); g.rotate(-0.45);
     g.beginPath(); g.roundRect(-W*0.30,-H*0.07,W*0.52,H*0.13,H*0.06); g.fill(); g.restore(); };
 
-  if(it instanceof Tool){                                   // side profile, muzzle right
+  if(it instanceof Tool){                                   // side profile, muzzle right — a PROFILE PICTURE of this instance's real build (owner)
     g.save(); g.translate(0,H*0.06);
+    const cols=toolColumns(it), mg=toolMagazine(it);
+    let hvy=false; for(const c2 of cols){ for(const r2 of c2.refs){ const o=readRef(r2); if(o&&o.effect&&o.effect.grav){hvy=true;break;} } if(hvy)break; }
     box(W*0.30,H*0.44,W*0.10,H*0.30,3,lo);                                   // grip
     box(W*0.06,H*0.34,W*0.22,H*0.14,3,base);                                 // stock
-    box(W*0.62,H*0.345,W*0.30,H*0.075,3,hi);                                 // barrel
-    box(W*0.46,H*0.44,W*0.09,H*0.24,2,lo);                                   // magazine
-    box(W*0.24,H*0.30,W*0.40,H*0.16,3,base);                                 // receiver
-    box(W*0.26,H*0.26,W*0.34,H*0.045,2,lo);                                  // the top rail
-    box(W*0.52,H*0.18,W*0.03,H*0.08,1,hi);                                   // sight
+    // its columns: the fire tube + wings, length by depth, joint gems for slotted mods
+    const n=Math.min(4,cols.length);
+    for(let i=0;i<n;i++){ const c2=cols[i];
+      const ln=Math.min(1,Math.max(1,c2.refs.length)/16);
+      const yy=H*(0.345+(c2.x||0)*0.075);
+      box(W*0.60,yy,W*(0.14+0.24*ln),H*(i===0?0.075:0.055),3,i===0?hi:lo);   // the tube
+      let gc=0; for(const r2 of c2.refs){ const o=readRef(r2); if(o&&!(o instanceof Barrel)&&!(o instanceof Platform)&&!(o instanceof Magazine)) gc++; }
+      for(let gi=0;gi<Math.min(4,gc);gi++) dot(W*(0.65+gi*0.062),yy-H*0.008,W*0.017,'#b06adf');   // fused GEMS
+    }
+    if(mg){ if(mg.maxCapacity>20) dot(W*0.50,H*0.64,W*0.10,lo);              // its drum...
+            else box(W*0.46,H*0.44,W*0.09,H*0.24,2,lo); }                    // ...or stick
+    else{ g.strokeStyle=OUT; g.lineWidth=2; rr(W*0.46,H*0.46,W*0.09,H*0.10,2); g.stroke(); }   // VISIBLY missing: the empty well
+    box(W*0.24,H*(hvy?0.27:0.30),W*0.40,H*(hvy?0.20:0.16),3,base);           // receiver — a HEAVY build bulks it
+    box(W*0.26,H*(hvy?0.22:0.26),W*0.34,H*0.045,2,lo);                       // the top rail
+    box(W*0.52,H*(hvy?0.14:0.18),W*0.03,H*0.08,1,hi);                        // sight
     g.restore();
   }else if(it instanceof Magazine && it.maxCapacity>20){    // drum
     dot(W*0.5,H*0.62,W*0.34,base);
@@ -10193,6 +10223,7 @@ function frame(){
   gl.uniform1f(U.uBagW,_bagWS);
   // rack presentation: menu prop AND the held viewmodel share this data
   let _mzTip=0.34;                                     // the barrel's local tip z — the free-aim PIVOT + the bare dot's anchor (suppressor/column may push it out)
+  let _hvy=0;                                          // HEAVY (grav) mod worn anywhere → the receiver bulks (uToolCfg.z +2 bit)
   if(activeTool){
     const cols=activeTool._cols||(activeTool._cols=toolColumns(activeTool));   // no per-frame churn
     const n=Math.min(8,cols.length);
@@ -10204,6 +10235,7 @@ function frame(){
       _colsBuf[i*4]=Math.fround(Math.max(1,refs.length)); _colsBuf[i*4+1]=Math.fround(cols[i].x);
       _colsBuf[i*4+2]=Math.fround(joints); _colsBuf[i*4+3]=muz;
       if(i===0) _mzTip=Math.max(_mzTip, 0.28+Math.min(Math.max(1,refs.length)*0.022,0.24)+(muz?0.03:0));   // the fire column's tip — mirrors the shader's len math exactly
+      if(!_hvy) for(const r2 of refs){ const o=readRef(r2); if(o&&o.effect&&o.effect.grav){ _hvy=1; break; } }
     }
     for(let i=n*4;i<32;i++) _colsBuf[i]=0;
     gl.uniform4fv(U.uCols,_colsBuf);
@@ -10261,7 +10293,9 @@ function frame(){
   gl.uniform1i(U.flashlightOn,(playerPos.flashlightOn&&resT&&resT.flashlight)?1:0);
   gl.uniform1f(U.uHasTool,(activeTool&&!heldWorld&&!wornHidden())?1:0);
   const magNow=activeTool?toolMagazine(activeTool):null;
-  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, (resT&&(resT.reticle===3||resT.reticle===4))?1:0, magNow?1:0, meleeT>0?Math.min(1,meleeT/0.42):0);   // .y = the hollow scope TUBE, by reticle code; .w = the whip phase (0.42s clock)
+  gl.uniform4f(U.uToolCfg, resT&&resT.silenced?1:0, (resT&&(resT.reticle===3||resT.reticle===4))?1:0,
+    (magNow?1:0)+_hvy*2+((magNow&&magNow.maxCapacity>20)?4:0),   // .z packed: magged +1 · HEAVY receiver +2 · drum +4 — the tool WEARS its build (owner)
+    meleeT>0?Math.min(1,meleeT/0.42):0);   // .y = the hollow scope TUBE, by reticle code; .w = the whip phase (0.42s clock)
   if(resT&&resT.silenced) _mzTip=Math.max(_mzTip,0.45);                                   // the can's tip wins
   // FREE-AIM ANCHOR (owner dial, PARAMS.adsAnchor): 0 = muzzle tipping (pivot at the BUTT — the
   // tip sweeps hard) · 0.5 = side-to-side (the classic pure translate, the default) · 1 = pushing
