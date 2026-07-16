@@ -1688,8 +1688,14 @@ vec2 map(vec3 p){
       float sw=ph*ph*(3.0-2.0*ph)*(1.0-smoothstep(0.70,1.0,ph));            // master ease — and the hand RETURNS home on the recoil (owner: come back, don't shrink)
       vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame...
       hd.y+=0.42*sin(sw*3.14159);                                           // ...OVER THE TOP (owner: an overhead crack) — raised mid-swing, home at both ends
+      // the REAL arm (owner: the one thin capsule read as an insect leg) — JOINTED: shoulder →
+      // elbow → fist, gun-arm thick; the elbow takes a smaller lift so the throw reads human
       float wenv=clamp(ph*8.0,0.0,1.0);                                     // swell IN only — the exit is the RETURN
-      float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050*wenv);
+      vec3 el=mix(vec3(0.22,-0.16,-0.02), vec3(0.10,0.02,0.12), sw);
+      el.y+=0.18*sin(sw*3.14159);
+      float warm=sdCapsule(vl, vec3(0.18,-0.34,-0.20), el, 0.058*wenv);     // upper arm
+      warm=min(warm, sdCapsule(vl, el, hd, 0.048*wenv));                    // forearm
+      warm=min(warm, length(vl-hd)-0.062*wenv);                             // the fist gripping the cord
       if(warm<vmD && wenv>0.02){ vmD=warm; vmM=21.0; }
       // (the GLSL lash + cracker bead are RETIRED — the whip had TWO sources; the JS bezier cord,
       //  which carries the per-swing unfurl, is THE whip now (owner), growing from this hand's end)
