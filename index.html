@@ -1491,16 +1491,6 @@ vec2 map(vec3 p){
   gBound=1e9;
 #ifndef PREVIEW
   vec3 fwd=normalize(rd);
-  // VIEWMODEL PRIORITY (owner): the STATIC world yields inside the viewmodel's pocket — one cheap
-  // capsule carve along the view axis, so the raised bag prop + first-person tool always draw in
-  // front (their bodies fill the hole; a hugged wall shows a thin cut collar at worst). Applied
-  // BEFORE any dynamic unions: enemies/items/tracers are never carved. ~8 ALU, branch-gated.
-  { vec3 _vpp=p-ro;
-    if((uHasTool>0.5||uMenu>0.001)&&dot(_vpp,_vpp)<3.5){
-      vec3 _vl=vec3(dot(_vpp,uRight),dot(_vpp,uUp),dot(_vpp,fwd));
-      float _pz=(uMenu>0.001)?1.05:0.60, _pr=(uMenu>0.001)?0.52:0.24;
-      res.x=max(res.x, -sdCapsule(_vl, vec3(0.0,-0.12,0.06), vec3(0.0,-0.02,_pz), _pr));
-    } }
 
   for(int i=0;i<${RLIM.ITEMS};i++){
     if(i>=worldItemCount) break;
@@ -1611,7 +1601,10 @@ vec2 map(vec3 p){
     if(dcol < res.x) res = vec2(dcol, 19.0);
   }
 
-  // first-person Tool + arm, or the raised menu prop
+  // first-person Tool + arm, or the raised menu prop — computed into vmD/vmM so the WORLD can be
+  // carved by the model's OWN shape (+12mm skin) before the union: render priority whose cut is
+  // IDENTICAL to the silhouette (owner: the capsule pocket was sloppy). Zero extra evaluations.
+  float vmD=1e9, vmM=20.0;
   vec3 vp=p-ro;
   if(dot(vp,vp)<2.6){
     vec3 vl=vec3(dot(vp,uRight),dot(vp,uUp),dot(vp,fwd));
@@ -1622,7 +1615,7 @@ vec2 map(vec3 p){
         bp=rotX(bp, 0.45);                             // OPENED TO THE PLAYER: the bag tips its mouth toward the camera (~26°)
         bp=rotY(bp, sin(iTime*0.5)*0.08);              // the full sway is back — the UI swings WITH it (owner: together is nice; it was slot REFLOW that hurt)
         float d=sdBackpack(bp);
-        if(d<res.x) res=vec2(d,22.0);
+        if(d<vmD){ vmD=d; vmM=22.0; }
       }else{
         // the rack pose: gun points AWAY and up-screen — muzzles top, grip bottom,
         // matching the vertical column layout floating over it
@@ -1654,7 +1647,7 @@ vec2 map(vec3 p){
           }
           if(bd<d) d=bd;
         }
-        if(d<res.x) res=vec2(d,20.0);
+        if(d<vmD){ vmD=d; vmM=20.0; }
       }
     }else if(uMenuMode==0 && uHasTool>0.5){
       vec2 gxy=mix(vec2(0.24,-0.245), vec2(0.0, (uSights>0.5||uReticle==1||uReticle==2)?-0.115:(uReticle>=3?-0.15:-0.09)), uAim);   // ADS y: iron/red-dot/holo -0.115; magnified >=3 raised TO the tube axis (-0.15) — you sight THROUGH the hollow scope; BARE -0.09
@@ -1676,9 +1669,9 @@ vec2 map(vec3 p){
         }
         if(bd<g) g=bd;
       }
-      if(g<res.x) res=vec2(g,20.0);
+      if(g<vmD){ vmD=g; vmM=20.0; }
       float arm=sdCapsule(vl, vec3(0.14,-0.30,-0.36), vec3(0.005,-0.10,-0.055), 0.052);
-      if(arm<res.x) res=vec2(arm,21.0);
+      if(arm<vmD){ vmD=arm; vmM=21.0; }
     }
     else if(uToolCfg.w>0.001){
       // EMPTY HANDS — the whip snap. Phase w runs 0→1 over 0.3s; ease-in-out lives in
@@ -1688,12 +1681,16 @@ vec2 map(vec3 p){
       float snap=smoothstep(0.25,0.5,ph)*(1.0-smoothstep(0.55,1.0,ph));     // fling, then settle
       vec3 hd=mix(vec3(0.20,-0.24,0.10), vec3(-0.04,-0.12,0.34), sw);       // the hand arcs across the frame
       float warm=sdCapsule(vl, vec3(0.16,-0.30,-0.28), hd, 0.050);
-      if(warm<res.x) res=vec2(warm,21.0);
+      if(warm<vmD){ vmD=warm; vmM=21.0; }
       vec3 wtip=hd+mix(vec3(0.05,0.14,0.02), vec3(-0.02,-0.03,0.55), snap); // curled overhead → flung long
       float lash=sdCapsule(vl, hd, wtip, mix(0.026,0.011,snap));
       lash=min(lash, length(vl-wtip)-0.020);                                // the cracker bead
-      if(lash<res.x) res=vec2(lash,20.0);
+      if(lash<vmD){ vmD=lash; vmM=20.0; }
     }
+  }
+  if(vmD<1e8){
+    res.x=max(res.x, -(vmD-0.012));            // VIEWMODEL PRIORITY: the world yields EXACTLY where the model is — the cut IS the silhouette, +12mm skin
+    if(vmD<res.x) res=vec2(vmD,vmM);           // then the model itself fills the pocket it carved
   }
 #endif
   return res;
@@ -4038,6 +4035,20 @@ function isSight(it){ return it instanceof ToolMod && it.effect && it.effect.uni
 // ============================================================
 let _hpick=null;    // the last hands-pick: {t,f,zi,x,y,ext,srcId,live} — live gates drag-to-place; t drives the □□ window
 let _swTap=null;    // the previewed-bag-in-hand double-tap tracker (□□ on a sub-inventory cell = quick-swap it out)
+const SLOT_KIN={face:['face','goggles'],goggles:['goggles','face'],holster:['holster','belt'],belt:['belt','holster']};   // kin slots (owner): each pair is ONE category — either seat takes either
+function quickEquip(it){                           // □□/Shift+LMB on ARMOR with a free seat: it goes ON, not away (owner)
+  if(!(it instanceof Armor)) return false;
+  for(const s of EQUIP_SLOTS){
+    if((SLOT_KIN[s]||[s]).indexOf(it.armorType)>=0 && !equip[s]){
+      equip[s]=it; syncBagAlias(); clampZone();
+      toast(dispName(it).toUpperCase()+' EQUIPPED'); playSound('place'); return true;
+    }
+  }
+  return false;
+}
+let _shiftHeld=false;                              // live Shift state — the tooltip's verb hints follow it
+addEventListener('keydown',e=>{ if(e.key==='Shift'&&!_shiftHeld){ _shiftHeld=true; if(uiMenusOpen()) syncTip(); } });
+addEventListener('keyup',  e=>{ if(e.key==='Shift'&&_shiftHeld){ _shiftHeld=false; if(uiMenusOpen()) syncTip(); } });
 function stackInto(it,grid){                       // pour a held pile onto same-caliber stacks in a grid (banking merges before it claims a cell)
   for(const row of grid) for(const ch of row){
     if(ch&&ch instanceof Ammunition&&ch.ammoType===it.ammoType&&ch.count<AMMO_STACK){
@@ -4047,6 +4058,7 @@ function stackInto(it,grid){                       // pour a held pile onto same
 function quickMoveHeld(){                          // □□ / double-LMB: the held item goes to its smartest home
   const it=heldWorld.w.item;
   if(it._armT!=null){ toast('ARMED'); playSound('empty'); return; }
+  if(quickEquip(it)){ consumeHeld(); refreshInvUI(); return; }   // armor with a free seat goes ON first
   let ok=false;
   if(_hpick&&_hpick.ext) ok=autoPlaceAny(it);                                   // out of someone else's box → onto the player
   else if(isCrateOpen&&lootCrate&&lootCrate.stash&&(!_hpick||_hpick.srcId!=='stash')){   // a bank is open → bank it (stacks merge first)
@@ -4078,6 +4090,7 @@ function quickMoveAtCursor(){                      // Shift+LMB: quick-move the 
   const ox=cell.x, oy=cell.y;
   const srcId=(currentFocus===0)?(invZones()[zoneIdx]||{}).id:undefined;
   if(f.slotMode) f.grid[oy][ox]=null; else removeFromGrid(cell,f.grid);
+  if(quickEquip(cell)){ playSound('place'); refreshInvUI(); return; }   // armor with a free seat goes ON first — looting a crate can dress you in one click
   let ok=false;
   if(f.external) ok=autoPlaceAny(cell);
   else if(isCrateOpen&&lootCrate&&lootCrate.stash&&srcId!=='stash'){
@@ -4120,9 +4133,8 @@ function interactInventory(){
     const slot=EQUIP_SLOTS[cursorY];
     if(heldWorld){
       const it=heldWorld.w.item;
-      const KIN={face:['face','goggles'],goggles:['goggles','face'],holster:['holster','belt'],belt:['belt','holster']};   // kin slots (owner): face/goggles and holster/belt are ONE category — either seat takes either
-      if(!(it instanceof Armor) || !((KIN[slot]||[slot]).indexOf(it.armorType)>=0)){
-        toast(slot.toUpperCase()+' SLOT — '+(KIN[slot]?KIN[slot].join('/').toUpperCase():slot.toUpperCase())+' ONLY'); playSound('empty'); return;
+      if(!(it instanceof Armor) || !((SLOT_KIN[slot]||[slot]).indexOf(it.armorType)>=0)){
+        toast(slot.toUpperCase()+' SLOT — '+(SLOT_KIN[slot]?SLOT_KIN[slot].join('/').toUpperCase():slot.toUpperCase())+' ONLY'); playSound('empty'); return;
       }
       const old=equip[slot];
       equip[slot]=it;
@@ -8244,10 +8256,26 @@ function syncTip(){
   }
   if(!_tipShown){ tooltipEl.style.display='none'; return; }   // still resting — the timer re-enters when it's time
   const b=tipBrief(it);
+  // CONTEXT VERBS (owner): one dim line, minimal, input-flavored — pad glyphs when the d-pad drove last, mouse words otherwise; Shift shows its own pair
+  const _pad=tipPadT>tipMouseT;
+  let vb='';
+  if(heldWorld){ vb=_pad?'□ place':'LMB place'; }
+  else if(it.widget){ vb=_pad?'□ up · ✕ down':'LMB up · RMB down'; }
+  else{
+    const opens=(it instanceof Tool)||(it instanceof Magazine)||!!it.inv;
+    const open=inspectItem===it;
+    if(!_pad&&_shiftHeld){ vb='LMB stow'+((it instanceof Ammunition&&it.count>1)?' · RMB split':''); }
+    else{
+      vb=(_pad?'□ take':'LMB take');
+      if(opens) vb+=' · '+(_pad?'✕':'RMB')+(open?' close':' open');
+      if(it instanceof Tool) vb+=' · '+(_pad?'△':'MMB')+' wield';
+    }
+  }
   tooltipEl.innerHTML='<div class="tt-name">'+dispName(it)+'</div>'
     +'<div class="tt-cat">'+b.kind+'</div>'
     +b.rows.map(r=>'<div>'+r+'</div>').join('')
-    +'<div class="tt-cat" style="margin-top:4px;">'+(it.desc?it.desc():'')+'</div>';
+    +'<div class="tt-cat" style="margin-top:4px;">'+(it.desc?it.desc():'')+'</div>'
+    +(vb?'<div class="tt-cat" style="margin-top:5px;letter-spacing:.1em;">'+vb+'</div>':'');
   tooltipEl.style.display='block';
   // EXCLUSIVE positioning: the card rides the mouse when the mouse drove last; the d-pad anchors it to the cell
   if(tipMouseT>=tipPadT){ positionTipAtMouse(); return; }
@@ -9583,7 +9611,7 @@ function bagFrame(){
   const m=clamp(menuAnim,0,1), rise=(1-m)*(1-m)*0.45;
   const fovU=(playerPos.currentFov*(1-0.07*m))||1;                   // the exact fov the shader renders with this frame
   const H=canvas.clientHeight||innerHeight;
-  const py=H/2-(((0.302-rise)/0.798)/fovU)*H + H*0.02;               // the mouth line (anchor -0.02 + local crest 0.322), +2%H overlap; x is 0 → dead-center
+  const py=H/2-(((0.302-rise)/0.798)/fovU)*H + H*0.045;              // the mouth line (anchor -0.02 + local crest 0.322), +4.5%H overlap — seated PAST the lip (owner)
   const sc=(innerWidth<=1100||innerHeight<=880)?0.86:1;
   const rot=Math.sin(gameTime*0.5)*1.4;                              // swing WITH the model's rotY sway (owner: together is nice) — hung from the pinned mouth seam
   ui.style.left=(innerWidth/2)+'px';
@@ -9593,7 +9621,7 @@ function bagFrame(){
   const su=_stashEl||(_stashEl=document.getElementById('stashUI'));  // the OUTSIDE box rides flush with the bag: top edges level, left edge hugging the bag's right
   if(su&&!su.classList.contains('hidden')){
     const r=ui.getBoundingClientRect();
-    su.style.left=(r.right+14).toFixed(1)+'px'; su.style.top=Math.max(8,r.top).toFixed(1)+'px'; su.style.right='auto';
+    su.style.left=(r.right+34).toFixed(1)+'px'; su.style.top=Math.max(8,r.top).toFixed(1)+'px'; su.style.right='auto';   // a real gap — the OTHER box shouldn't lean on the bag
   }
 }
 
@@ -9690,7 +9718,7 @@ function frame(){
 
   // ---- camera & menu presentation ----
   menuAnim+=((uiMenusOpen()?1:0)-menuAnim)*Math.min(1,9*dt);
-  if(isInventoryOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2; else menuMode=0;
+  if(isInventoryOpen||isCrateOpen) menuMode=1; else if(isToolMenuOpen) menuMode=2; else menuMode=0;   // the bag prop rises for LOOT/STASH too (this per-frame recompute was silently overriding menuSet)
   const tYawOff=0, tPitchOff=(isToolMenuOpen&&activeTool)?-0.10:0;    // the camera dips to the raised prop — ONLY when opening the tool rack WITH a tool (no dip for the bag/crate or empty hands)
   playerPos.camYawOffset+=(tYawOff-playerPos.camYawOffset)*10*dt;
   playerPos.camPitchOffset+=(tPitchOff-playerPos.camPitchOffset)*8*dt;
