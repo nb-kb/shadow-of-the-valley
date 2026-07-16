@@ -105,10 +105,15 @@ canvas{display:block;width:100vw;height:100vh;cursor:crosshair;}
 #scopeGlass[data-optic="1"]::before{background:radial-gradient(circle, rgba(190,70,70,.03) 0%, rgba(170,60,60,.07) 62%, rgba(150,50,50,.10) 100%);}
 
 /* ---------- stylized inventories — slots float over the 3D prop ---------- */
-#backpackUI{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);z-index:40;
+#backpackUI{position:absolute;left:5%;top:11%;transform:none;z-index:40;   /* FIXED anchor — the kit grows right/down, the RIG never moves */
   text-align:center;pointer-events:none;}
-#zoneStack{display:flex;gap:16px;align-items:flex-start;justify-content:center;}
-.zoneRight{display:flex;flex-direction:column;}
+#zoneStack{display:flex;gap:18px;align-items:flex-start;justify-content:flex-start;}
+.zoneCol{display:flex;flex-direction:column;align-items:flex-start;}
+.zoneCol .gridWrap{margin:12px 0 0;}                            /* left-aligned in the column — a neighbor folding never re-centers the rest */
+.zonePanel .gridWrap{background:rgba(8,10,12,.5);border-color:rgba(215,220,230,.26);}   /* worn containers + stash read as their own detached panels */
+.zoneStub{display:flex;align-items:center;justify-content:center;min-width:120px;align-self:stretch;height:18px;
+  border:1px solid rgba(215,220,230,.14);border-radius:5px;background:rgba(60,64,58,.22);
+  margin:12px 0 0;pointer-events:auto;cursor:pointer;}          /* a folded container keeps its dock — click opens it */
 .zoneBlock{margin-bottom:10px;}
 .equipCell{position:relative;}
 .slotGhost{font-size:11px;letter-spacing:.1em;color:#4a4a42;}
@@ -8176,12 +8181,21 @@ const CELL_PITCH=47, GRID_PAD=6;      // 44px cell + 3px gap · 6px wrap padding
 function renderZones(){
   const host=document.getElementById('zoneStack');
   host.innerHTML='';
-  const left=document.createElement('div'); left.className='zoneLeft';
-  const right=document.createElement('div'); right.className='zoneRight';
-  host.appendChild(left); host.appendChild(right);
+  // STABLE LAYOUT (owner): fixed left-anchored columns — [RIG] [POCKETS] [worn containers] [STASH/CRATE].
+  // The rig column NEVER moves; each worn container is a detached panel docked in a FIXED slot order
+  // (folded = a slim stub in the same dock, click to open), and the stash/crate sits in its own
+  // column to the RIGHT of the kit. Zone nav indices (zoneIdx over invZones) are untouched.
+  const left=document.createElement('div');  left.className='zoneCol';
+  const mid=document.createElement('div');   mid.className='zoneCol';
+  const cont=document.createElement('div');  cont.className='zoneCol';
+  const side=document.createElement('div');  side.className='zoneCol';
+  host.appendChild(left); host.appendChild(mid); host.appendChild(cont); host.appendChild(side);
+  const CONT_ORDER=['rucksack','harness','holster','belt','goggles','headphones'];
+  const contSlot={};                                   // one dock per armor slot — panel or stub, the order never shuffles
+  CONT_ORDER.forEach(id=>{ const d=document.createElement('div'); contSlot[id]=d; cont.appendChild(d); });
   const zl=invZones();
   zl.forEach((z,zi)=>{
-    const blk=document.createElement('div'); blk.className='zoneBlock';
+    const blk=document.createElement('div'); blk.className='zoneBlock'+(z.equipCol||z.id==='pockets'?'':' zonePanel');
     const g=document.createElement('div'); g.className='gridWrap';
     g.style.gridTemplateColumns='repeat('+z.cols+',44px)';
     if(z.equipCol){
@@ -8262,7 +8276,17 @@ function renderZones(){
         span.appendChild(img); g.appendChild(span);
       });
     }
-    blk.appendChild(g); (z.equipCol?left:right).appendChild(blk);
+    blk.appendChild(g);
+    (z.equipCol?left : z.id==='pockets'?mid : (z.id==='stash'||z.id==='crate')?side : (contSlot[z.id]||cont)).appendChild(blk);
+  });
+  // folded containers hold their dock as a slim stub — click = the same open verb as X on the item
+  CONT_ORDER.forEach(id=>{ const it=equip[id];
+    if(it&&it.inv&&it.invCols>0&&zoneShut(it)){
+      const st=document.createElement('div'); st.className='zoneStub';
+      st.innerHTML='<span class="slotGhost">'+id.slice(0,4).toUpperCase()+'</span>';
+      st.addEventListener('mousedown',e=>{ if(e.button>0) return; it.zoneOpen=true; clampZone(); playSound('click'); refreshInvUI(); });
+      contSlot[id].appendChild(st);
+    }
   });
 }
 function renderGrid(containerId,grid,cols,rows,focusIdx){
