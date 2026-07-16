@@ -4048,6 +4048,19 @@ function quickEquip(it){                           // □□/Shift+LMB on ARMOR 
   }
   return false;
 }
+// MAGS ARE SUB-INVENTORIES (owner): a magazine's panel is a real 1-slot grid — the rounds sit in
+// it as an actual ammo stack you can take/place/split/quick-move. The mag's internals stay
+// loaded/loadedType (nothing else about mags changes); the seat is a live VIEW kept in sync.
+const AMMO_DEF={'9mm':'ammo9','7.62':'ammo762','flechette':'ammoFlch','slug':'ammoSlug','buckshot':'ammoBuck'};
+function syncMagInv(m){
+  if(!m.inv){ m.invCols=1; m.invRows=1; m.inv=[[null]]; }
+  const t=m.loadedType;
+  if(m.loaded>0&&t&&AMMO_DEF[t]){
+    if(!m._rounds||m._rounds.ammoType!==t) m._rounds=ITEM_DEFS[AMMO_DEF[t]]();
+    m._rounds.count=m.loaded; m._rounds.x=0; m._rounds.y=0;
+    m.inv[0][0]=m._rounds;
+  } else { m.inv[0][0]=null; m._rounds=null; }
+}
 let _shiftHeld=false;                              // live Shift state — the tooltip's verb hints follow it
 addEventListener('keydown',e=>{ if(e.key==='Shift'&&!_shiftHeld){ _shiftHeld=true; if(uiMenusOpen()) syncTip(); } });
 addEventListener('keyup',  e=>{ if(e.key==='Shift'&&_shiftHeld){ _shiftHeld=false; if(uiMenusOpen()) syncTip(); } });
@@ -4086,6 +4099,12 @@ function quickMoveAtCursor(){                      // Shift+LMB: quick-move the 
   if(f.locked||f.rack||!f.grid){ playSound('click'); return; }
   const cell=cellAt(f);
   if(!cell||cell.widget){ playSound('click'); return; }
+  if(f.inspectGrid && inspectItem instanceof Magazine && cell===inspectItem._rounds){   // quick-move the mag's load: empty it into the best home (restore on NO ROOM)
+    inspectItem.loaded=0; inspectItem.loadedType=null; inspectItem.inv[0][0]=null; inspectItem._rounds=null;
+    if(autoPlaceAny(cell)){ playSound('place'); refreshInvUI(); return; }
+    inspectItem._rounds=cell; inspectItem.inv[0][0]=cell; inspectItem.loaded=cell.count; inspectItem.loadedType=cell.ammoType;
+    toast('NO ROOM'); playSound('empty'); refreshInvUI(); return;
+  }
   if(cell instanceof Barrel && !barrelIsEmpty(cell)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
   if(cell instanceof Platform && !platformIsEmpty(cell)){ toast('CLEAR THE PLATFORM FIRST'); playSound('empty'); return; }
   if(cell===inspectItem) closeInspect();
@@ -4112,7 +4131,9 @@ function splitAtCursor(){                          // Shift+RMB / LT+□: half t
   clampCursor(f);
   const cell=cellAt(f);
   if(!(cell instanceof Ammunition)||cell.count<2){ playSound('empty'); return; }
-  const take=cell.count>>1; cell.count-=take;
+  const take=cell.count>>1;
+  if(f.inspectGrid && inspectItem instanceof Magazine && cell===inspectItem._rounds) inspectItem.loaded-=take;   // splitting the mag's load draws the rounds OUT of it
+  else cell.count-=take;
   const half=ITEM_DEFS[cell.defKey](); half.count=take;
   handHold(half); refreshInvUI();
 }
@@ -4208,6 +4229,17 @@ function interactInventory(){
     // Scope Adapter is a SIGHTS-ONLY 2-slot container — its grid takes reticles, nothing else
     if(f.inspectGrid && inspectItem && inspectItem.effect && inspectItem.effect.adapter && !isSight(it)){
       toast('SIGHTS ONLY'); playSound('empty'); return; }
+    // MAG SEAT: pouring a held ammo stack into an open magazine's slot loads it — wrong caliber or a full mag refuses; anything else is not rounds
+    if(f.inspectGrid && inspectItem instanceof Magazine){
+      if(it instanceof Ammunition){
+        if(!magCanLoad(inspectItem,it.ammoType)){ toast('WRONG CALIBER'); playSound('empty'); return; }
+        if(inspectItem.loaded>=inspectItem.maxCapacity){ toast('FULL'); playSound('empty'); return; }
+        const tk=magPut(inspectItem,it.ammoType,it.count); it.count-=tk;
+        if(it.count<=0) consumeHeld();
+        playSound('reload'); refreshInvUI(); return;
+      }
+      toast('ROUNDS ONLY'); playSound('empty'); return;
+    }
     // helmet seats: filters (mask helms) + the HEADPHONES every helmet carries (owner); the face mask stays filters-only (P3)
     if(f.inspectGrid && inspectItem instanceof Armor && inspectItem.armorType==='helmet'
        && !((inspectItem.mask&&it.filter) || it.armorType==='headphones')){
@@ -4272,6 +4304,12 @@ function interactInventory(){
   }
 
   if(cell){                                               // hand empty: lift it out of the pocket
+    if(f.inspectGrid && inspectItem instanceof Magazine && cell===inspectItem._rounds){   // taking the rounds EMPTIES the mag — they leave as a real stack
+      inspectItem.loaded=0; inspectItem.loadedType=null; inspectItem.inv[0][0]=null; inspectItem._rounds=null;
+      handHold(cell);
+      _hpick={t:runClock,f:currentFocus,zi:zoneIdx,x:cursorX,y:cursorY,ext:false,srcId:undefined,live:true};
+      refreshInvUI(); return;
+    }
     if(cell instanceof Barrel && !barrelIsEmpty(cell)){ toast('EMPTY THE BARREL FIRST'); playSound('empty'); return; }
     if(cell instanceof Platform && !platformIsEmpty(cell)){ toast('CLEAR THE PLATFORM FIRST'); playSound('empty'); return; }
     if(cell===inspectItem) closeInspect();
@@ -4348,8 +4386,10 @@ function renderInspect(){
   else { rnBtn.classList.add('hidden'); rnInp.classList.add('hidden'); }
   const body=document.getElementById('inspectBody');
   if(inspectItem instanceof Magazine){
-    body.innerHTML='<div style="margin-top:8px;font-size:14px;letter-spacing:.12em;">'
-      +'Rounds <b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · '+magLabel(inspectItem)+'</div>';
+    syncMagInv(inspectItem);                             // the rounds sit in a REAL slot (owner: mags are sub-inventories)
+    body.innerHTML='<div id="inspectPockets" class="gridWrap" style="position:relative;grid-template-columns:repeat(1,44px);"></div>'
+      +'<div style="margin-top:8px;font-size:14px;letter-spacing:.12em;"><b>'+inspectItem.loaded+' / '+inspectItem.maxCapacity+'</b> · '+magLabel(inspectItem)+'</div>';
+    renderGrid('inspectPockets', inspectItem.inv, 1, 1, 2, ['AMMO']);
   }else if(inspectItem instanceof Tool){
     body.innerHTML='<div id="inspectRack"></div>';
     renderRack('inspectRack',inspectItem,2);
