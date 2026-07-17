@@ -6949,7 +6949,7 @@ class Zealot{
     this._feedT=0; this._radioactive=false; this._huntC=null; this._huntT=0;   // P8 FOOD CHAIN: zombie feed channel + the +64 glow bit + cached hunt target/rescan throttle
     this._idleT=0; this._idleM=0; this._gibX=0; this._gibZ=0; this._gibGo=0;   // P8 IDLE HABITS: re-pick clock · 0 drift / 1 feed / 2 twitch-dash · a lingering gib pile pulls the feed to it
     this._cSt=0; this._cT=0; this._cP=0; this._cPrT=0; this._cScanT=runRng()*0.25;   // CRITTER: 0 graze · 1 flee (this.state STAYS 0 — render law), re-pick/probe clocks, spawn-staggered threat scan (harmless on every other kind)
-    this._cAx=x; this._cAz=z; this._cFx=0; this._cFz=1; this._cGx=x; this._cGz=z;    //   graze anchor · flee bearing · graze goal
+    this._cAx=x; this._cAz=z; this._cFx=0; this._cFz=1; this._cGx=x; this._cGz=z; this._cDrA=runRng()*6.28;    //   graze anchor · flee bearing · graze goal · herd-drift heading
     this.targetPoint=this.newPatrolTarget();
     if(this._faction==='zombie'||this._critter){ this.tool=null; this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // undead + critters reuse the Zealot body but carry NO tool/armor/loot — die() drops nothing
     else if(this._believer){ this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // no tool, no gear roll — it carries only what die() hands out
@@ -7594,6 +7594,13 @@ class Zealot{
       if(this._cSt!==1){                                 // still calm this frame (the scan above may have bolted us)
         this._cT-=dt;
         if(this._cT<=0){ this._cT=2+runRng()*3;
+          // HERD DRIFT (P8): the anchor itself creeps a wandering arc — snapped back toward the nearest fellow's anchor past 6m, fenced by the flee-lane hazard reads — so huddles wander the map TOGETHER
+          this._cDrA+=(runRng()-0.5)*1.1;
+          let hx=this._cAx+Math.sin(this._cDrA)*1.2, hz=this._cAz+Math.cos(this._cDrA)*1.2, fd=1e9, fo=null;
+          for(const o of enemies){ if(o!==this&&o._critter&&o.health>0){ const dd=(o._cAx-this._cAx)**2+(o._cAz-this._cAz)**2; if(dd<fd){ fd=dd; fo=o; } } }
+          if(fo&&fd>36){ hx=this._cAx+(fo._cAx-this._cAx)*0.25; hz=this._cAz+(fo._cAz-this._cAz)*0.25; }
+          if(radAt(hx,hz)<0.05&&Math.abs(hz)<46&&mapWorldJS(hx,this.position.y+0.3,hz)>=0.5){ this._cAx=hx; this._cAz=hz; }
+          else this._cDrA+=Math.PI;                      // fenced (gas lip / wall / rim) — swing the creep the other way next pick
           if(runRng()<0.35) this._cP=1;                  // a nibble — head down, feet still
           else{ this._cP=0; const a=runRng()*6.2832, r=runRng()*6;
             this._cGx=this._cAx+Math.sin(a)*r; this._cGz=this._cAz+Math.cos(a)*r; } }
