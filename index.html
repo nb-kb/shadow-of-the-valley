@@ -833,6 +833,7 @@ function playSound(type,pos){
     case 'grab':       blip(300,0.09,'sine',0.1,420,out); break;
     case 'drop':       blip(240,0.08,'sine',0.09,140,out); break;
     case 'click':      blip(900,0.03,'square',0.07,null,out); break;
+    case 'geiger':     blip(3400,0.012,'square',0.045,2900,out); break;   // worn counter — no pos, it ticks ON you
     case 'alert':      blip(520,0.3,'sawtooth',0.2,780,out); setTimeout(()=>blip(520,0.3,'sawtooth',0.18,780,out),180); break;
     case 'growl':      blip(70,0.5,'sawtooth',0.3,45,out); noiseBurst(0.35,0.3,300,out); break;
     case 'moan':       blip(110+((runRng()*40)|0),0.7,'sawtooth',0.12,60,out); break;
@@ -7795,6 +7796,7 @@ const RAD={ poiR:26, bruteR:9, edge:6 };
 const _radZBuf=new Float32Array(20);                 // 5× vec4 zone upload scratch (4 hazed POIs + the brute)
 let _radBrute=null, _radHere=0, _radProt=0, _doseVis=0;   // per-frame cache: live brute ref · field at the player · worn shave · smoothed dose for the GLASS
 let _radSig='', _radTintO=-1;                        // HUD dedup signatures (DOM writes only on change)
+let _geigT=0;                                        // worn geiger cadence — reads the AIR: masks shave the burn, the counter still screams
 function radAt(x,z){
   const L=activeLevel; if(!L||!L.spawn.pois) return 0;         // the gas is AREA-1's affliction
   const b=L.bounds;
@@ -7817,6 +7819,9 @@ function updateRadiation(dt){
   _radHere=gameState==='play'?radAt(playerPos.x,playerPos.z):0;
   _radProt=radProtection();
   _doseVis=gameState==='play'?_doseVis+(_radHere*(1-_radProt)-_doseVis)*Math.min(1,dt*2.5):0;   // DOSED GLASS drive — eased so crossing the lip breathes in, never snaps; dead worlds read clean
+  _geigT-=dt;                                        // lip ~1-2 ticks/s -> full field ~7-14/s, jittered — a counter, not a metronome
+  if(_radHere>0.02&&gameState==='play'){ if(_geigT<=0){ playSound('geiger'); _geigT=0.09/Math.max(_radHere,0.06)*(0.55+runRng()*0.9); } }
+  else _geigT=Math.max(_geigT,0.15);
   // P8: a RADIOACTIVE undead (fed on the warren) is a walking dose — light, close-range, mask-shaved,
   // into the same burn pool as the field; the +64 green glow is the tell. Dormant = unseen = never
   // burns (the invisible-biter law). The brute stays out: it already trails RAD.bruteR through radAt.
