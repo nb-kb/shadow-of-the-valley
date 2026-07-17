@@ -931,6 +931,7 @@ uniform vec2  uEnemyEye;                     // x:cos(fov/2) y:vision-cone range
 uniform float uRadOn;                        // GAS HAZE (CONTAINMENT P3): 0 = clean level · 1 = area-1 (field live)
 uniform vec4  uRadBounds;                    // x0,z0,x1,z1 — OUTSIDE this box the outskirts gas owns the air
 uniform vec4  uRadZone[5];                   // xy center · z radius (<=0.5 = empty) · w unused — 4 hazed POIs + the brute's trailing aura
+uniform float uDose;                         // DOSED GLASS: radHere*(1-radProt), JS-smoothed — the rate your lungs eat, not the field
 #endif
 
 uniform int   tracerCount;
@@ -2093,7 +2094,12 @@ void main(){
     if(uRadOn>0.5){
       float gz=clamp((max(max(uRadBounds.x-p.x,p.x-uRadBounds.z),max(uRadBounds.y-p.z,p.z-uRadBounds.w))+3.0)/6.0,0.0,1.0);
       for(int i=0;i<5;i++){ vec4 rz=uRadZone[i]; if(rz.z>0.5) gz=max(gz,clamp((rz.z-length(p.xz-rz.xy))/6.0,0.0,1.0)); }
-      col=mix(col,vec3(0.30,0.44,0.16)*(0.35+0.65*max(uAmbient,0.18)),gz*0.55);
+      if(gz>0.003){   // P3 REWORK: billow+hug+ramp live INSIDE this gate — clean fragments pay one compare; twin radAt() centers/radii/edge UNCHANGED
+        gz*=0.72+0.42*vnoise(p.xz*0.16+vec2(iTime*0.05,-iTime*0.033));   // slow rolling billow — the field BREATHES
+        gz*=clamp(1.35-p.y*0.10,0.30,1.0);                               // ground-hug: thins with height, never below 30%
+        vec3 gcol=mix(vec3(0.46,0.42,0.13),vec3(0.24,0.47,0.12),clamp(gz*1.6,0.0,1.0));   // jaundiced lip -> green core
+        col=mix(col,gcol*(0.35+0.65*max(uAmbient,0.18)),min(gz,1.0)*0.60);
+      }
     }
 #endif
   }else{
@@ -2101,6 +2107,18 @@ void main(){
   }
   col = pow(col, vec3(0.4545));
   col = mix(vec3(dot(col, vec3(0.299,0.587,0.114))), col, uSaturation); // color-grade saturation (goggles COLOR dial) — post-gamma so no pow() NaN, pre-HUD so reticle stays neutral
+#ifdef AUTHORED
+  // DOSED GLASS: rate-keyed green vignette breath + a brief rolling scanline comb.
+  // uDose = radHere*(1-radProt) JS-smoothed — a masked player sees the tint (DOM #radTint) but almost no pulse. Clean fragments pay one compare.
+  if(uDose>0.004){
+    vec2 du=gl_FragCoord.xy/iResolution.xy-0.5;
+    float ring=smoothstep(0.18,0.62,dot(du,du));                       // rim-weighted, center stays readable
+    float pulse=0.70+0.30*sin(iTime*(1.8+5.0*uDose));                  // breath quickens as the dose climbs
+    col=mix(col,vec3(0.36,0.52,0.20),ring*pulse*min(0.42,uDose*0.9));
+    float fl=step(fract(iTime*0.53),0.05+0.11*uDose);                  // a brief flicker window, more often when hot
+    col*=1.0-fl*min(0.35,uDose*0.6)*step(0.5,fract(gl_FragCoord.y*0.5-iTime*22.0));
+  }
+#endif
   // ---- optic reticle: the player looks THROUGH the glass while aiming ----
   if(uReticle>0 && uAim>0.55){
     vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y - uAimOff;   // glyphs ride the free-aim lead — the glass aims where the shot lands
@@ -2201,7 +2219,7 @@ function locArray(prog,name,n){ const a=[]; for(let i=0;i<n;i++) a.push(gl.getUn
 function cacheUniforms(prog){
   ['iResolution','iTime','ro','rd','fov','uRight','uUp','uMenu','uMenuMode','uMenuLook','uBagH','uBagW','uColCount','uCols','uGlobCount','uReticle','uSights','uAimOff','uLead','uWallPush','uLevelOn','uLevelBounds','uLevelGround','uContain','uLevelCutA','uLevelCutB','uLevelTex','uAim','uBob','uHasTool','uToolCfg',
    'uLightDir','uLightCol','uAmbient','uSkyHi','uSkyLo','uFog','uFar','uMaxSteps','uSaturation','uShadowMode','uAO','uWorldTop','uVCrateCount',
-   'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds']
+   'uSeed','uGateCell','uGatePos','flashlightOn','worldItemCount','uEnemyCount','tracerCount','decalCount','dynCount','uEditCount','uExposure','uEnemyEye','uExfilCount','uRadOn','uRadBounds','uDose']
    .forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   U.edits    = locArray(prog,'uEdits', 16);
   U.uGlobs   = locArray(prog,'uGlobs', 10);
@@ -7775,7 +7793,7 @@ function updateOutskirts(dt){
 // a source.
 const RAD={ poiR:26, bruteR:9, edge:6 };
 const _radZBuf=new Float32Array(20);                 // 5× vec4 zone upload scratch (4 hazed POIs + the brute)
-let _radBrute=null, _radHere=0, _radProt=0;          // per-frame cache: live brute ref · field at the player · worn shave
+let _radBrute=null, _radHere=0, _radProt=0, _doseVis=0;   // per-frame cache: live brute ref · field at the player · worn shave · smoothed dose for the GLASS
 let _radSig='', _radTintO=-1;                        // HUD dedup signatures (DOM writes only on change)
 function radAt(x,z){
   const L=activeLevel; if(!L||!L.spawn.pois) return 0;         // the gas is AREA-1's affliction
@@ -7798,6 +7816,7 @@ function updateRadiation(dt){
   if(activeLevel&&activeLevel.spawn.pois) for(const e of enemies){ if(e._brute&&e.health>0&&!e._dormant){ _radBrute=e; break; } }   // a DORMANT brute is invisible — an unseen aura must never burn (the invisible-biter law)
   _radHere=gameState==='play'?radAt(playerPos.x,playerPos.z):0;
   _radProt=radProtection();
+  _doseVis=gameState==='play'?_doseVis+(_radHere*(1-_radProt)-_doseVis)*Math.min(1,dt*2.5):0;   // DOSED GLASS drive — eased so crossing the lip breathes in, never snaps; dead worlds read clean
   // P8: a RADIOACTIVE undead (fed on the warren) is a walking dose — light, close-range, mask-shaved,
   // into the same burn pool as the field; the +64 green glow is the tell. Dormant = unseen = never
   // burns (the invisible-biter law). The brute stays out: it already trails RAD.bruteR through radAt.
@@ -10634,6 +10653,7 @@ function frame(){
   // GAS HAZE zones (P3) — twin of radAt(): same centers/radii/edge, the green fog IS the burn field
   const _rOn=!!(activeLevel&&activeLevel.spawn.pois);
   gl.uniform1f(U.uRadOn,_rOn?1:0);
+  gl.uniform1f(U.uDose,_rOn?_doseVis:0);              // DOSED GLASS — null location no-ops on non-AUTHORED programs
   if(_rOn){
     const rb=activeLevel.bounds;
     gl.uniform4f(U.uRadBounds,rb.x0,rb.z0,rb.x1,rb.z1);
