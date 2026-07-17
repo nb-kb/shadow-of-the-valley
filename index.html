@@ -1599,8 +1599,8 @@ vec2 map(vec3 p){
     vec3 toA=vec3(0.0,0.95,0.0);              float toRa=0.185+isBr*0.055;
     vec3 toB=vec3(0.0,1.38+br-aimK*0.04,shZ); float toRb=0.15+isBr*0.07;
     vec3 hdC=hc;                              float hdR=0.165;   // LOCKED: enemyHeadR/enemyHeadPos twin
-    vec3 dmA=hc+vec3(0.0,mix(0.075,0.06,hasH),mix(-0.045,0.0,hasH));   // hood cowl -> helm dome
-    vec3 dmB=hc+vec3(0.0,mix(-0.01,0.10,hasH),mix(-0.10,0.0,hasH));
+    vec3 dmA=hc+vec3(0.0,mix(0.075,0.01,hasH),mix(-0.045,0.0,hasH));   // hood cowl -> helm dome
+    vec3 dmB=hc+vec3(0.0,mix(-0.01,0.05,hasH),mix(-0.10,0.0,hasH));    // helm crown 0.05+0.19=0.240 — KISSES enemyHeadR 0.24, never proud (graze law, KNOWN_BUGS #4)
     float dmR=mix(0.135,0.19,hasH);
     if(isBr>0.5){ dmA=hc+vec3(0.0,-0.02,-0.08); dmB=hc+vec3(0.0,-0.12,-0.13); dmR=0.19; }   // nape hump
     // LEGS in the |x| mirror: one bent pair serves both sides, phase-opposed via side
