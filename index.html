@@ -6860,6 +6860,12 @@ const _stC=new Vec3();   // settle() scratch (the _n/_c1 idiom) — one body sph
 // ---- P8 AI DIALS — consts, not PARAMS (owner: promote to PARAMS only if playtest demands) ----
 const BRT={ chgR:14, windT:0.6, chgSpd:3.0, chgMaxT:2.2, chgDmg:30, chgCd:7, wallStun:1.4 };   // brute charge: trigger reach · wind-up s · x brute pace · sprint cap s · contact hp · re-arm s · wall stagger s
 const HORDE={ ga:2.399963, ringR0:2.4, ringDr:0.55, orbW:0.05, moanT0:9, moanTr:9, rplStep:0.14, rplPulse:0.4 };   // golden-angle escort ring + moan ripple: angle · base/step radius · wheel rad/s · moan base/jitter s · ripple stagger/pulse s
+const ZAI={ duckT:1.2, duckCd:0.8,                    // shot-at cover impulse hold · re-probe throttle
+  peekOut:0.9, peekIn:1.4, peekOff:1.1,               // lean-out fire window · tuck hold base (+rng*0.8) · lateral lean (m)
+  healAt:0.35, healHP:90, healT:2.0, healCd:3.0, medOdds:0.5,   // heal trigger frac · restore · channel s · retry lockout · rollGear odds
+  bkR:40, bkCd:20, cvgT:10,                           // CALL FOR BACKUP reach · caller cd · converge push window
+  supSpread:0.26, supWin:3.5, repoT:1.5,              // blind covering-fire spread · window after losing sight · 'repositioning' squad flag ttl
+  fleeR:12 };                                         // retreat: rally to an ally at least this far
 class Zealot{
   constructor(x,z,kind){                // kind: undefined/'soldier' · 'zombie' · 'brute' (build 2 faction spawn)
     const gy=activeLevel ? levelGroundJS(x,z) : terrainHJS(x,z);
@@ -6879,6 +6885,8 @@ class Zealot{
     this.target=null;                   // BUILD 3: resolved nearest-hostile {ent,isPlayer,x,y,z} — set each frame by acquireTarget() in update/updateZombie
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;   // COVER/SUPPRESS squad state (set on alarm)
     this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // P5 MORALE: current break ('flee'|'stand') · its clock · check throttle · re-break calm
+    this.cmb=0; this._duckT=0; this._pkT=0; this._pkS=1; this._pkMv=null;   // P8 COMBAT SUB-STATE (state itself stays 0/1/2): 0 none · 2 tucked · 3 peeking · 4 healing, + duck impulse / peek clock / lean side
+    this._healT=0; this._healCd=0; this._med=0; this._repoT=0; this._bkCd=0; this._cvg=0; this._rlyT=0;   // heal channel/lockout/kit · repositioning flag (squad-read) · backup-call cd · converge push · rally re-aim throttle
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
@@ -7000,6 +7008,10 @@ class Zealot{
     if(by==='player'&&this.state<2){ this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(playerPos.x,0,playerPos.z); this.state=1; }
     else if(by&&by!=='player'&&by.position&&by._faction!==this._faction&&this.state<2){   // BUILD 3: shot by the OTHER faction — turn and fight back toward the shooter (else cross-faction fire is ignored)
       this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(by.position.x,0,by.position.z); this.state=1; }
+    if(this._faction==='soldier'&&!this._believer){   // P8: incoming fire draws a duck; a hit hand drops the bandage (3s before it re-tries)
+      if(this.state===2) this._duckT=ZAI.duckT;
+      if(this.cmb===4){ this.cmb=0; this._healT=0; this._healCd=ZAI.healCd; }
+    }
     if(this.health<=0) this.die();
   }
   die(){
@@ -7101,6 +7113,7 @@ class Zealot{
     const seesLOS = dist<34*dayEye() && (FLAGS.seeAll || losClearJS(this.position.x,eyeY,this.position.z, tx,tEyeY,tz));   // RANGE GATE FIRST: the SDF march only runs inside sight range — out-of-range soldiers were paying a full losClearJS ray every frame for a result the && then discarded (findCover casts its own rays; nothing else read the old losRay)
     this.inCover = this.state===2 && this.alarmRole==='cover' && !!this.coverPoint && this.position.distanceTo(this.coverPoint)<1.2;   // only an ALARMED cover-role zealot committed to its cover point counts — not oblivious patrollers, facing-away enemies, or Believers
     if(this._coveringFire>0) this._coveringFire-=dt;
+    if(this._duckT>0)this._duckT-=dt; if(this._healCd>0)this._healCd-=dt; if(this._bkCd>0)this._bkCd-=dt; if(this._repoT>0)this._repoT-=dt; if(this._cvg>0)this._cvg-=dt;   // P8 combat clocks (soldier path only — the zombie dispatch returned above)
     const fwdX=Math.sin(this.yaw), fwdZ=Math.cos(this.yaw);
     const cone=(fwdX*dx+fwdZ*dz)/Math.max(0.001,dist);
     const fovCos=Math.cos((P('enemyFovDeg')*Math.PI/180)/2);
@@ -7177,14 +7190,26 @@ class Zealot{
         else if(this._brk==='flee'){}                          // broken and running — the override below owns the feet, the trigger stays cold
         else if(this._brk==='stand'){ if(this.alarmRole!=='cover'||this.squadMayFire()) this.tryShoot(dt,dist,seesLOS); }   // dug in: advances nowhere, fires through its role's gate
         else if(this.alarmRole==='cover'){
-          // SEEK COVER: sit on a spot that breaks the sightline; peek-fire only if the squad allows it
-          if(!this.coverPoint||this._coverT<=0){ this.coverPoint=this.findCover(tx,tz); this._coverT=2.5; }
+          // COVER CYCLE (P8): commit to a spot that breaks the sightline, then tuck → lean out → fire → tuck.
+          // the lean (±peekOff lateral) is the ONLY exposure; side picked by 2 rays per cycle, never per frame.
+          if(!this.coverPoint||this._coverT<=0){ this.coverPoint=this.findCover(tx,tz); this._coverT=2.5; if(this.coverPoint) this._repoT=ZAI.repoT; }
           this._coverT-=dt;
           if(this.coverPoint){
-            moveTo=this.coverPoint;
-            if(this.position.distanceTo(this.coverPoint)<1.0){ moveTo=null; }   // arrived — hold the cover
-          }else{ if(dist>7) moveTo=this.investigate; else if(dist<3){ const rd=Math.max(dist,1e-4); moveTo=new Vec3(this.position.x-dx/rd*2,0,this.position.z-dz/rd*2); } }   // nowhere to hide — behave like a shooter. rd: overlapped spawns can put dist at EXACTLY 0 — raw dx/dist NaN-poisons position into an invisible unkillable roster ghost
-          if(this.squadMayFire()) this.tryShoot(dt,dist,seesLOS);
+            if(this.position.distanceTo(this.coverPoint)>=1.0){ moveTo=this.coverPoint; this.cmb=0; }   // not there yet — feet first
+            else{
+              this._pkT-=dt;
+              if(this.cmb!==3){ this.cmb=2; moveTo=null;   // TUCKED: hold the shadow of the cover, trigger cold
+                if(this._pkT<=0){                          // pick the lean side that OPENS the line — 2 rays per cycle, never per frame
+                  const bx2=tx-this.coverPoint.x, bz2=tz-this.coverPoint.z, bl=Math.hypot(bx2,bz2)||1, y2=this.position.y+1.35;
+                  this._pkS=losClearJS(this.coverPoint.x-bz2/bl*ZAI.peekOff,y2,this.coverPoint.z+bx2/bl*ZAI.peekOff,tx,tEyeY,tz)?1:-1;
+                  this.cmb=3; this._pkT=ZAI.peekOut; } }
+              else{ const bx2=tx-this.coverPoint.x, bz2=tz-this.coverPoint.z, bl=Math.hypot(bx2,bz2)||1;   // PEEKING: lean out, fire through the squad gate, tuck back
+                moveTo=(this._pkMv||(this._pkMv=new Vec3())).set(this.coverPoint.x-bz2/bl*ZAI.peekOff*this._pkS,0,this.coverPoint.z+bx2/bl*ZAI.peekOff*this._pkS);
+                if(this.squadMayFire()) this.tryShoot(dt,dist,seesLOS);
+                if(this._pkT<=0){ this.cmb=2; this._pkT=ZAI.peekIn+runRng()*0.8; } } }
+          }else{ if(dist>7) moveTo=this.investigate; else if(dist<3){ const rd=Math.max(dist,1e-4); moveTo=new Vec3(this.position.x-dx/rd*2,0,this.position.z-dz/rd*2); }   // nowhere to hide — behave like a shooter. rd: overlapped spawns can put dist at EXACTLY 0 — raw dx/dist NaN-poisons position into an invisible unkillable roster ghost
+            if(this.squadMayFire()) this.tryShoot(dt,dist,seesLOS);
+          }
         }else{
           // COVERING FIRE (suppress): press the attack and lay it down — exempt from fire-discipline (it IS the covering fire)
           if(dist>7) moveTo=this.investigate;
@@ -7195,6 +7220,12 @@ class Zealot{
         this.lostSightT+=dt;
         moveTo=this.investigate;
         if(this.lostSightT>4){ this.state=1; this.detection=0.6; }
+      }
+      // DUCK (P8): incoming fire or an open bolt sends ANY role to the nearest cover — the gas-fear
+      // override idiom: feet only, faceTo stays on the threat; a morale break or a heal owns the feet instead.
+      if((this._duckT>0||this.reloadT>0)&&this._brk===null&&this.cmb!==4){
+        if(!this.coverPoint&&(this._coverT-=dt)<=0){ this.coverPoint=this.findCover(tx,tz); this._coverT=ZAI.duckCd; if(this.coverPoint) this._repoT=ZAI.repoT; }
+        if(this.coverPoint&&this.position.distanceTo(this.coverPoint)>0.8) moveTo=this.coverPoint;
       }
       // morale override (P5): a broken zealot's feet obey the break, not the role — FLEE runs the
       // threat bearing straight out, LOS or no LOS (gas fear below still trumps: worse air wins the
@@ -7410,19 +7441,22 @@ class Zealot{
       if(sy>this.position.y-0.7) this.position.y+=(sy-this.position.y)*Math.min(1,12*dt);
     }
   }
-  findCover(px,pz){                                  // ring-sample a nearby standable spot that breaks LOS to the THREAT (~8 rays, throttled to a re-pick)
+  findCover(px,pz){                                  // ring-sample a nearby standable spot that breaks LOS to the THREAT (8 rays/ring, near ring first — the far ring only runs when 3m strands, so the cost doubles only on a miss; callers stay throttled)
     const y=this.position.y+0.9, py=(this.target&&!this.target.isPlayer)?this.target.y+0.95:playerPos.y+0.9;   // break LOS to the resolved hostile (player or the other faction)
-    let best=null,bestD=1e9;
-    for(let i=0;i<8;i++){
-      const a=i/8*6.283, r=3.0;
-      const cx=this.position.x+Math.cos(a)*r, cz=this.position.z+Math.sin(a)*r;
-      if(Math.abs(cz)>46) continue;                  // stay off the canyon walls
-      if(mapWorldJS(cx,y,cz)<0.5) continue;          // standable, not buried in a wall
-      if(losClearJS(cx,y,cz, px,py,pz)) continue;    // player can still see it — not cover
-      const d=(cx-this.position.x)**2+(cz-this.position.z)**2;
-      if(d<bestD){ bestD=d; best=new Vec3(cx,0,cz); }
+    for(const r of [3.0,5.0]){
+      let best=null,bestD=1e9;
+      for(let i=0;i<8;i++){
+        const a=i/8*6.283;
+        const cx=this.position.x+Math.cos(a)*r, cz=this.position.z+Math.sin(a)*r;
+        if(Math.abs(cz)>46) continue;                  // stay off the canyon walls
+        if(mapWorldJS(cx,y,cz)<0.5) continue;          // standable, not buried in a wall
+        if(losClearJS(cx,y,cz, px,py,pz)) continue;    // player can still see it — not cover
+        const d=(cx-this.position.x)**2+(cz-this.position.z)**2;
+        if(d<bestD){ bestD=d; best=new Vec3(cx,0,cz); }
+      }
+      if(best) return best;
     }
-    return best;                                      // null = nothing nearby breaks LOS
+    return null;                                      // nothing nearby breaks LOS
   }
   squadMayFire(){                                     // SQUAD FIRE-DISCIPLINE: read-only scan of live allies within 18m (n<=maxEnemies)
     if(this.alarmRole==='suppress') return true;      // the suppressor IS the covering fire — exempt
@@ -7500,6 +7534,7 @@ class Zealot{
     this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // a fresh body carries no broken nerve
     this._chgSt=0; this._chgT=0; this._chgCd=0; this._charging=false;   // charge state dies with the body (reviveBrute reinforces in place)
     this._ringI=-1; this._rplT=-1; this._rplP=0;   // fresh body, fresh ring slot — no fuse survives the grave
+    this.cmb=0; this._duckT=0; this._pkT=0; this._healT=0; this._healCd=0; this._repoT=0; this._cvg=0;   // P8 combat sub-state dies with the body
     this.patrolDir=runRng()*6.28; this.dwellT=0; this._roam=null;   // fresh roam goal on respawn (brute re-picks from its new drop point)
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
