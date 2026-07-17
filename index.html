@@ -6938,6 +6938,7 @@ class Zealot{
     this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // P5 MORALE: current break ('flee'|'stand') · its clock · check throttle · re-break calm
     this.cmb=0; this._duckT=0; this._pkT=0; this._pkS=1; this._pkMv=null;   // P8 COMBAT SUB-STATE (state itself stays 0/1/2): 0 none · 2 tucked · 3 peeking · 4 healing, + duck impulse / peek clock / lean side
     this._healT=0; this._healCd=0; this._med=0; this._repoT=0; this._bkCd=0; this._cvg=0; this._rlyT=0;   // heal channel/lockout/kit · repositioning flag (squad-read) · backup-call cd · converge push · rally re-aim throttle
+    this._chatT=0; this._chatCd=10+runRng()*20; this._mate=null;   // P8 IDLE CHAT: posted pairs face off — hold clock · strike-up cd · partner ref (only the state-0 soldier branch reads these)
     this.lostSightT=0;
     this.shootCooldown=1+runRng();
     this.reloadT=0; this.stagger=0;
@@ -7355,11 +7356,22 @@ class Zealot{
       speed*=0.55;
       const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
       if(this.tickHealIdle(dt)){}                        // P8: wrapping the wound — the patrol waits
+      else if(this._chatT>0){                            // P8 CHAT: two posted bodies face off — the walk waits; the micro-sway IS the gesture (yaw is already a pose channel)
+        const cm=this._mate;
+        if(!cm||cm.health<=0||cm.state!==0||cm.position.distanceTo(this.position)>=5){ this._chatT=0; this._mate=null; }   // mate dead/alarmed/wandered — drop it mid-word
+        else{ this._chatT-=dt; moveTo=null; faceTo=cm.position;
+          this.yaw+=Math.sin(gameTime*2.3+this.startPos.z)*dt*0.35;
+          if(this._chatT<=0) this._mate=null; }
+      }
       else if(this.dwellT>0){                            // mill in place at a blocked spot, then resume on a fresh heading
         this.dwellT-=dt;
         this.yaw+=Math.sin(gameTime*1.7+this.startPos.x)*dt*1.5;
         if(this.dwellT<=0) this.patrolDir=(this._reDir!=null)?this._reDir:runRng()*6.28;
       }else{                                             // walk the line, but DRAW TOWARD nearby allies so a POI cluster patrols together instead of idling apart
+        if((this._chatCd-=dt)<=0){ this._chatCd=25+runRng()*20;   // strike up: an idle mate in arm's reach — believers welcome (camouflage); POI cohesion below IS the pairing mechanism, no new attractor
+          for(const o of enemies){ if(o===this||o.health<=0||o._faction!=='soldier'||o.state!==0||o._chatT>0) continue;
+            if(o.position.distanceTo(this.position)>3.2) continue;
+            this._chatT=o._chatT=4+runRng()*3; this._mate=o; o._mate=this; o._chatCd=25+runRng()*20; break; } }
         let gx=0,gz=0,gn=0, nx=0,nz=0,nd=99;
         for(const o of enemies){ if(o!==this&&o.health>0&&o._faction==='soldier'&&o.state<2){ const dd=o.position.distanceTo(this.position); if(dd<16){ gx+=o.position.x; gz+=o.position.z; gn++; if(dd<nd){ nd=dd; nx=o.position.x; nz=o.position.z; } } } }
         let tx=this.position.x+fx*3, tz=this.position.z+fz*3;
@@ -7727,7 +7739,7 @@ class Zealot{
     this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // a fresh body carries no broken nerve
     this._chgSt=0; this._chgT=0; this._chgCd=0; this._charging=false;   // charge state dies with the body (reviveBrute reinforces in place)
     this._ringI=-1; this._rplT=-1; this._rplP=0; this._feedT=0; this._radioactive=false; this._huntC=null;   // fresh body, fresh ring slot — no fuse, meal, or glow survives the grave
-    this.cmb=0; this._duckT=0; this._pkT=0; this._healT=0; this._healCd=0; this._repoT=0; this._cvg=0;   // P8 combat sub-state dies with the body
+    this.cmb=0; this._duckT=0; this._pkT=0; this._healT=0; this._healCd=0; this._repoT=0; this._cvg=0; this._chatT=0; this._mate=null;   // P8 combat sub-state dies with the body — no ghost of a chat either
     this.patrolDir=runRng()*6.28; this.dwellT=0; this._roam=null;   // fresh roam goal on respawn (brute re-picks from its new drop point)
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
