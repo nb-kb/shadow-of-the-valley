@@ -7053,7 +7053,7 @@ class Zealot{
         if(s instanceof Ammunition) s.count=3+Math.floor(runRng()*5);
         spawnWorldItem(s,this.position.x,this.position.y+0.6,this.position.z,new Vec3((runRng()-0.5)*3,3.2,(runRng()-0.5)*3));
       }                                                    // self-detonation leaves nothing but a crater
-      this.respawnT=45; return;
+      this.respawnT=300+runRng()*300; return;            // the covenant refills on the undead's 5-10 min clock — the 45s revolving door made kills feel rented
     }
     spawnWorldItem(this.tool,this.position.x,this.position.y+0.8,this.position.z,new Vec3((runRng()-0.5)*2,3,(runRng()-0.5)*2));
     // loot follows gear: they drop exactly what they wore — same item, wear and all
@@ -7066,7 +7066,7 @@ class Zealot{
     else if(runRng()<0.6){ const a=ITEM_DEFS[(this._loadout&&this._loadout.ammo)||'ammo9'](); a.count=4+Math.floor(runRng()*8);   // caliber-matched to what it fired (loadout parity)
       spawnWorldItem(a,this.position.x,this.position.y+0.6,this.position.z,new Vec3((runRng()-0.5)*3,3.5,(runRng()-0.5)*3)); }
     if(this._med>0&&runRng()<0.35) spawnWorldItem(ITEM_DEFS.bandAid(),this.position.x,this.position.y+0.65,this.position.z,new Vec3((runRng()-0.5)*2,2.6,(runRng()-0.5)*2));   // the unspent field dressing rides the body down (drop parity)
-    this.respawnT=45;
+    this.respawnT=300+runRng()*300;                      // soldiers match the undead 5-10 min clock — hot-POI knots thin for real mid-raid now (brute keeps its own 15-min session clock; reinforce cap-retry/pop-in/reap stay wait clocks, not death clocks)
   }
   acquireTarget(){
     // NEAREST HOSTILE (build 3): player + every live, non-dormant enemy of the OTHER faction are candidates → pick the nearest. Own faction is never a candidate. The player is ALWAYS in the pool, so a wiped faction can't strand this enemy (no empty-faction crash). O(roster) — the small-roster O(n^2) the design allows.
