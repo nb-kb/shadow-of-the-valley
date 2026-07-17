@@ -834,6 +834,8 @@ function playSound(type,pos){
     case 'drop':       blip(240,0.08,'sine',0.09,140,out); break;
     case 'click':      blip(900,0.03,'square',0.07,null,out); break;
     case 'alert':      blip(520,0.3,'sawtooth',0.2,780,out); setTimeout(()=>blip(520,0.3,'sawtooth',0.18,780,out),180); break;
+    case 'growl':      blip(70,0.5,'sawtooth',0.3,45,out); noiseBurst(0.35,0.3,300,out); break;
+    case 'moan':       blip(110+((runRng()*40)|0),0.7,'sawtooth',0.12,60,out); break;
     case 'death':      blip(220,1.2,'sine',0.3,40,out); noiseBurst(0.8,0.3,500,out); break;
     case 'breach':     blip(523,0.3,'triangle',0.2,null,out); setTimeout(()=>blip(659,0.3,'triangle',0.2,null,out),160); setTimeout(()=>blip(784,0.5,'triangle',0.22,null,out),320); break;
     case 'step':       noiseBurst(0.04,0.05,500,out); break;
@@ -6855,6 +6857,8 @@ function finishReload(){          // single-load only (mag-mode never starts the
 // built from the same mod pool, and drop them when they fall
 // ============================================================
 const _stC=new Vec3();   // settle() scratch (the _n/_c1 idiom) — one body sphere per live enemy per frame was pure GC feed
+// ---- P8 AI DIALS — consts, not PARAMS (owner: promote to PARAMS only if playtest demands) ----
+const BRT={ chgR:14, windT:0.6, chgSpd:3.0, chgMaxT:2.2, chgDmg:30, chgCd:7, wallStun:1.4 };   // brute charge: trigger reach · wind-up s · x brute pace · sprint cap s · contact hp · re-arm s · wall stagger s
 class Zealot{
   constructor(x,z,kind){                // kind: undefined/'soldier' · 'zombie' · 'brute' (build 2 faction spawn)
     const gy=activeLevel ? levelGroundJS(x,z) : terrainHJS(x,z);
@@ -6879,6 +6883,7 @@ class Zealot{
     this.reloadT=0; this.stagger=0;
     this.status={burn:0,bleedT:0,bleedN:0};
     this.muzzle=0; this.hurtFlash=0;
+    this._chgSt=0; this._chgT=0; this._chgX=0; this._chgZ=0; this._chgCd=0; this._charging=false;   // BRUTE CHARGE: 0 idle · 1 wind-up · 2 sprint, locked bearing + re-arm clock; _charging is the +32 pose bit — harmless on every other kind
     this.targetPoint=this.newPatrolTarget();
     if(this._faction==='zombie'){ this.tool=null; this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // undead reuse the Zealot body but carry NO tool/armor/loot — die() drops nothing
     else if(this._believer){ this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // no tool, no gear roll — it carries only what die() hands out
@@ -7289,6 +7294,32 @@ class Zealot{
       const np=noisePings[i];
       if(this.position.distanceTo(np.pos)<Math.min(np.r,22)){ this.investigate=(this.investigate||new Vec3()).set(np.pos.x,np.pos.y,np.pos.z); if(this.state===0) this.state=1; break; }   // reuse the Vec3 — no per-frame alloc
     }
+    // ---- BRUTE CHARGE (P8): telegraphed wind-up -> straight-line 3x sprint at the PLAYER only (soldiers keep the plain lunge). Wind-up/sprint own the frame — return before the shamble logic. ----
+    if(this._brute){
+      if(this._chgCd>0) this._chgCd-=dt;
+      const pdx2=playerPos.x-this.position.x, pdz2=playerPos.z-this.position.z, pd=Math.hypot(pdx2,pdz2);
+      if(this._chgSt===0&&!this._dormant&&this._chgCd<=0&&pd<BRT.chgR&&pd>2.5
+         &&losClearJS(this.position.x,eyeY,this.position.z, playerPos.x,playerPos.y+0.9,playerPos.z)){
+        this._chgSt=1; this._chgT=BRT.windT; this._charging=true;
+        playSound('growl',this.position); addNoise(this.position.x,this.position.y+1,this.position.z,14); }
+      if(this._chgSt===1){                               // WIND-UP: planted feet, glowing tell — 0.6s to get out of the lane
+        this._chgT-=dt; this.muzzle=Math.max(this.muzzle,0.7);
+        const want=Math.atan2(pdx2,pdz2); let a=want-this.yaw; while(a>Math.PI)a-=6.283; while(a<-Math.PI)a+=6.283; this.yaw+=clamp(a,-6*dt,6*dt);
+        this.velocity.x*=0.6; this.velocity.z*=0.6; this.position.addScaledVector(this.velocity,dt); this.settle(dt);
+        if(this._chgT<=0){ const l=pd||1; this._chgX=pdx2/l; this._chgZ=pdz2/l; this._chgSt=2; this._chgT=BRT.chgMaxT; }
+        if(this.shootCooldown>0) this.shootCooldown-=dt; return; }
+      if(this._chgSt===2){                               // SPRINT: straight line at 3x brute pace, no steering — sidestep beats it
+        this._chgT-=dt;
+        const spd=P('enemySpeed')*globSlow(this.position,this)*0.55*BRT.chgSpd;
+        this.velocity.x=this._chgX*spd; this.velocity.z=this._chgZ*spd; this.yaw=Math.atan2(this._chgX,this._chgZ);
+        if(mapWorldJS(this.position.x+this._chgX*0.9,this.position.y+0.9,this.position.z+this._chgZ*0.9)<0.45){   // wall one stride out — heavy stagger
+          this._chgSt=0; this._charging=false; this._chgCd=BRT.chgCd+runRng()*4; this.stagger=BRT.wallStun; this.hurtFlash=1;
+          playSound('boom',this.position); addNoise(this.position.x,this.position.y+1,this.position.z,20); }
+        else if(pd<1.6&&!this._dormant){ damagePlayer(BRT.chgDmg); playerPos.kickV+=26; this._chgSt=0; this._charging=false; this._chgCd=BRT.chgCd+runRng()*4; }   // !_dormant mirrors the lunge law — never bite from the void
+        else if(this._chgT<=0){ this._chgSt=0; this._charging=false; this._chgCd=BRT.chgCd+runRng()*4; }
+        this.position.addScaledVector(this.velocity,dt); this.settle(dt);
+        if(this.shootCooldown>0) this.shootCooldown-=dt; return; }
+    }
     let speed=P('enemySpeed')*globSlow(this.position,this)*(this._brute?0.55:1.2), moveTo=null, faceTo=null;
     if(sees){
       if(this.state!==2){                                  // fresh acquisition — rouse nearby undead (~18m) so the swarm converges
@@ -7451,6 +7482,7 @@ class Zealot{
     this.detection=0; this.state=0; this.investigate=null;
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;
     this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // a fresh body carries no broken nerve
+    this._chgSt=0; this._chgT=0; this._chgCd=0; this._charging=false;   // charge state dies with the body (reviveBrute reinforces in place)
     this.patrolDir=runRng()*6.28; this.dwellT=0; this._roam=null;   // fresh roam goal on respawn (brute re-picks from its new drop point)
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
     this.status.burn=0; this.status.bleedT=0; this.status.bleedN=0;
