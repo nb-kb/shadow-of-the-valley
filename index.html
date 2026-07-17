@@ -4784,9 +4784,13 @@ function spotDistance(){
 const WORLDITEM_CAP=64;   // dropped-loot pile bound: render only shows the nearest RLIM.ITEMS anyway, so evicting the oldest OFF-SCREEN drop is invisible — and it stops the all-session growth that fed 3 per-frame O(n) sweeps + a per-item alloc (the long-run lag)
 function spawnWorldItem(item,x,y,z,vel){
   if(worldItems.length>=WORLDITEM_CAP){                 // over cap → drop the OLDEST evictable item — the REAP's exact predicate: never a carried, PINNED, armed, or physgun-held one (a deliberately pinned old item used to vanish the moment the 65th spawned; _armT>0 also missed a core on its 0-tick frame)
-    for(let i=0;i<worldItems.length;i++){ const w=worldItems[i]; if(!w.held && !w.frozen && !(w.item&&w.item._armT!=null) && !(heldWorld&&heldWorld.w===w)){ worldItems.splice(i,1); break; } }
+    const gib=!!item.gib; let out=false;                // meat evicts MEAT at the cap too: a gib may only displace an OLDER GIB — no meat evictable, the chunk is never born (loot keeps the oldest-first law; a full pile must never silently eat drops)
+    for(let i=0;i<worldItems.length;i++){ const w=worldItems[i]; if(gib&&!(w.item&&w.item.gib)) continue;
+      if(!w.held && !w.frozen && !(w.item&&w.item._armT!=null) && !(heldWorld&&heldWorld.w===w)){ worldItems.splice(i,1); out=true; break; } }
+    if(gib&&!out) return null;
   }
-  worldItems.push({item,pos:new Vec3(x,y,z),vel:vel||new Vec3(),ry:runRng()*6.28,rotVel:0,pitch:0,rotVelP:0,held:false,age:0});
+  const w={item,pos:new Vec3(x,y,z),vel:vel||new Vec3(),ry:runRng()*6.28,rotVel:0,pitch:0,rotVelP:0,held:false,age:0};
+  worldItems.push(w); return w;                         // handle back to the caller — spawnGibs preloads age/spin on it and MUST see the skip
 }
 // GIBS (P3 dressing) — the death moment BURSTS: 3-5 chunks (brute 7, critter 2-3)
 // ride the worldItem physics whole (gravity/bounce/skid/settle) and the 120s reap
@@ -4803,9 +4807,10 @@ function spawnGibs(en){
   const sc=en._critter?0.6:1;                                                         // small pale bits off the small body
   for(let i=0;i<n;i++){
     const t=en._critter?17:en._brute?(runRng()<0.5?16:14):(en._faction==='zombie'?14:15);
-    spawnWorldItem({gib:true,renderType:t}, en.position.x+(runRng()-0.5)*0.3, en.position.y+(en._critter?0.25:0.5)+runRng()*0.8*sc, en.position.z+(runRng()-0.5)*0.3,
+    const w=spawnWorldItem({gib:true,renderType:t}, en.position.x+(runRng()-0.5)*0.3, en.position.y+(en._critter?0.25:0.5)+runRng()*0.8*sc, en.position.z+(runRng()-0.5)*0.3,
       new Vec3((kx*(2.5+runRng()*3)+(runRng()-0.5)*2.2)*sc, (2.5+runRng()*2.5)*sc, (kz*(2.5+runRng()*3)+(runRng()-0.5)*2.2)*sc));
-    const w=worldItems[worldItems.length-1]; w.age=100+runRng()*6; w.rotVel=(runRng()-0.5)*9; w.rotVelP=(runRng()-0.5)*7;   // preload -> the 120s reap fires at ~14-20s
+    if(!w) continue;                                                                  // board full of loot — the chunk was never born
+    w.age=100+runRng()*6; w.rotVel=(runRng()-0.5)*9; w.rotVelP=(runRng()-0.5)*7;   // preload -> the 120s reap fires at ~14-20s
   }
   playSound('gib', en.position);
 }
