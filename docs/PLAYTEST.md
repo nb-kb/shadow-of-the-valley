@@ -304,3 +304,105 @@ guards + corrupt-LOAD rollback (#10) · four unobtainable items + settings
 gadgets not in the hideout guarantee (#11) · the horde gate still has NO
 physical terminal body (#12) · worldItem age/frozen/hideout-reap guards (#13)
 · the starter kit is unchanged (#14) · uniform batching (#15).
+
+---
+
+# CREATURE WAVE addendum (2026-07-16, 22 commits, 3b1075f…HEAD)
+
+The P8 enemy-AI overhaul + idle ecosystem. Same rules as the pass above:
+Chrome PRIMARY, devtools console open, failures become KNOWN_BUGS.md entries,
+dial notes go to the flagged const (ZAI/BRT/HORDE/CRIT blocks ~L6910). The
+SwiftShader smoke gate passed after every commit — these checks need a REAL
+GPU and eyes. Deploy area-1 unless a line says valley.
+
+## §C1. Compile budget FIRST  (KNOWN_BUGS #2 — the standing gate)
+
+- [ ] Real-window Chrome load after the GLSL-touching commits (bodies
+      3b1075f/a85b87d, gas+glass ee7631e, gibs d594882): boot clean, no black
+      screen beyond the known brief flash, `__bootPhase` sane. Wave shader
+      delta: a 12-prim pose rig REPLACING the old enemy block (~+5-10% net
+      compiled, executed 12/10/10/6 prims by kind), critter/gib itemSdf
+      branches, D.w bit strips 128→2, gas billow + DOSED glass post.
+      `RLIM.ENEMIES` untouched at 20.
+
+## §C2. New bodies on all factions
+
+- [ ] Soldier: robe+torso cones, bent limbs, hood/helm/plates still read; arms
+      RISE in alarm (state 2). Zombie: shamble slump + head loll. Brute:
+      knuckle bulk. Charging brute: lean + hand plow + heat tint (+32).
+- [ ] Believer still renders a gun (KNOWN — owner-flagged render tell).
+- [ ] Critter: small quadruped, trot legs, tail wisp, beady eyes; its corpse
+      lies over (pitch 1.45) while it lingers.
+- [ ] Headshots land on every kind — the JS head/body twins moved WITH the
+      geometry (slump/loll/charge/flinch offsets; critter head sphere
+      +0.40/r0.12, horizontal spine capsule r0.19).
+
+## §C3. Brute charge
+
+- [ ] Stand ~10m off in the open: growl + body glow is the 0.6s tell; the
+      sprint is a straight 3x lane — a sidestep beats it clean.
+- [ ] Eat one on purpose: ~30 dmg + a real view kick. Bait it into a
+      truck/wall: 1.4s stagger window, boom + 20m noise ping. Re-arms 7-11s.
+
+## §C4. Zealot combat AI
+
+- [ ] Alarm a knot: the cover role tucks, leans ±1.1m out to fire ~0.9s,
+      tucks 1.4-2.2s — the lean is the only exposure. Shooting one forces a
+      duck (any role; reloading ducks too).
+- [ ] Wound one below 35%: it breaks for cover and wraps the wound 2s
+      ('reload' cue, 'pickup' on completion); shooting it interrupts. ~35%
+      of carriers drop a spare bandAid.
+- [ ] Backup shout: a pressed soldier rallies the camp from 40m — the
+      converge jogs (1.15x). The LAST soldier standing always runs — toward
+      an ally ≥12m or home, never through your guns.
+- [ ] Suppression: while a squadmate repositions/heals and you're out of
+      sight, the suppressor hoses your last-known cover BLIND — stand behind
+      a truck and hear rounds crack into it.
+
+## §C5. Horde + food chain
+
+- [ ] Find the wandering brute: the escort wheels a golden-angle ring, the
+      gait ripples around it; every 9-18s a moan rolls outward in staggered
+      answers with a short lunge pulse.
+- [ ] Critter huddles (2 groups of 3, seeded off the hot camps): graze and
+      nibble; over minutes the herd DRIFTS together (anchors creep, knit past
+      6m, fenced off gas/walls/rim). Walk inside 7m: an 8m startle ripple
+      bolts the huddle around the hazards.
+- [ ] Let a zombie hunt one: 1.35x chase, bite, ~4s head-down feed → the
+      sickly green pulse (+64). Stand inside 4.5m masked then bare: the burn
+      tick scales with distance AND mask — radiation dread, the glow IS the
+      zone. Geiger cadence + DOSED glass + rad motes agree with the field.
+- [ ] Critters never alarm soldiers and never tick the HUD kill counter;
+      seeker/chaos threads DO read them as warmth (owner call — flag it).
+
+## §C6. Idle ecosystem — watch a calm camp do NOTHING for 2 minutes
+
+- [ ] Two posted zealots drift together (POI cohesion), stop in arm's reach,
+      face off and sway ~4-7s, then part (~25-45s cadence). Believers join
+      the circle too. Any alarm/damage/distance drops it mid-word.
+- [ ] Calm zombies rotate habits on a 6-12s clock: mostly drift, some stand
+      head-down swaying (stillness is the tell), some twitch-dash; feed rolls
+      moan about half the time.
+- [ ] Kill something near calm zombies and wait one idle roll: a zombie walks
+      to the gib pile (≤12m) and mouths it — piles last 14-20s; reaped
+      mid-walk it worries the stain instead.
+- [ ] Fireflies at night: warm dots only OUTSIDE the gas (the dark line marks
+      the field). SPRINT through the swarm — flies dart dark off your body
+      and re-light ~1s later; a plain WALK leaves them lit. A chasing zombie,
+      charging brute, or bolting critter punches the same dark hole.
+
+## §C7. Gibs + respawn feel
+
+- [ ] Kills burst faction-tinted chunks (zombie green-black · soldier
+      red-brown · brute slabs · critter pale), never lootable, never a
+      prompt; the 14-meat cap self-evicts quietly.
+- [ ] Hold a camp 6+ minutes: dead soldiers return on the undead 5-10 min
+      clock — the 45s revolving door is gone. The brute keeps its 15-min
+      session clock.
+
+## Dials if it plays wrong (all consts, one line each — see KNOWN_BUGS
+Backlog "CREATURE-wave owner calls + dials" for the full ledger)
+
+#radTint alpha .38→.30 (over-green) · FLY_VIS / duty gate 0.08 (firefly
+density) · gib counts + meat cap 14 · chat cadence · zombie idle mix
+(0.62/0.24/0.14) · ZAI/BRT/HORDE/CRIT ~L6910.

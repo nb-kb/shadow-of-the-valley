@@ -4,12 +4,18 @@ Living list of open issues, worst-first-ish. Fixed items move to the changelog
 in commit history. Line numbers drift — treat them as hints, re-grep before
 editing.
 
-Last reviewed: 2026-07-15 (the Containment wave on `feat/containment` — the P2
-fix-up, the systems-audit sweep, and P3–P7 landed; 61 commits). #0/#4/#6a/#6b/
-#7/#8 closed this wave; the closeout batch then closed #9/#10/#11/#13/#14 —
-see Recently fixed. #12 and #15 stay open ON PURPOSE (the gate-terminal prim
+Last reviewed: 2026-07-16 (the CREATURE wave on `feat/containment` — the P8
+enemy-AI overhaul: pose-rig bodies, brute charge, zealot cover/heal/backup/
+suppression, horde orbit, critter food chain, gas dread dressing, gibs,
+fireflies, and the idle ecosystem; 22 commits, 3b1075f…HEAD). New this review:
+#16 logs the item/enemy material-band collision the wave's recon surfaced
+(deferred on purpose — report-only law); the CREATURE-wave owner calls + dials
+live in Backlog. Prior review 2026-07-15 (Containment P2–P7, 61 commits):
+#0/#4/#6a/#6b/#7/#8 closed, then the closeout batch closed #9/#10/#11/#13/#14
+— see Recently fixed. #12 and #15 stay open ON PURPOSE (the gate-terminal prim
 awaits the Chrome compile-budget checkpoint; uniform batching is backlog-grade).
-**One consolidated browser pass gates all of it: `docs/PLAYTEST.md`.**
+**One consolidated browser pass gates all of it: `docs/PLAYTEST.md` — the
+CREATURE WAVE addendum at its tail gates this wave.**
 
 ## Open
 
@@ -107,6 +113,19 @@ awaits the Chrome compile-budget checkpoint; uniform batching is backlog-grade).
   array wants its own commit + visual check, so it never belonged in a batch
   pass. Untouched.
 
+### 16. Item renderTypes 10-13 shade in the ENEMY material band  (pre-existing — surfaced by the creature-wave recon, DEFERRED on purpose)
+- `itemSdf` types 10-13 write material ids 40-43 (`30.0+t`), which fall PAST
+  the `m<40.0` item-tint test into the enemy tint band — any world item
+  carrying those renderTypes mistints as flesh. The creature wave dodged the
+  band by design (critters at 23, gibs at 23-26 via `9.0+t`, both inside the
+  free (22.5,30) gap) and the P8 spec law was report-only: no fix rode it.
+- Same family, log together: the glue-glob band comment (~L1467,
+  `50+RLIM.ENEMIES`=70) no longer matches the live `m>59.5&&m<60.5` tint test,
+  and tracerCol[10] still carries the glue-teal row — which is WHY tracer
+  slots 10-11 stay gameplay-only (the firefly/gib emitters respect it).
+- Fix when touched: move types 10-13 into the (22.5,30) gap like the gibs (or
+  widen the item test), and re-grep the band comments in the same commit.
+
 ## Backlog (future — low priority)
 
 - **Comment-debt — one sanctioned comment-only commit** (exactly the
@@ -120,8 +139,30 @@ awaits the Chrome compile-budget checkpoint; uniform batching is backlog-grade).
   walk their POI together; a whole second faction (zombies + brute) with swarm
   AI + 3-way targeting landed on top; this wave added zealot morale
   (flee/stand), faction-separated seeding, gas fear, and step-over parity.
-  Still direct-steer (no navmesh — by design). Remaining polish if wanted:
-  flanking, smarter cover rotation.
+  The CREATURE wave (2026-07-16) landed the rest of P8 on top: joint-table
+  pose bodies + critter/gib/rad render bits, brute charge, zealot cover
+  cycle/field heal/backup shout/blind suppression, horde orbit + moan
+  ripples, the critter food chain, and the idle ecosystem (patrol chat
+  pairs, zombie feed/twitch habits + gib-pile meals, herd drift, firefly
+  scatter). Still direct-steer (no navmesh — by design). Remaining polish
+  if wanted: flanking.
+- **CREATURE-wave owner calls + dials** (2026-07-16 — all deliberate, all
+  single-line flips; the dial blocks are consts above `class Zealot`,
+  ~L6910): Believers still RENDER a gun (tool-less bombers look armed —
+  render-tell owner call, unchanged from build 1) · critters are NOT
+  radioactive themselves (the species' rad expresses through the food
+  chain; ctor one-liner if glowing grazers are wanted) · seeker/chaos
+  aim-assist reads critters as warmth ("the thread reads flesh" — exclude
+  `en._critter` in the bias scans if playtest hates it) · spec-literal
+  zealot quirks kept: a healer at tall cover can stall its channel until
+  the 4s lost-sight drop finishes it calmly, the peek oscillates around
+  the 1.0m arrival band (inCover<1.2 holds throughout), alarm entry
+  double-fires 'alert' (entry + callBackup — reads as one louder blip) ·
+  the valley gets NO critters in v1 · dials: #radTint CSS alpha .38→.30
+  if the gas reads over-green, FLY_VIS + the 0.08 duty gate for firefly
+  density, gib counts + the 14-meat cap, chat cadence (25-45s cd, 4-7s
+  hold), zombie idle mix (0.62/0.24/0.14) — promote ZAI/BRT/HORDE/CRIT
+  to PARAMS only if playtest demands live editing.
 - **Crouch is camera-only** — no crawl/prone vocabulary exists anywhere in the
   movement code. Note it before designing anything that assumes one.
 - **area1 literals in the generic POI seeding path** — harmless today; fix
