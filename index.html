@@ -7023,6 +7023,7 @@ class Zealot{
       if(this.state===2) this._duckT=ZAI.duckT;
       if(this.cmb===4){ this.cmb=0; this._healT=0; this._healCd=ZAI.healCd; }
     }
+    if(this._faction==='soldier'&&this.state===2&&this.health<120) this.callBackup(this.investigate?this.investigate.x:playerPos.x, this.investigate?this.investigate.z:playerPos.z);   // pressed and bleeding — one shout rallies the camp (the cd gates spam)
     if(this.health<=0) this.die();
   }
   die(){
@@ -7164,8 +7165,7 @@ class Zealot{
       this.coverPoint=null; this._coverT=0;
       if(tgt.isPlayer){ document.getElementById('alertFlash').style.opacity=1;   // the red ALERT flash is PLAYER feedback only — spotting a zombie must not fake it
         setTimeout(()=>document.getElementById('alertFlash').style.opacity=0,400); }
-      for(const o of enemies){ if(o!==this&&o.health>0&&o._faction===this._faction&&o.position.distanceTo(this.position)<18){   // rouse the SQUAD (same faction only) toward the threat — the other faction has its own rouse
-        o.detection=Math.max(o.detection,0.65); o.investigate=new Vec3(tx,0,tz); if(o.state===0)o.state=1; } }
+      this.callBackup(tx,tz);   // CALL FOR BACKUP (P8): the old 18m squad whisper is a 40m shout now — the camp converges on the caller's target (believers scream too)
     }
     if(this.state===2&&this.detection<0.35){ this.state=1; this.alarmRole=null; this.coverPoint=null; }
     if(this.state===1&&this.detection<=0.02){ this.state=0; this.investigate=null; this.alarmRole=null; this.coverPoint=null; }
@@ -7196,7 +7196,8 @@ class Zealot{
           if(fo>=al+2) sc++;                                   // outnumbered where it stands
           if(ls+1<lz*0.6) sc++;                                // the war map reads lost (live line count, self included)
           if(sc>=1&&!this.coverPoint&&!this.findCover(tx,tz)) sc++;   // nothing to duck behind — probe only (the cover ROLE commits coverPoint on its own cadence; a suppress body must not hold a stale probe)
-          if(sc>=2){ this._brk=runRng()<0.6?'flee':'stand'; this._brkT=6+runRng()*3; this.coverPoint=null; }
+          if(ls===0) sc=2;                                     // LAST MAN: no line left to hold — the break is automatic
+          if(sc>=2){ this._brk=(ls===0||runRng()<0.6)?'flee':'stand'; this._brkT=6+runRng()*3; this.coverPoint=null; this._rlyT=0; }   // the last soldier standing always RUNS; a fresh break re-aims its rally at once
         }
         // P8 HEALING: below 35% a kitted zealot pulls back and wraps the wound — a ~2s hands-off channel;
         // any hit interrupts it (hurt() drops the bandage + 3s lockout). Preempts the role, never a morale break.
@@ -7256,12 +7257,21 @@ class Zealot{
       // threat bearing straight out, LOS or no LOS (gas fear below still trumps: worse air wins the
       // argument); STAND holds the ground it broke on, even blind.
       if(this._brk==='flee'){
-        const rd=Math.max(dist,1e-4);                          // overlapped-spawn zero-dist guard (the retreat idiom)
-        moveTo=(this._brkMv||(this._brkMv=new Vec3())).set(this.position.x-dx/rd*8,0,this.position.z-dz/rd*8);
-        faceTo=moveTo; speed*=1.25;                            // it RUNS, eyes front
+        // RETREAT (P8): run TOWARD friends, not just anywhere — re-aim ~1/s at the nearest live ally
+        // beyond fleeR (none → home); a rally that reads as INTO the guns falls back to pure anti-threat.
+        if((this._rlyT-=dt)<=0){ this._rlyT=1.0;
+          const rd=Math.max(dist,1e-4);                        // overlapped-spawn zero-dist guard (the retreat idiom)
+          let rx=this.startPos.x, rz=this.startPos.z, rd2=1e9;
+          for(const o of enemies){ if(o===this||o.health<=0||o._faction!==this._faction||o._believer) continue;
+            const dd=o.position.distanceTo(this.position); if(dd>ZAI.fleeR&&dd*dd<rd2){ rd2=dd*dd; rx=o.position.x; rz=o.position.z; } }
+          const rvx=rx-this.position.x, rvz=rz-this.position.z, rvl=Math.hypot(rvx,rvz)||1;
+          if((rvx*dx+rvz*dz)/(rvl*rd)>0.4){ rx=this.position.x-dx/rd*8; rz=this.position.z-dz/rd*8; }   // rally bearing · threat bearing — it lies toward the guns, run anti-threat instead
+          (this._brkMv||(this._brkMv=new Vec3())).set(rx,0,rz);
+        }
+        moveTo=this._brkMv; faceTo=moveTo; speed*=1.25;        // it RUNS, eyes front
       }else if(this._brk==='stand') moveTo=null;
     }else if(this.state===1){
-      speed*=0.8;
+      speed*=(this._cvg>0?1.15:0.8);                   // P8: a backup call converges at a jog, not a creep
       if(this.tickHealIdle(dt)){}                      // P8: wrapping the wound — feet hold, the search waits
       else if(this.investigate){
         moveTo=this.investigate; faceTo=this.investigate;
@@ -7538,6 +7548,14 @@ class Zealot{
       if(gen!==_worldGen) return;                    // player died → this object is off a dead roster; don't die() into the fresh world
       if(this.health>0){ this.health=0; this.die(); }   // guarantee the bomber dies to its own blast even if splash undershot
     }
+  }
+  callBackup(tx,tz){                                  // P8: one shout — the same-faction camp within bkR converges on the caller's target. The cd gates spam; the noise ping is real (the undead hear it too)
+    if(this._bkCd>0) return; this._bkCd=ZAI.bkCd;
+    playSound('alert',this.position); addNoise(this.position.x,this.position.y+1.5,this.position.z,10);
+    for(const o of enemies){ if(o===this||o.health<=0||o._faction!==this._faction) continue;
+      if(o.position.distanceTo(this.position)>=ZAI.bkR) continue;
+      o.detection=Math.max(o.detection,0.65); o.investigate=(o.investigate||new Vec3()).set(tx,0,tz);
+      if(o.state===0) o.state=1; o._cvg=ZAI.cvgT; }
   }
   reinforce(){
     if(this.health<=0 && enemies.filter(e=>e.health>0).length>=P('maxEnemies')) { this.respawnT=10; return; }   // cap gates DEAD respawns only — resetLevel fills to maxEnemies exactly, so a live-count gate blocked EVERY valley >70m far-yank and nobody ever closed in
