@@ -6866,6 +6866,7 @@ const ZAI={ duckT:1.2, duckCd:0.8,                    // shot-at cover impulse h
   bkR:40, bkCd:20, cvgT:10,                           // CALL FOR BACKUP reach · caller cd · converge push window
   supSpread:0.26, supWin:3.5, repoT:1.5,              // blind covering-fire spread · window after losing sight · 'repositioning' squad flag ttl
   fleeR:12 };                                         // retreat: rally to an ally at least this far
+const CRIT={ N:2, grpN:3, senseR:14, fleeR:10, fleeT:3.5, spd:5.2, grazeSpd:0.8, feedT:4, radR:4.5, radMul:0.35 };   // critter: groups x size · zombie hunt reach · flee trigger/hold/sprint · graze pace · feed s · rad-zombie aura reach/dose (hit radii live at enemyHeadR/enemyBodyR — the drawn-body twins)
 class Zealot{
   constructor(x,z,kind){                // kind: undefined/'soldier' · 'zombie' · 'brute' (build 2 faction spawn)
     const gy=activeLevel ? levelGroundJS(x,z) : terrainHJS(x,z);
@@ -6873,10 +6874,11 @@ class Zealot{
     this.startPos=this.position.clone();
     this.velocity=new Vec3();
     // ---- FACTION (build 2): soldier = Zealot/Believer · zombie = undead/brute. Render reads _faction/_brute (build-1 enemyData bits). ----
-    this._faction=(kind==='zombie'||kind==='brute')?'zombie':'soldier';
+    this._faction=(kind==='zombie'||kind==='brute')?'zombie':kind==='critter'?'critter':'soldier';
     this._brute=(kind==='brute');
+    this._critter=(kind==='critter');   // P8: neutral grazer — rides the roster/render (+128 body bit), fights NOBODY; carries none of bits 2/4/8/16/32 by construction (gear gate below, faction, brute/charge paths)
     this._believer=this._faction==='soldier'&&runRng()<0.10;   // feature 15: 1 in 10 SOLDIERS walks in a tool-less bomber (the undead never do)
-    this.health=this._brute?800:this._faction==='zombie'?100:this._believer?100:200;   // brute mini-boss 800 · undead 100 · bomber 100 · line zealot 200
+    this.health=this._brute?800:this._critter?30:this._faction==='zombie'?100:this._believer?100:200;   // brute mini-boss 800 · critter 30 · undead 100 · bomber 100 · line zealot 200
     this.yaw=runRng()*6.28;
     this.patrolDir=runRng()*6.28; this.dwellT=0;   // LINE PATROL: straight-line heading + short mill-in-place timer at obstacles
     this.state=0;                       // 0 patrol · 1 suspicious · 2 alarm
@@ -6894,8 +6896,10 @@ class Zealot{
     this.muzzle=0; this.hurtFlash=0;
     this._chgSt=0; this._chgT=0; this._chgX=0; this._chgZ=0; this._chgCd=0; this._charging=false;   // BRUTE CHARGE: 0 idle · 1 wind-up · 2 sprint, locked bearing + re-arm clock; _charging is the +32 pose bit — harmless on every other kind
     this._ringI=-1; this._rplT=-1; this._rplP=0; this._moanT=HORDE.moanT0; this._ringN=0;   // HORDE: sunflower orbit slot · ripple fuse/pulse · brute moan clock + slot counter
+    this._cSt=0; this._cT=0; this._cP=0; this._cPrT=0; this._cScanT=runRng()*0.25;   // CRITTER: 0 graze · 1 flee (this.state STAYS 0 — render law), re-pick/probe clocks, spawn-staggered threat scan (harmless on every other kind)
+    this._cAx=x; this._cAz=z; this._cFx=0; this._cFz=1; this._cGx=x; this._cGz=z;    //   graze anchor · flee bearing · graze goal
     this.targetPoint=this.newPatrolTarget();
-    if(this._faction==='zombie'){ this.tool=null; this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // undead reuse the Zealot body but carry NO tool/armor/loot — die() drops nothing
+    if(this._faction==='zombie'||this._critter){ this.tool=null; this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // undead + critters reuse the Zealot body but carry NO tool/armor/loot — die() drops nothing
     else if(this._believer){ this.helm=this.plates=this.pack=null; this._selfBoom=false; }   // no tool, no gear roll — it carries only what die() hands out
     else { this.buildTool(); this.rollGear(); }
   }
@@ -7016,7 +7020,8 @@ class Zealot{
     }
     this.health-=dmg;
     this.hurtFlash=1;
-    if(by==='player'&&this.state<2){ this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(playerPos.x,0,playerPos.z); this.state=1; }
+    if(this._critter){ if(this.health>0){ const bp=(by&&by!=='player'&&by.position)||playerPos; this.critFlee(bp.x,bp.z,true); } }   // P8: a grazed critter BOLTS — no detection game, no state write (render law: st stays 0), and the huddle startles with it
+    else if(by==='player'&&this.state<2){ this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(playerPos.x,0,playerPos.z); this.state=1; }
     else if(by&&by!=='player'&&by.position&&by._faction!==this._faction&&this.state<2){   // BUILD 3: shot by the OTHER faction — turn and fight back toward the shooter (else cross-faction fire is ignored)
       this.detection=Math.min(1,this.detection+0.55); this.investigate=new Vec3(by.position.x,0,by.position.z); this.state=1; }
     if(this._faction==='soldier'&&!this._believer){   // P8: incoming fire draws a duck; a hit hand drops the bandage (3s before it re-tries)
@@ -7027,6 +7032,12 @@ class Zealot{
     if(this.health<=0) this.die();
   }
   die(){
+    if(this._critter){                                  // P8 CRITTER DOWN: no kill credit, no loot — it just drops clean (gibs stay a future JS pass; the body vanishes like every corpse)
+      playSound('hit',this.position);
+      addDecal(new Vec3(this.position.x,this.position.y+0.03,this.position.z),new Vec3(0,1,0),0.6);
+      this.respawnT=300+runRng()*300;                   // the warren refills on the same 5-10 min law (reinforce re-places at the anchor, pop-in guarded)
+      return;
+    }
     kills++;
     playSound('hit', this.position);                    // spatial: the body drops where it stands
     worldNormalJS(this.position.x,this.position.y+0.1,this.position.z,_n);
@@ -7072,7 +7083,7 @@ class Zealot{
     // NEAREST HOSTILE (build 3): player + every live, non-dormant enemy of the OTHER faction are candidates → pick the nearest. Own faction is never a candidate. The player is ALWAYS in the pool, so a wiped faction can't strand this enemy (no empty-faction crash). O(roster) — the small-roster O(n^2) the design allows.
     let bestEnt=null, bestD=1156;                          // 34^2 — an enemy past sight isn't acquired; the player still is, at any range
     for(const o of enemies){
-      if(o===this||o.health<=0||o._dormant||o._faction===this._faction) continue;
+      if(o===this||o.health<=0||o._dormant||o._critter||o._faction===this._faction) continue;   // critters are NOBODY's hostile — the undead hunt them through their own wander-branch channel
       const d=(o.position.x-this.position.x)**2+(o.position.z-this.position.z)**2;
       if(d<bestD){ bestD=d; bestEnt=o; }
     }
@@ -7112,6 +7123,8 @@ class Zealot{
     if(this.health<=0){ this.die(); return; }
     if(this.stagger>0){ this.stagger-=dt; this.position.addScaledVector(this.velocity,dt*0.4); this.settle(dt); return; }
 
+    // ---- CRITTER (P8): neutral grazer — its own tiny brain, BEFORE the zombie gate. ----
+    if(this._critter){ this.updateCritter(dt); return; }
     // ---- ZOMBIE (build 2): simple swarm AI — no FOV cone, no cover, no line-patrol; sees fine at night (skips dayEye/fog/effVision). Soldiers fall through to the full state machine below. ----
     if(this._faction==='zombie'){ this.updateZombie(dt); return; }
 
@@ -7187,7 +7200,7 @@ class Zealot{
         if(!this._believer&&!this._brk&&this._morCd<=0&&(this._morT-=dt)<=0){
           this._morT=1.0;
           let sc=this.health<70?1:0, al=0, fo=0, ls=0, lz=0;   // low blood is the first read
-          for(const o of enemies){ if(o===this||o.health<=0) continue;
+          for(const o of enemies){ if(o===this||o.health<=0||o._critter) continue;   // a grazing critter is neither gun nor ghoul — it weighs nothing on the war map
             if(o._faction==='soldier') ls++; else lz++;
             if(o._dormant) continue;
             const dd=o.position.distanceTo(this.position);
@@ -7454,8 +7467,65 @@ class Zealot{
     this.settle(dt);
     if(this.shootCooldown>0) this.shootCooldown-=dt;
   }
+  critFlee(tx,tz,rip){                                  // CRITTER BOLT: lock a bearing dead away from (tx,tz); rip=the whole huddle within 8m startles with it
+    const dx=this.position.x-tx, dz=this.position.z-tz, l=Math.hypot(dx,dz)||1;
+    this._cFx=dx/l; this._cFz=dz/l; this._cSt=1; this._cT=CRIT.fleeT; this._cPrT=0;   // probe clock zeroed — the first flee frame hazard-checks the lane at once
+    if(rip) for(const o of enemies){ if(o!==this&&o._critter&&o.health>0&&o._cSt!==1&&o.position.distanceTo(this.position)<8) o.critFlee(tx,tz,false); }
+  }
+  updateCritter(dt){
+    // NEUTRAL GRAZER (P8): graze/flee only — never fights, never alarms. this.state STAYS 0
+    // (render law: cone paint + the beady-eye row key st<0.5); all motion state lives in _c*.
+    if(this._cSt===1){                                   // FLEE — full sprint on the locked bearing, hazard-steered
+      this._cT-=dt;
+      if((this._cPrT-=dt)<=0){ this._cPrT=0.4;           // probe one lunge out: gas (radAt also fences the perimeter lip), wall, canyon rim → swerve
+        const hx=this.position.x+this._cFx*3, hz=this.position.z+this._cFz*3;
+        if(radAt(hx,hz)>0.2||mapWorldJS(hx,this.position.y+0.3,hz)<0.5||Math.abs(hz)>46){
+          const a=Math.atan2(this._cFx,this._cFz)+(runRng()<0.5?1.2:-1.2);
+          this._cFx=Math.sin(a); this._cFz=Math.cos(a);
+        } }
+      const spd=CRIT.spd*globSlow(this.position,this);   // glue takes critters too
+      this.velocity.x=this._cFx*spd; this.velocity.z=this._cFz*spd;
+      this.yaw=Math.atan2(this._cFx,this._cFz);
+      if(this._cT<=0){ this._cSt=0; this._cT=0; }        // winded — back to the graze (anchor holds: the group re-knits)
+    }else{                                               // GRAZE — amble a 6m disc around the anchor, frequent nibble stops
+      if((this._cScanT-=dt)<=0){ this._cScanT=0.25;      // threat scan, throttled + spawn-staggered: any undead close, the player closer, or a noise ping
+        let tx=0,tz=0,thr=false;
+        for(const o of enemies){ if(o.health>0&&o._faction==='zombie'&&!o._dormant&&o.position.distanceTo(this.position)<CRIT.fleeR){ tx=o.position.x; tz=o.position.z; thr=true; break; } }
+        if(!thr&&Math.hypot(playerPos.x-this.position.x,playerPos.z-this.position.z)<7){ tx=playerPos.x; tz=playerPos.z; thr=true; }
+        if(!thr) for(const np of noisePings){ if(this.position.distanceTo(np.pos)<Math.min(np.r,14)){ tx=np.pos.x; tz=np.pos.z; thr=true; break; } }
+        if(thr) this.critFlee(tx,tz,true);
+      }
+      if(this._cSt!==1){                                 // still calm this frame (the scan above may have bolted us)
+        this._cT-=dt;
+        if(this._cT<=0){ this._cT=2+runRng()*3;
+          if(runRng()<0.35) this._cP=1;                  // a nibble — head down, feet still
+          else{ this._cP=0; const a=runRng()*6.2832, r=runRng()*6;
+            this._cGx=this._cAx+Math.sin(a)*r; this._cGz=this._cAz+Math.cos(a)*r; } }
+        if(!this._cP){
+          const mdx=this._cGx-this.position.x, mdz=this._cGz-this.position.z, md=Math.hypot(mdx,mdz);
+          if(md>0.3){ const spd=CRIT.grazeSpd*globSlow(this.position,this);
+            this.velocity.x=mdx/md*spd; this.velocity.z=mdz/md*spd;
+            const want=Math.atan2(mdx,mdz); let a2=want-this.yaw; while(a2>Math.PI)a2-=6.283; while(a2<-Math.PI)a2+=6.283; this.yaw+=clamp(a2,-3*dt,3*dt);
+          } else { this.velocity.x*=0.8; this.velocity.z*=0.8; }
+        } else { this.velocity.x*=0.8; this.velocity.z*=0.8; }
+      }
+    }
+    this.position.addScaledVector(this.velocity,dt);
+    if(this._prX||this._prZ){ this.position.x+=this._prX*2.2*dt; this.position.z+=this._prZ*2.2*dt; this._prX=0; this._prZ=0; }   // a WAVE press shoves the grazer like everyone else
+    this.settle(dt);
+  }
   settle(dt){
     this.velocity.y=0;                          // enemies are GROUND-BOUND: never carry vertical momentum. Root fix for "flying into the sky" — shoves (KINETIC/WAVE/blast) ADD to velocity.y and the move step only ever set x/z, so y accumulated every frame and launched them upward faster than settle's 6/s descent.
+    if(this._critter){                          // CRITTER: knee-high probe (y+0.25 r 0.20), NO clamber — it goes around, never over
+      const cc=_stC.set(this.position.x,this.position.y+0.25,this.position.z);
+      resolveCollision(cc,0.20);
+      this.position.set(cc.x,cc.y-0.25,cc.z);
+      const gc=mapWorldJS(this.position.x,this.position.y+0.05,this.position.z);
+      if(gc>0.55) this.position.y-=6*dt;        // falling
+      else{ const sy=restOnSurface(this.position.x,this.position.y+0.5,this.position.z);
+        if(sy>this.position.y-0.7) this.position.y+=(sy-this.position.y)*Math.min(1,12*dt); }
+      return;
+    }
     // STEP-OVER split by faction (owner call 6): SOLDIERS probe a FEET sphere like the player
     // (cap ~0.46m — hip-high ruin walls / truck beds read as cover against them again, jump-only),
     // headY hands them the player's overhang guard at their head line. The UNDEAD keep the tall
@@ -7565,7 +7635,7 @@ class Zealot{
       if(o.state===0) o.state=1; o._cvg=ZAI.cvgT; }
   }
   reinforce(){
-    if(this.health<=0 && enemies.filter(e=>e.health>0).length>=P('maxEnemies')) { this.respawnT=10; return; }   // cap gates DEAD respawns only — resetLevel fills to maxEnemies exactly, so a live-count gate blocked EVERY valley >70m far-yank and nobody ever closed in
+    if(this.health<=0 && !this._critter && enemies.filter(e=>e.health>0&&!e._critter).length>=P('maxEnemies')) { this.respawnT=10; return; }   // cap gates DEAD respawns only — resetLevel fills to maxEnemies exactly, so a live-count gate blocked EVERY valley >70m far-yank and nobody ever closed in. Critters sit OUTSIDE the count both ways: they don't hold the line, and their own roster (seed count) is their cap
     const _poiLvl=activeLevel&&activeLevel.spawn&&activeLevel.spawn.pois;   // Area-1 (POI level): respawn AT the enemy's OWN spawn — no teleporting into a ring around the player. Open valley (no POIs): the endless horde still closes on you.
     let _rx,_rz;
     if(_poiLvl){ if(this._home){ this.startPos=this._home; this._home=null; } _rx=this.startPos.x; _rz=this.startPos.z;   // a gauntlet-stolen interior body comes back at its REAL spawn — _home undoes wakeUndead's startPos overwrite
@@ -7573,7 +7643,9 @@ class Zealot{
     else { const a=runRng()*Math.PI*2, r=45+runRng()*15; _rx=playerPos.x+Math.cos(a)*r; _rz=playerPos.z+Math.sin(a)*r; this.startPos=new Vec3(_rx,0,_rz); }
     const _gy=activeLevel ? levelGroundJS(_rx,_rz) : terrainHJS(_rx,_rz);   // valley has NO authored level → procedural terrain height (mirrors the constructor). levelGroundJS reads activeLevel.bounds and would NPE in the valley — that throw was aborting the whole enemy loop (frozen mid-air enemies).
     this.position.set(_rx, restOnSurface(_rx, _gy+2.5, _rz), _rz);
-    if(this._faction==='zombie'){                         // faction persists across respawn — undead come back undead (brute keeps its 800), no gear, no bomber roll
+    if(this._critter){                                    // a fresh grazer at its anchor — calm, empty-handed
+      this.health=30; this._cSt=0; this._cT=0; this._cP=0; this._cAx=_rx; this._cAz=_rz;
+    }else if(this._faction==='zombie'){                   // faction persists across respawn — undead come back undead (brute keeps its 800), no gear, no bomber roll
       this._believer=false; this._selfBoom=false;
       this.health=this._brute?800:100;
       this.tool=null; this.helm=this.plates=this.pack=null;
@@ -7644,7 +7716,8 @@ function spawnOutskirtsZombie(){
   const p=outskirtsSpawnPoint(); if(!p) return;
   const dz=enemies.find(e=>e.health<=0&&e._faction==='zombie'&&!e._brute&&_outOfBounds(e.position.x,e.position.z));   // reuse a downed shambler first — zero roster growth. Wake bait is ONLY a corpse already out past the perimeter (owner call): the interior arena is never thinned to feed the gauntlet; retired gauntlet bodies recycle first
   if(dz){ wakeUndead(dz,p[0],p[1]); return; }
-  if(enemies.length<RLIM.ENEMIES+OUTSK_MAX) enemies.push(new Zealot(p[0],p[1],'zombie'));   // else MINT on top of the (full, dormant-behind-you) arena roster — nearest-N upload + dormancy keep render + material band safe
+  let _rn=0; for(const e of enemies) if(!e._critter) _rn++;                     // the warren is not the arena roster — mint headroom ignores it
+  if(_rn<RLIM.ENEMIES+OUTSK_MAX) enemies.push(new Zealot(p[0],p[1],'zombie'));   // else MINT on top of the (full, dormant-behind-you) arena roster — nearest-N upload + dormancy keep render + material band safe
 }
 function updateOutskirts(dt){
   if(!inOutskirts()){
@@ -8084,6 +8157,22 @@ function seedLevelSpawns(L){
     for(const zz of ZZ) if(farOf(zz)) loops.push(zz);
     if(!loops.length) for(let i=0;i<POI.length;i++) if(hot.indexOf(i)<0) loops.push(POI[i].c);   // separation must never starve the horde — unfiltered non-hot POIs win over an empty list
     for(let n=0;n<N_ZOMB&&loops.length;n++){ const lc=loops[n%loops.length]; drop(lc[0],lc[1],14,5,'zombie'); }
+    // CRITTERS (P8) — CRIT.N grazing huddles seeded in the quiet in-between: off the drop, off the
+    // hot knots (30m), out of the haze (radAt<0.05 also fences the perimeter lip — _hazedPOIs set
+    // above). Neutral: nobody's hostile, outside every combatant count, capped by this seed alone.
+    for(let g=0;g<CRIT.N;g++){
+      for(let t=0;t<20;t++){
+        const x=bnd.x0+8+rng()*(bnd.x1-bnd.x0-16), z=bnd.z0+8+rng()*(bnd.z1-bnd.z0-16);
+        if(!offDrop(x,z)||radAt(x,z)>=0.05) continue;
+        if(!hot.every(hi=>!POI[hi]||Math.hypot(x-POI[hi].c[0],z-POI[hi].c[1])>=30)) continue;
+        if(levelGroundJS(x,z)>_yCap||levelSdfJS(x,1.0,z)<0.4) continue;
+        for(let n=0;n<CRIT.grpN;n++){ const a=rng()*6.2832, rr2=1+rng()*3;
+          let mx=x+Math.cos(a)*rr2, mz=z+Math.sin(a)*rr2;
+          if(levelSdfJS(mx,1.0,mz)<0.4){ mx=x; mz=z; }   // a member rolled into a prop — huddle at the clear center instead
+          enemies.push(new Zealot(mx,mz,'critter')); }
+        break;
+      }
+    }
   }else{
     for(const spec of (L.spawn.zealots||[])){
       const r=regionById(spec.region); if(!r) continue;
