@@ -922,7 +922,7 @@ uniform int   uExfilCount;                  // exfil smoke columns — authored 
 uniform vec4  uExfils[3];                   // xyz column base · w live — VISUAL ONLY, no JS twin
 uniform int   uEnemyCount;
 uniform vec3  enemyPos[${RLIM.ENEMIES}];
-uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates · +8 zombie · +16 brute · +32 charging) — bits strip HIGH->LOW, same order in map() and the material row
+uniform vec4  enemyData[${RLIM.ENEMIES}];    // x:yaw y:state+walk/2 z:muzzle w:hurt (+2 helm · +4 plates · +8 zombie · +16 brute · +32 charging · +64 radioactive · +128 critter) — bits strip HIGH->LOW, same order in map() and the material row
 uniform vec2  uEnemyEye;                     // x:cos(fov/2) y:vision-cone range
 
 #ifdef AUTHORED
@@ -1564,6 +1564,8 @@ vec2 map(vec3 p){
     float phi=float(i)*2.13;
     // D.w BITS — strip HIGH->LOW, SAME ORDER as the material row (one float, two in-shader reads: orders differ = bits misread)
     float w=D.w;
+    float isCr=step(128.0,w); w-=isCr*128.0;        // +128 critter (neutral fauna) — quadruped joint table below
+    w-=step(64.0,w)*64.0;                           // +64 radioactive is material-only
     float isCh=step(32.0,w);  w-=isCh*32.0;         // +32 charging — pose tell only, AI owns the flag
     float isBr=step(16.0,w);  w-=isBr*16.0;         // +16 brute (mini-boss) bit
     float isZ =step(8.0,w);   w-=isZ*8.0;           // +8 zombie-faction bit
@@ -1571,7 +1573,7 @@ vec2 map(vec3 p){
     float hasH=step(2.0,w);   w-=hasH*2.0;          // w == hurtFlash [0,1) -> flinch below
     float sham=isZ*(1.0-isBr);                      // rank undead shamble; the brute keeps its bulk pose
     // CLOCKS
-    float th=iTime*7.0+phi;
+    float th=iTime*7.0+phi+isCr*iTime*2.0;          // gait; the critter patters ~9Hz
     float s1=sin(th)*walk, cth=cos(th);
     float br=0.015*sin(iTime*1.4+phi);
     float ha=enHeadYaw(D, enemyPos[i], phi);
@@ -1607,43 +1609,58 @@ vec2 map(vec3 p){
     vec3 lgA2=lgB;                                  // shin roots at the knee
     float lgR1=0.085+isBr*0.03, lgR2=0.07+isBr*0.025;
     float kA=0.06, kB=0.05;
+    if(isCr>0.5){   // CRITTER: same prim slots, quadruped table (~0.5m neutral fauna)
+      skA=vec3(0.0,0.26+0.01*sin(iTime*2.0+phi),-0.18); skRa=0.115;   // bean body
+      skB=vec3(0.0,0.30,0.12);                          skRb=0.145;
+      toA=skB; toRa=0.09; toB=vec3(0.0,0.36,0.21);      toRb=0.06;    // neck taper
+      hdC=vec3(sin(ha)*0.03,0.40+br,cos(ha)*0.03+0.24); hdR=0.095;    // TWIN: critter head (enemyHeadPos + visor row)
+      dmA=vec3(0.0,0.30,-0.26); dmB=vec3(0.0,0.40+0.04*sin(iTime*3.0+phi),-0.42); dmR=0.032;  // tail wag
+      lgA=vec3(0.085,0.24,0.12);   lgB=vec3(0.10,0.02,0.12+sw*0.09);  // front pair (|x| serves L/R)
+      lgA2=vec3(0.085,0.24,-0.12); lgC=vec3(0.10,0.02,-0.12-sw*0.09); // back pair, anti-phase = trot
+      lgR1=0.030; lgR2=0.030; kA=0.04; kB=0.035;
+    }
     float d=smin(sdRoundCone(lp,skA,skB,skRa,skRb), sdRoundCone(lp,toA,toB,toRa,toRb), kA);
     d=smin(d, sdSphere(lp-hdC,hdR), kB);            // cowled neck / head bump
     d=min(d, sdCapsule(q,lgA,lgB,lgR1));
     d=min(d, sdCapsule(q,lgA2,lgC,lgR2));
     float tag=0.0;
-    // ARMS: two-segment, ONE code path — pose table by kind, aim rides the head-look
-    vec3 qa=rotY(lp-vec3(0.0,1.32,0.0), ha*aimK);
-    float swA=s1*(1.0-aimK), reachK=sham*step(1.5,st), paw=0.03*sin(th*0.5);
-    vec3 aSr=mix(vec3(0.245,0.06,0.02), vec3(0.24,0.06,-0.02), aimK);
-    vec3 aEr=mix(vec3(0.19,-0.16,0.10+0.05*swA), vec3(0.16,-0.04,0.14), aimK);
-    vec3 aHr=mix(vec3(0.06,-0.20,0.24+0.08*swA), vec3(0.06,-0.02,0.26), aimK);
-    vec3 aSl=mix(vec3(-0.245,0.06,0.02), vec3(-0.22,0.04,-0.02), aimK);
-    vec3 aEl=mix(vec3(-0.20,-0.18,0.08-0.05*swA), vec3(-0.12,-0.10,0.10), aimK);
-    vec3 aHl=mix(vec3(-0.08,-0.22,0.20-0.08*swA), vec3(-0.02,-0.04,0.22), aimK);
-    if(isZ>0.5){                                    // undead: dangle -> reach (converge on alarm)
-      aSr=vec3(0.21,0.02,0.04);  aEr=mix(vec3(0.23,-0.28,0.06+0.05*s1),vec3(0.17,-0.06,0.30),reachK);  aHr=mix(vec3(0.21,-0.52,0.10+0.09*s1),vec3(0.13,-0.08+paw,0.55),reachK);
-      aSl=vec3(-0.21,0.02,0.04); aEl=mix(vec3(-0.23,-0.28,0.06-0.05*s1),vec3(-0.17,-0.06,0.30),reachK); aHl=mix(vec3(-0.21,-0.52,0.10-0.09*s1),vec3(-0.13,-0.08-paw,0.55),reachK);
-    }
-    if(isBr>0.5){                                   // knuckle-drag hulk; charge plows the hands fwd
-      aSr=vec3(0.25,0.04,0.02);  aEr=vec3(0.25,-0.34,0.08+isCh*0.10);  aHr=vec3(0.22,-0.80,0.12+0.08*s1+isCh*0.16);
-      aSl=vec3(-0.25,0.04,0.02); aEl=vec3(-0.25,-0.34,0.08+isCh*0.10); aHl=vec3(-0.22,-0.80,0.12-0.08*s1+isCh*0.16);
-    }
-    float rUp=0.07+isBr*0.02, rFo=0.06+isBr*0.015, kSh=0.05+0.04*isBr;
-    d=smin(d, sdCapsule(qa,aSr,aEr,rUp), kSh);      // shoulder mass blends in (brute bulk)
-    d=smin(d, sdCapsule(qa,aSl,aEl,rUp), kSh);
-    d=min(d, sdCapsule(qa,aEr,aHr,rFo));
-    d=min(d, sdCapsule(qa,aEl,aHl,rFo));
-    if(isZ<0.5){                                    // gun: cross-carry -> shouldered; muzzle tip ~(0.05,1.30,0.54) — tryShoot origin law
-      d=min(d, sdBox(qa-mix(vec3(-0.01,-0.22,0.22),vec3(0.05,-0.02,0.30),aimK),
-                     mix(vec3(0.16,0.04,0.05),vec3(0.035,0.045,0.24),aimK)));
+    if(isCr<0.5){
+      // ARMS: two-segment, ONE code path — pose table by kind, aim rides the head-look
+      vec3 qa=rotY(lp-vec3(0.0,1.32,0.0), ha*aimK);
+      float swA=s1*(1.0-aimK), reachK=sham*step(1.5,st), paw=0.03*sin(th*0.5);
+      vec3 aSr=mix(vec3(0.245,0.06,0.02), vec3(0.24,0.06,-0.02), aimK);
+      vec3 aEr=mix(vec3(0.19,-0.16,0.10+0.05*swA), vec3(0.16,-0.04,0.14), aimK);
+      vec3 aHr=mix(vec3(0.06,-0.20,0.24+0.08*swA), vec3(0.06,-0.02,0.26), aimK);
+      vec3 aSl=mix(vec3(-0.245,0.06,0.02), vec3(-0.22,0.04,-0.02), aimK);
+      vec3 aEl=mix(vec3(-0.20,-0.18,0.08-0.05*swA), vec3(-0.12,-0.10,0.10), aimK);
+      vec3 aHl=mix(vec3(-0.08,-0.22,0.20-0.08*swA), vec3(-0.02,-0.04,0.22), aimK);
+      if(isZ>0.5){                                  // undead: dangle -> reach (converge on alarm)
+        aSr=vec3(0.21,0.02,0.04);  aEr=mix(vec3(0.23,-0.28,0.06+0.05*s1),vec3(0.17,-0.06,0.30),reachK);  aHr=mix(vec3(0.21,-0.52,0.10+0.09*s1),vec3(0.13,-0.08+paw,0.55),reachK);
+        aSl=vec3(-0.21,0.02,0.04); aEl=mix(vec3(-0.23,-0.28,0.06-0.05*s1),vec3(-0.17,-0.06,0.30),reachK); aHl=mix(vec3(-0.21,-0.52,0.10-0.09*s1),vec3(-0.13,-0.08-paw,0.55),reachK);
+      }
+      if(isBr>0.5){                                 // knuckle-drag hulk; charge plows the hands fwd
+        aSr=vec3(0.25,0.04,0.02);  aEr=vec3(0.25,-0.34,0.08+isCh*0.10);  aHr=vec3(0.22,-0.80,0.12+0.08*s1+isCh*0.16);
+        aSl=vec3(-0.25,0.04,0.02); aEl=vec3(-0.25,-0.34,0.08+isCh*0.10); aHl=vec3(-0.22,-0.80,0.12-0.08*s1+isCh*0.16);
+      }
+      float rUp=0.07+isBr*0.02, rFo=0.06+isBr*0.015, kSh=0.05+0.04*isBr;
+      d=smin(d, sdCapsule(qa,aSr,aEr,rUp), kSh);    // shoulder mass blends in (brute bulk)
+      d=smin(d, sdCapsule(qa,aSl,aEl,rUp), kSh);
+      d=min(d, sdCapsule(qa,aEr,aHr,rFo));
+      d=min(d, sdCapsule(qa,aEl,aHl,rFo));
+      if(isZ<0.5){                                  // gun: cross-carry -> shouldered; muzzle tip ~(0.05,1.30,0.54) — tryShoot origin law
+        d=min(d, sdBox(qa-mix(vec3(-0.01,-0.22,0.22),vec3(0.05,-0.02,0.30),aimK),
+                       mix(vec3(0.16,0.04,0.05),vec3(0.035,0.045,0.24),aimK)));
+      }
     }
     d-=isBr*0.12;   // brute heft: inflate the body; head CENTER moves only with its JS twin (enemyHeadR 0.30 / enemyBodyR 0.44 stay valid)
-    float dm=sdCapsule(lp,dmA,dmB,dmR);             // hood / helm / nape
-    if(dm<d){ d=dm; tag=0.375*hasH; }               // only the HELM takes the steel tag; hood/nape read as cloth/flesh
-    if(hasP>0.5){
-      float pl=sdBox(lp-vec3(0.0,1.22,0.16+shZ*0.5), vec3(0.17,0.15,0.045));
-      if(pl<d){ d=pl; tag=0.25; }
+    float dm=sdCapsule(lp,dmA,dmB,dmR);             // hood / helm / nape / critter tail — ONE compiled prim serves both branches
+    if(isCr>0.5) d=min(d,dm);                       // tail reads as flesh (tag 0)
+    else{
+      if(dm<d){ d=dm; tag=0.375*hasH; }             // only the HELM takes the steel tag; hood/nape read as cloth/flesh
+      if(hasP>0.5){
+        float pl=sdBox(lp-vec3(0.0,1.22,0.16+shZ*0.5), vec3(0.17,0.15,0.045));
+        if(pl<d){ d=pl; tag=0.25; }
+      }
     }
     if(d < res.x) res = vec2(d, 40.0 + float(i) + tag);
   }
@@ -1935,6 +1952,8 @@ void main(){
       float st=floor(D.y+0.01), part=fract(m);
       // D.w BITS — strip HIGH->LOW, SAME ORDER as map() (one float, two in-shader reads: orders differ = bits misread)
       float w=D.w;
+      float isCr=step(128.0,w); w-=isCr*128.0;                      // +128 critter
+      float isRad=step(64.0,w); w-=isRad*64.0;                      // +64 radioactive (fed on the glow)
       float isCh=step(32.0,w);  w-=isCh*32.0;                       // +32 charging
       float isBr=step(16.0,w);  w-=isBr*16.0;                       // +16 brute bit
       float isZ =step(8.0,w);   w-=isZ*8.0;                         // +8 zombie-faction bit
@@ -1946,23 +1965,28 @@ void main(){
       if(part>0.31)            matCol=vec3(0.30,0.31,0.33);
       if(isZ>0.5)  matCol=mix(matCol, vec3(0.16,0.55,0.18), 0.7);   // zombie: green undead
       if(isBr>0.5) matCol=mix(matCol, vec3(0.09,0.32,0.11), 0.85);  // brute: darker, ranker green (distinct mini-boss)
+      if(isCr>0.5) matCol=vec3(0.55,0.52,0.44)*(0.80+0.40*vnoise(vec2(p.x+p.z,p.y)*7.0));   // pale, mottled fauna
       matCol+=vec3(0.10,0.02,0.0)*isCh;                             // charge heat
       matCol+=vec3(0.9,0.1,0.05)*w;                                 // hurt flash (still applies -> undead recoil)
       emiss=D.z*0.7;
-      // VISOR — hc TWIN of map() + enemyHeadPos() in JS: world frame, the kind offsets rotate by D.x
+      if(isRad>0.5){ matCol=mix(matCol, vec3(0.35,0.85,0.30), 0.45);   // fed on the glow: hot critters + zombies that ate one
+                     emiss=max(emiss, 0.22+0.10*sin(iTime*2.2+phi)); }
+      // VISOR/EYES — hc TWIN of map() + enemyHeadPos() in JS: world frame, the kind offsets rotate by D.x
       float ha=enHeadYaw(D, enemyPos[ei], phi), hy=D.x+ha;
       float br=0.015*sin(iTime*1.4+phi);
       float sham=isZ*(1.0-isBr);
       float drop=sham*0.14+isBr*0.10;
-      float hFwd=sham*0.16+isBr*0.12+isCh*0.08-w*0.05;
+      float hFwd=mix(sham*0.16+isBr*0.12+isCh*0.08-w*0.05, 0.24, isCr);
       float lollX=sham*0.05*sin(iTime*0.9+phi);
-      vec3 hc=enemyPos[ei]+vec3(sin(hy)*0.07+cos(D.x)*lollX+sin(D.x)*hFwd, 1.63+br-step(1.5,st)*0.04-drop, cos(hy)*0.07-sin(D.x)*lollX+cos(D.x)*hFwd);
+      float hOffR=mix(0.07,0.03,isCr);
+      float hh=mix(1.63+br-step(1.5,st)*0.04-drop, 0.40+br, isCr);
+      vec3 hc=enemyPos[ei]+vec3(sin(hy)*hOffR+cos(D.x)*lollX+sin(D.x)*hFwd, hh, cos(hy)*hOffR-sin(D.x)*lollX+cos(D.x)*hFwd);
       vec3 hl=rotY(p-hc, hy);
-      if(length(hl)<0.22 && hl.z>0.08 && abs(hl.y-0.015)<0.020){
-        matCol = st<0.5? vec3(0.10,0.22,0.20)
+      if(length(hl)<mix(0.22,0.11,isCr) && hl.z>mix(0.08,0.05,isCr) && abs(hl.y-mix(0.015,-0.01,isCr))<mix(0.020,0.014,isCr)){
+        matCol = st<0.5? mix(vec3(0.10,0.22,0.20),vec3(0.05,0.05,0.06),isCr)   // critter: beady eyes, never a threat lamp
                : st<1.5? vec3(1.0,0.62,0.12)*(0.75+0.25*sin(iTime*7.0))
                :         vec3(1.0,0.10,0.06)*1.3;
-        emiss=max(emiss, st<0.5?0.55:1.2);
+        emiss=max(emiss, st<0.5?mix(0.55,0.10,isCr):1.2);
       }
     }
     else{
@@ -5854,7 +5878,7 @@ function runContinuousBeams(dt){
           const cut=ts<gl-0.05;
           if(lineBite) for(const en of enemies){
             if(en.health<=0||en._dormant||bit.has(en)) continue;
-            const rx=en.position.x-P.x, ry=(en.position.y+0.95)-P.y, rz=en.position.z-P.z;
+            const rx=en.position.x-P.x, ry=(en.position.y+(en._critter?0.26:0.95))-P.y, rz=en.position.z-P.z;
             const tt=rx*dx+ry*dy+rz*dz;
             if(tt>0.05&&tt<ts){
               const d=enemyBodyDist(en,P.x+dx*tt,P.y+dy*tt,P.z+dz*tt);
@@ -5888,7 +5912,7 @@ function runContinuousBeams(dt){
       let hitEn=null, hitHead=false;
       if(sh.kind!=='wave'&&!pts) for(const en of enemies){
         if(en.health<=0||en._dormant) continue;
-        const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
+        const rx=en.position.x-o.x, ry=(en.position.y+(en._critter?0.26:0.95))-o.y, rz=en.position.z-o.z;
         const tt=rx*dir.x+ry*dir.y+rz*dir.z;
         if(tt>0.3&&tt<t){
           const d=enemyBodyDist(en,o.x+dir.x*tt,o.y+dir.y*tt,o.z+dir.z*tt);
@@ -6047,7 +6071,7 @@ function runContinuousBeams(dt){
               let sEn=null, sHead=false;
               for(const en of enemies){
                 if(en.health<=0||en._dormant) continue;
-                const rx=en.position.x-sO.x, ry=(en.position.y+0.95)-sO.y, rz=en.position.z-sO.z;
+                const rx=en.position.x-sO.x, ry=(en.position.y+(en._critter?0.26:0.95))-sO.y, rz=en.position.z-sO.z;
                 const tt=rx*ds.x+ry*ds.y+rz*ds.z;
                 if(tt>0.05&&tt<ts){
                   const d=enemyBodyDist(en,sO.x+ds.x*tt,sO.y+ds.y*tt,sO.z+ds.z*tt);
@@ -6108,7 +6132,7 @@ function fireHitscan(owner,origin,dir,shot,res,dt,doRelay){
   const hits=[];
   for(const en of enemies){
     if(en.health<=0||en._dormant) continue;
-    const rx=en.position.x-o.x, ry=(en.position.y+0.95)-o.y, rz=en.position.z-o.z;
+    const rx=en.position.x-o.x, ry=(en.position.y+(en._critter?0.26:0.95))-o.y, rz=en.position.z-o.z;
     const tt=rx*f.x+ry*f.y+rz*f.z;
     if(tt>0.3&&tt<t){
       const d=enemyBodyDist(en,o.x+f.x*tt,o.y+f.y*tt,o.z+f.z*tt);
@@ -6238,6 +6262,10 @@ function enemyHeadPos(en,out){
   const hy=en.yaw+enemyHeadLook(en);
   const phi=(en._slot||0)*2.13;
   const br=0.015*Math.sin(gameTime*1.4+phi);
+  if(en._critter) return out.set(                        // TWIN: critter head (map() hdC + visor row)
+    en.position.x+Math.sin(hy)*0.03+Math.sin(en.yaw)*0.24,
+    en.position.y+0.40+br,
+    en.position.z+Math.cos(hy)*0.03+Math.cos(en.yaw)*0.24);
   const sham=(en._faction==='zombie'&&!en._brute)?1:0;   // TWIN of the map()/material hc: slump/loll/charge offsets — one law, three sites
   const drop=sham*0.14+(en._brute?0.10:0);
   const hFwd=sham*0.16+(en._brute?0.12:0)+(en._charging?0.08:0)-0.05*en.hurtFlash;
@@ -6246,15 +6274,22 @@ function enemyHeadPos(en,out){
                  en.position.y+1.63+br-(en.state===2?0.04:0)-drop,
                  en.position.z+Math.cos(hy)*0.07-Math.sin(en.yaw)*lollX+Math.cos(en.yaw)*hFwd);
 }
-const enemyHeadR=en=>en._brute?0.30:0.24;             // KNOWN_BUGS #4: GLSL inflates the whole brute d-=0.12 (drawn head ~0.285) — the hit sphere must cover the drawn flesh or grazes pass through it; rank-and-file keep 0.24
+const enemyHeadR=en=>en._critter?0.12:en._brute?0.30:0.24;   // KNOWN_BUGS #4: GLSL inflates the whole brute d-=0.12 (drawn head ~0.285) — the hit sphere must cover the drawn flesh or grazes pass through it; rank-and-file keep 0.24; critter drawn 0.095+bob stays under 0.12
 // P5 HONEST BODY (spec F prerequisite): hits test ONE vertical capsule hugging the DRAWN body —
-// axis y+0.20..y+1.40, r 0.32 (GLSL body: torso capsule r.205 spans .92-1.40, hip box corner ~.26,
-// shoulder flesh ~.315; the brute rides its d-=0.12 inflate → .44). Replaces the old y+0.95 r 0.55
-// ball that paid hits ~25cm off visible flesh. Heads keep their own sphere (enemyHeadR).
-const enemyBodyR=en=>en._brute?0.44:0.32;
+// axis y+0.20..y+1.40, r 0.32 (GLSL joint table: zombie slump shZ .163 + torso r .15 = .313; brute
+// charge shZ .103 + r .22 + d-=0.12 inflate = .443 → .44 — the leans are CAPPED by these radii).
+// Limbs/robe hem/tail poke past it: the accepted class (old feet already sat .485). Replaces the
+// old y+0.95 r 0.55 ball that paid hits ~25cm off visible flesh. Heads keep their own sphere
+// (enemyHeadR); the critter tests a HORIZONTAL spine capsule instead (below).
+const enemyBodyR=en=>en._critter?0.19:en._brute?0.44:0.32;   // critter drawn body r<=0.145+smin bulge ~0.16 — covered
 function enemyBodyDist(en,px,py,pz){                  // point → capsule-axis distance (ray sites hand their foot, projectiles their pos)
-  const cy=Math.min(Math.max(py,en.position.y+0.20),en.position.y+1.40);
-  return Math.hypot(px-en.position.x,py-cy,pz-en.position.z);
+  if(en._critter){                                    // TWIN: critter spine runs HORIZONTAL along facing — tail -0.17 .. snout 0.22 on the yaw axis, y+0.28
+    const sy=Math.sin(en.yaw), cy=Math.cos(en.yaw);
+    const t=Math.max(-0.17,Math.min(0.22,(px-en.position.x)*sy+(pz-en.position.z)*cy));
+    return Math.hypot(px-(en.position.x+sy*t), py-(en.position.y+0.28), pz-(en.position.z+cy*t));
+  }
+  const cy2=Math.min(Math.max(py,en.position.y+0.20),en.position.y+1.40);
+  return Math.hypot(px-en.position.x,py-cy2,pz-en.position.z);
 }
 function crackHelm(en){
   if(!en.helm) return;
@@ -10437,7 +10472,7 @@ function frame(){
     gl.uniform3f(U.enemyPos[ei],en.position.x,en.position.y,en.position.z);
     gl.uniform4f(U.enemyData[ei],en.yaw,en.state+en._walk*0.5,en.muzzle,
                  en.hurtFlash+(en.helm?2:0)+(en.plates?4:0)+(en._faction==='zombie'?8:0)+(en._brute?16:0)
-                 +(en._charging?32:0));   // +32 charging — pose tell; AI owns the flag (unset fields read 0)
+                 +(en._charging?32:0)+(en._radioactive?64:0)+(en._critter?128:0));   // +32/64/128 charging/radioactive/critter — render tells; AI owns the flags (unset fields read 0)
     ei++;
   }
   gl.uniform1i(U.uEnemyCount,ei);
