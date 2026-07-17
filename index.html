@@ -7084,7 +7084,7 @@ class Zealot{
     if(this.health<=0) this.die();
   }
   die(){
-    if(this._critter){                                  // P8 CRITTER DOWN: no kill credit, no loot — it just drops clean (gibs stay a future JS pass; the body vanishes like every corpse)
+    if(this._critter){                                  // P8 CRITTER DOWN: no kill credit, no loot — it drops clean (the body vanishes like every corpse; the gibs below are what's left)
       playSound('hit',this.position);
       addDecal(new Vec3(this.position.x,this.position.y+0.03,this.position.z),new Vec3(0,1,0),0.6);
       spawnGibs(this);                                  // small pale bits — the pop was a body
