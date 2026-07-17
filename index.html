@@ -10919,7 +10919,8 @@ function frame(){
   let ei=0;
   _liveEn.length=0;
   for(const e of enemies){ if(e.health<=0) continue;
-    e._d2=(e.position.x-playerPos.x)**2+(e.position.z-playerPos.z)**2-(e._dormant?0:25);
+    e._d2=(e.position.x-playerPos.x)**2+(e.position.z-playerPos.z)**2-(e._dormant?0:25)
+         +(e._critter?1e9:0);   // fauna YIELDS: critters sit outside the combatant caps, so they take render slots only after EVERY fighter has one — 20 seeds + 6 grazers must never ghost a combatant mid-fight (ambience never starves gameplay)
     _liveEn.push(e); }
   _liveEn.sort((a,b)=>a._d2-b._d2);
   for(const en of _liveEn){
