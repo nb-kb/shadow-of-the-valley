@@ -7563,6 +7563,9 @@ class Zealot{
     this.settle(dt);
     if(this.shootCooldown>0) this.shootCooldown-=dt;
   }
+  critRim(x,z){                                         // hazard fence: an authored level fences on ITS bounds (the seeding inB margin) — the |z|>46 canyon rim is OPEN-VALLEY law only (area1 huddles roam z +/-192; the literal there killed drift and spun every bolt)
+    const b=activeLevel&&activeLevel.bounds;
+    return b ? (x<b.x0+6||x>b.x1-6||z<b.z0+6||z>b.z1-6) : Math.abs(z)>46; }
   critFlee(tx,tz,rip){                                  // CRITTER BOLT: lock a bearing dead away from (tx,tz); rip=the whole huddle within 8m startles with it
     const dx=this.position.x-tx, dz=this.position.z-tz, l=Math.hypot(dx,dz)||1;
     this._cFx=dx/l; this._cFz=dz/l; this._cSt=1; this._cT=CRIT.fleeT; this._cPrT=0;   // probe clock zeroed — the first flee frame hazard-checks the lane at once
@@ -7575,7 +7578,7 @@ class Zealot{
       this._cT-=dt;
       if((this._cPrT-=dt)<=0){ this._cPrT=0.4;           // probe one lunge out: gas (radAt also fences the perimeter lip), wall, canyon rim → swerve
         const hx=this.position.x+this._cFx*3, hz=this.position.z+this._cFz*3;
-        if(radAt(hx,hz)>0.2||mapWorldJS(hx,this.position.y+0.3,hz)<0.5||Math.abs(hz)>46){
+        if(radAt(hx,hz)>0.2||mapWorldJS(hx,this.position.y+0.3,hz)<0.5||this.critRim(hx,hz)){
           const a=Math.atan2(this._cFx,this._cFz)+(runRng()<0.5?1.2:-1.2);
           this._cFx=Math.sin(a); this._cFz=Math.cos(a);
         } }
@@ -7599,7 +7602,7 @@ class Zealot{
           let hx=this._cAx+Math.sin(this._cDrA)*1.2, hz=this._cAz+Math.cos(this._cDrA)*1.2, fd=1e9, fo=null;
           for(const o of enemies){ if(o!==this&&o._critter&&o.health>0){ const dd=(o._cAx-this._cAx)**2+(o._cAz-this._cAz)**2; if(dd<fd){ fd=dd; fo=o; } } }
           if(fo&&fd>36){ hx=this._cAx+(fo._cAx-this._cAx)*0.25; hz=this._cAz+(fo._cAz-this._cAz)*0.25; }
-          if(radAt(hx,hz)<0.05&&Math.abs(hz)<46&&mapWorldJS(hx,this.position.y+0.3,hz)>=0.5){ this._cAx=hx; this._cAz=hz; }
+          if(radAt(hx,hz)<0.05&&!this.critRim(hx,hz)&&mapWorldJS(hx,this.position.y+0.3,hz)>=0.5){ this._cAx=hx; this._cAz=hz; }
           else this._cDrA+=Math.PI;                      // fenced (gas lip / wall / rim) — swing the creep the other way next pick
           if(runRng()<0.35) this._cP=1;                  // a nibble — head down, feet still
           else{ this._cP=0; const a=runRng()*6.2832, r=runRng()*6;
