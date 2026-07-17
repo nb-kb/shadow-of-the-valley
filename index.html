@@ -6947,6 +6947,7 @@ class Zealot{
     this._chgSt=0; this._chgT=0; this._chgX=0; this._chgZ=0; this._chgCd=0; this._charging=false;   // BRUTE CHARGE: 0 idle · 1 wind-up · 2 sprint, locked bearing + re-arm clock; _charging is the +32 pose bit — harmless on every other kind
     this._ringI=-1; this._rplT=-1; this._rplP=0; this._moanT=HORDE.moanT0; this._ringN=0;   // HORDE: sunflower orbit slot · ripple fuse/pulse · brute moan clock + slot counter
     this._feedT=0; this._radioactive=false; this._huntC=null; this._huntT=0;   // P8 FOOD CHAIN: zombie feed channel + the +64 glow bit + cached hunt target/rescan throttle
+    this._idleT=0; this._idleM=0; this._gibX=0; this._gibZ=0; this._gibGo=0;   // P8 IDLE HABITS: re-pick clock · 0 drift / 1 feed / 2 twitch-dash · a lingering gib pile pulls the feed to it
     this._cSt=0; this._cT=0; this._cP=0; this._cPrT=0; this._cScanT=runRng()*0.25;   // CRITTER: 0 graze · 1 flee (this.state STAYS 0 — render law), re-pick/probe clocks, spawn-staggered threat scan (harmless on every other kind)
     this._cAx=x; this._cAz=z; this._cFx=0; this._cFz=1; this._cGx=x; this._cGz=z;    //   graze anchor · flee bearing · graze goal
     this.targetPoint=this.newPatrolTarget();
@@ -7529,11 +7530,25 @@ class Zealot{
             if(Math.hypot(hc.position.x-this.position.x,hc.position.z-this.position.z)<1.2&&!this._dormant){ hc.hurt(400,this); this._huntC=null; }   // the bite IS the kill — die() hands the meal back via _lastBy (never from the void)
           }
           else{ this._huntC=null;
+          this._idleT-=dt;                                 // IDLE HABITS (P8): the graveyard breathes — drift, feed, or a twitch-dash, re-rolled on a slow clock
+          if(this._idleT<=0){ this._idleT=6+runRng()*6;
+            const r=runRng(); this._idleM=r<0.62?0:(r<0.86?1:2); this._gibGo=0;
+            if(this._idleM===1){                           // FEED pick: a lingering gib pile within 12m (and inside the leash) pulls the mouth to it — else it worries the bare ground
+              let gd2=144;
+              for(const w of worldItems){ if(!(w.item&&w.item.gib)||w.held) continue;
+                const dd2=(w.pos.x-this.position.x)**2+(w.pos.z-this.position.z)**2;
+                if(dd2<gd2&&Math.hypot(w.pos.x-this.startPos.x,w.pos.z-this.startPos.z)<32){ gd2=dd2; this._gibX=w.pos.x; this._gibZ=w.pos.z; this._gibGo=1; } }
+              if(runRng()<0.5) playSound('moan',this.position); } }
+          if(this._idleM===1){                             // FEED: head down, feet still — stillness is the tell; a pile gets walked to first (reaped mid-walk it mouths the stain — the decal is there)
+            if(this._gibGo&&Math.hypot(this._gibX-this.position.x,this._gibZ-this.position.z)>1.0){
+              moveTo=(this._mv||(this._mv=new Vec3())).set(this._gibX,0,this._gibZ); faceTo=moveTo; speed*=0.5; }
+            else{ this._gibGo=0; this.yaw+=Math.sin(gameTime*0.7+this.startPos.x)*dt*0.4; }
+          }else{
           this.patrolDir += Math.sin(gameTime*0.5+this.startPos.x*1.3)*dt*0.9;   // no brute, no prey: a lazy loop drift, LEASHED near the spawn zone
           const fx=Math.sin(this.patrolDir), fz=Math.cos(this.patrolDir);
           let zx=this.position.x+fx*3, zz=this.position.z+fz*3;
           if(Math.hypot(this.position.x-this.startPos.x,this.position.z-this.startPos.z)>30){ zx=this.startPos.x; zz=this.startPos.z; }   // hold the spawn zone (undead still rally to a brute within 80m, above)
-          moveTo=(this._mv||(this._mv=new Vec3())).set(zx,0,zz); faceTo=moveTo; speed*=0.5; }   // per-instance _mv reuse
+          moveTo=(this._mv||(this._mv=new Vec3())).set(zx,0,zz); faceTo=moveTo; speed*=(this._idleM===2?0.8:0.5); } }   // per-instance _mv reuse; twitch-dash = 1.6x the drift
         }
       }
     }
@@ -7738,7 +7753,7 @@ class Zealot{
     this.inCover=false; this.alarmRole=null; this.coverPoint=null; this._coverT=0; this._coveringFire=0;
     this._brk=null; this._brkT=0; this._morT=0; this._morCd=0;   // a fresh body carries no broken nerve
     this._chgSt=0; this._chgT=0; this._chgCd=0; this._charging=false;   // charge state dies with the body (reviveBrute reinforces in place)
-    this._ringI=-1; this._rplT=-1; this._rplP=0; this._feedT=0; this._radioactive=false; this._huntC=null;   // fresh body, fresh ring slot — no fuse, meal, or glow survives the grave
+    this._ringI=-1; this._rplT=-1; this._rplP=0; this._feedT=0; this._radioactive=false; this._huntC=null; this._idleT=0; this._idleM=0; this._gibGo=0;   // fresh body, fresh ring slot — no fuse, meal, glow, or half-eaten pile survives the grave
     this.cmb=0; this._duckT=0; this._pkT=0; this._healT=0; this._healCd=0; this._repoT=0; this._cvg=0; this._chatT=0; this._mate=null;   // P8 combat sub-state dies with the body — no ghost of a chat either
     this.patrolDir=runRng()*6.28; this.dwellT=0; this._roam=null;   // fresh roam goal on respawn (brute re-picks from its new drop point)
     this._helmT=0; this.reloadT=0; this.shootCooldown=1+runRng();
@@ -7788,7 +7803,7 @@ function wakeUndead(en,x,z){                       // recycle a DOWNED undead bo
   en.health=100; en.respawnT=0; en.stagger=0; en._dormant=false;
   en.detection=0; en.state=0; en.investigate=null; en.target=null;
   en.patrolDir=runRng()*6.28; en.dwellT=0; en._roam=null;
-  en._ringI=-1; en._rplT=-1; en._rplP=0; en._feedT=0; en._radioactive=false; en._huntC=null;   // gauntlet body re-queues at the wheel — no meal or glow rides along
+  en._ringI=-1; en._rplT=-1; en._rplP=0; en._feedT=0; en._radioactive=false; en._huntC=null; en._idleT=0; en._idleM=0; en._gibGo=0;   // gauntlet body re-queues at the wheel — no meal, glow, or idle habit rides along
   en.status.burn=0; en.status.bleedT=0; en.status.bleedN=0;
 }
 function spawnOutskirtsZombie(){
