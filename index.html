@@ -7894,6 +7894,65 @@ function updateRadMotes(dt){
 }
 
 // ============================================================
+// FIREFLIES (P3 dressing) — warm night air where the gas ISN'T
+// ============================================================
+// A pool of wanderers over the valley grass strip / along area-1's treelines.
+// Each frame the nearest <=6 mid-pulse become ONE-FRAME emissive dots on the
+// tracer seam: flash-tagged (stale next frame — flashHeadroom never counts
+// them), pushed at the TAIL after the decay sweep (projectiles + gameplay
+// beams always outrank them at upload), and never past slot 9 — slots 10-11
+// stay gameplay-only (tracerCol[10] is the glue globs' row). Warm=alive vs
+// green=dose is the semiotics: a fly that drifts into the gas DIES, so the
+// dark line marks the field boundary at night from 30m out. The brightest
+// fly grounds <=1 dyn glow at 0.35 — bottom of the sort beside the rad-mote
+// system's 2: any muzzle/lamp/blast evicts the lot. Zero GLSL.
+const FLIES=[]; const FLY_N=24, FLY_VIS=6;
+let _flyLvl=null,_flyTrees=null,_flyScan=0;
+function updateFireflies(dt){
+  for(let i=beamSegs.length-1;i>=0;i--) if(beamSegs[i].mote) beamSegs.splice(i,1);   // own dots never live 2 frames (the ttl+0.001 carryover would double-occupy)
+  const nightAmt=clamp((0.22-dayNight.k)/0.10,0,1);                    // wakes through late dusk, gone by first light
+  if(gameState!=='play'||nightAmt<=0){ FLIES.length=0; return; }
+  if(activeLevel!==_flyLvl){ _flyLvl=activeLevel; FLIES.length=0;
+    _flyTrees=activeLevel?activeLevel.regions.filter(r=>r.kind===LVL.KIND.TREES):null; }   // valley: no trees — the open grass carries them
+  if(_flyTrees&&!_flyTrees.length) return;                             // an authored level without a treeline keeps dark air
+  const t=gameTime;
+  if(FLIES.length<FLY_N){                                              // reseed <=1/frame, <=6 tries: dark CLEAN air on a 6-24m ring
+    for(let k=0;k<6;k++){
+      const a=runRng()*6.2832, r=6+runRng()*18;
+      const x=playerPos.x+Math.sin(a)*r, z=playerPos.z+Math.cos(a)*r;
+      if(radAt(x,z)>=0.05) continue;                                   // never seed in the gas — green drifting points are the dose's language
+      if(_flyTrees){ let ok=false;
+        for(const g of _flyTrees){ const b=g.box; if(x>b[0]-4&&x<b[2]+4&&z>b[1]-4&&z<b[3]+4){ ok=true; break; } }
+        if(!ok) continue; }
+      else if(Math.abs(z)>=50) continue;                               // the endless valley's open floor strip
+      const ay=restOnSurface(x,playerPos.y+2,z), y=ay+0.3+runRng()*1.3;
+      if(mapWorldJS(x,y,z)>0.25){ FLIES.push({x,y,z,ay,ph:runRng()*6.2832,_d2:0}); break; }
+    }
+  }
+  for(let i=FLIES.length-1;i>=0;i--){ const m=FLIES[i];
+    m.x+=Math.sin(t*0.43+m.ph*5.1)*0.9*dt; m.z+=Math.cos(t*0.37+m.ph*4.2)*0.9*dt;   // lazy wander
+    m.y+=Math.sin(t*0.31+m.ph*3.3)*0.5*dt;
+    if(m.y<m.ay+0.3) m.y=m.ay+0.3; else if(m.y>m.ay+1.6) m.y=m.ay+1.6;              // the low lantern band
+    const dx=m.x-playerPos.x, dz=m.z-playerPos.z; m._d2=dx*dx+dz*dz;
+    if(m._d2>900) FLIES.splice(i,1);                                   // strayed past 30m — recycle
+  }
+  if(FLIES.length){ _flyScan=(_flyScan+1)%FLIES.length;                // bounded field check: ONE fly/frame — drift into the gas and die
+    const m=FLIES[_flyScan]; if(radAt(m.x,m.z)>0.3) FLIES.splice(_flyScan,1); }
+  FLIES.sort((a,b)=>a._d2-b._d2);
+  let used=projectiles.length+beamSegs.length, pushed=0, gm=null;      // post-sweep occupancy: never fill past slot 9
+  for(let i=0;i<FLIES.length&&used+pushed<10&&pushed<FLY_VIS;i++){ const m=FLIES[i];
+    const bl=Math.max(0,Math.sin(t*1.9+m.ph*6.28))**3*nightAmt;
+    if(bl<=0.08) continue;                                             // ~35% duty cycle — a dark fly holds no slot
+    const s=0.25+1.05*bl;
+    beamSegs.push({a:new Vec3(m.x,m.y,m.z),b:new Vec3(m.x,m.y+0.02,m.z),   // +0.02y: a zero-length seg NaNs sdCapsule
+                   col:[1.0*s,0.75*s,0.28*s],ttl:dt+0.001,flash:lastT,mote:true,r:0.018});
+    pushed++;
+    if(!gm&&bl>0.5) gm=m;                                              // nearest mid-flash fly
+  }
+  if(gm) addDyn(gm.x,gm.y,gm.z,[0.55,0.75,0.22],0.35,0.05);            // grounds a faint warm pool
+}
+
+// ============================================================
 // LOOT · GATE · RUN FLOW
 // ============================================================
 // (ground scatter retired in v21l — the world's loot lives in crates now)
@@ -10624,6 +10683,7 @@ function frame(){
     for(let i=noisePings.length-1;i>=0;i--){ noisePings[i].ttl-=dt; if(noisePings[i].ttl<=0) noisePings.splice(i,1); }
     for(let i=dynLights.length-1;i>=0;i--){ dynLights[i].ttl-=dt; if(dynLights[i].ttl<=0) dynLights.splice(i,1); }
     for(let i=beamSegs.length-1;i>=0;i--){ beamSegs[i].ttl-=dt; if(beamSegs[i].ttl<=0) beamSegs.splice(i,1); }
+    updateFireflies(dt);                   // P3 dressing: night wanderers on the tracer seam — swept + re-pushed AFTER the decay (tail slots, <=6, never past slot 9) + <=1 dyn pool
 
     updateExposure(dt);
     if(!activeLevel && Math.hypot(playerPos.x-GATE.x,playerPos.z-GATE.z)<2.4) onBreach();
