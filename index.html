@@ -7973,7 +7973,8 @@ function updateRadMotes(dt){
 // fly grounds <=1 dyn glow at 0.35 — bottom of the sort beside the rad-mote
 // system's 2: any muzzle/lamp/blast evicts the lot. Zero GLSL.
 const FLIES=[]; const FLY_N=24, FLY_VIS=6;
-let _flyLvl=null,_flyTrees=null,_flyScan=0;
+let _flyLvl=null,_flyTrees=null,_flyScan=0,_flyPx=0,_flyPz=0;
+const _flyRun=[];   // this frame's RUNNERS (refs only, cleared each call) — bodies fast enough to punch the swarm
 function updateFireflies(dt){
   for(let i=beamSegs.length-1;i>=0;i--) if(beamSegs[i].mote) beamSegs.splice(i,1);   // own dots never live 2 frames (the ttl+0.001 carryover would double-occupy)
   const nightAmt=clamp((0.22-dayNight.k)/0.10,0,1);                    // wakes through late dusk, gone by first light
@@ -7982,6 +7983,14 @@ function updateFireflies(dt){
     _flyTrees=activeLevel?activeLevel.regions.filter(r=>r.kind===LVL.KIND.TREES):null; }   // valley: no trees — the open grass carries them
   if(_flyTrees&&!_flyTrees.length) return;                             // an authored level without a treeline keeps dark air
   const t=gameTime;
+  // SCATTER (P8): a body RUNNING through the swarm punches it dark — sprinting player (>5.5, walk 4 stays under) or any creature legging it (>2.55: chases/charges/bolts, never drifts/patrols/grazes)
+  const pvx=(playerPos.x-_flyPx)/Math.max(dt,1e-4), pvz=(playerPos.z-_flyPz)/Math.max(dt,1e-4);
+  _flyPx=playerPos.x; _flyPz=playerPos.z;
+  _flyRun.length=0;
+  if(pvx*pvx+pvz*pvz>30) _flyRun.push(playerPos);
+  for(const e of enemies){ if(_flyRun.length>=4) break;                // ≤4 runners — the check below is FLIES x runners, keep it flat
+    if(e.health>0&&e.velocity.x*e.velocity.x+e.velocity.z*e.velocity.z>6.5
+       &&Math.abs(e.position.x-playerPos.x)<32&&Math.abs(e.position.z-playerPos.z)<32) _flyRun.push(e.position); }
   if(FLIES.length<FLY_N){                                              // reseed <=1/frame, <=6 tries: dark CLEAN air on a 6-24m ring
     for(let k=0;k<6;k++){
       const a=runRng()*6.2832, r=6+runRng()*18;
@@ -7992,12 +8001,17 @@ function updateFireflies(dt){
         if(!ok) continue; }
       else if(Math.abs(z)>=50) continue;                               // the endless valley's open floor strip
       const ay=restOnSurface(x,playerPos.y+2,z), y=ay+0.3+runRng()*1.3;
-      if(mapWorldJS(x,y,z)>0.25){ FLIES.push({x,y,z,ay,ph:runRng()*6.2832,_d2:0}); break; }
+      if(mapWorldJS(x,y,z)>0.25){ FLIES.push({x,y,z,ay,ph:runRng()*6.2832,_d2:0,_sT:0,_sx:0,_sz:0}); break; }
     }
   }
   for(let i=FLIES.length-1;i>=0;i--){ const m=FLIES[i];
-    m.x+=Math.sin(t*0.43+m.ph*5.1)*0.9*dt; m.z+=Math.cos(t*0.37+m.ph*4.2)*0.9*dt;   // lazy wander
-    m.y+=Math.sin(t*0.31+m.ph*3.3)*0.5*dt;
+    if(m._sT>0){ m._sT-=dt; m.x+=m._sx*dt; m.z+=m._sz*dt; m.y+=1.1*dt; }             // startled: a dark climbing dart — no wander, no flash till it settles
+    else{
+      m.x+=Math.sin(t*0.43+m.ph*5.1)*0.9*dt; m.z+=Math.cos(t*0.37+m.ph*4.2)*0.9*dt;   // lazy wander
+      m.y+=Math.sin(t*0.31+m.ph*3.3)*0.5*dt;
+      for(const rp of _flyRun){ const sx=m.x-rp.x, sz=m.z-rp.z, sd2=sx*sx+sz*sz;
+        if(sd2<2.9){ const l=Math.sqrt(sd2)||1; m._sx=sx/l*(2.5+runRng()*2); m._sz=sz/l*(2.5+runRng()*2); m._sT=0.7+runRng()*0.5; break; } }   // brushed inside ~1.7m — bolt straight off the body
+    }
     if(m.y<m.ay+0.3) m.y=m.ay+0.3; else if(m.y>m.ay+1.6) m.y=m.ay+1.6;              // the low lantern band
     const dx=m.x-playerPos.x, dz=m.z-playerPos.z; m._d2=dx*dx+dz*dz;
     if(m._d2>900) FLIES.splice(i,1);                                   // strayed past 30m — recycle
@@ -8007,6 +8021,7 @@ function updateFireflies(dt){
   FLIES.sort((a,b)=>a._d2-b._d2);
   let used=projectiles.length+beamSegs.length, pushed=0, gm=null;      // post-sweep occupancy: never fill past slot 9
   for(let i=0;i<FLIES.length&&used+pushed<10&&pushed<FLY_VIS;i++){ const m=FLIES[i];
+    if(m._sT>0) continue;                                              // a startled fly goes DARK — the runner leaves a hole in the lantern field
     const bl=Math.max(0,Math.sin(t*1.9+m.ph*6.28))**3*nightAmt;
     if(bl<=0.08) continue;                                             // ~35% duty cycle — a dark fly holds no slot
     const s=0.25+1.05*bl;
