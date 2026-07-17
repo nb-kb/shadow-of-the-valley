@@ -10910,7 +10910,7 @@ function frame(){
     const d=(w.pos.x-playerPos.x)**2+(w.pos.y-playerPos.y)**2+(w.pos.z-playerPos.z)**2;
     if(d<cullR2){ w._d2=d; renderItemsBuf.push(w); }   // _d2 rides the wrapper (the enemy-loop idiom) — no [d,w] pair alloc per item per frame
   }
-  renderItemsBuf.sort((a,b)=>a._d2-b._d2);
+  renderItemsBuf.sort((a,b)=>(a.item.gib?1:0)-(b.item.gib?1:0)||a._d2-b._d2);   // LOOT FIRST, meat takes the remainder (the tracer law): a multi-kill's ~21 live chunks must never render fresh drops invisible for the 14-20s reap window
   const nItems=Math.min(RLIM.ITEMS,renderItemsBuf.length);
   gl.uniform1i(U.worldItemCount,nItems);
   for(let i=0;i<nItems;i++){
