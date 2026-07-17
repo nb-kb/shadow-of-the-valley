@@ -30,7 +30,7 @@ CREATURE WAVE addendum at its tail gates this wave.**
   clean Chrome load post-GPU-overload confirms the banner stays quiet; the
   *why-does-init-abort* question is still unpinned.
 
-### 2. Enemy render cap 20 — Chrome/ANGLE compile budget UNVERIFIED  ⚠ potential showstopper
+### 2. Enemy render cap 20 — Chrome/ANGLE compile budget  ⚠ MEASURED 2× on D3D11/FXC (2026-07-16); boots clean, Optimus pass still owed
 - **The one to watch.** `RLIM.ENEMIES` went 10 → 16 → **20** for the horde. Both
   per-fragment enemy loops (body SDF + shading) unroll to 20 — on the branch
   family that exists precisely because the fragment shader was already near
@@ -55,6 +55,22 @@ CREATURE WAVE addendum at its tail gates this wave.**
 - The wave's GLSL deltas (gas fog d73840b, menu-prop fix 9f5ada6) ride the
   same pass — the SHADER-BUDGET audit returned null, so PLAYTEST.md §1 doubles
   as the budget checkpoint.
+- **MEASURED (2026-07-16, creature-wave closer):** CDP-held headless probe on
+  this machine's Arc 140T through ANGLE **D3D11/FXC** — the path the historical
+  black screen lived on (the SwiftShader gate only exercises Vulkan/SPIR-V).
+  Boot ARMS at ~4.4s wall on the preview program, errBanner stays down, no
+  black screen — the paint-first + KHR-parallel-poll + prewarm chain (654881b)
+  holds. BUT the FULL variant's compile mark went **33s → 65s (1.96×)** vs
+  baseline 062daab: the creature wave's enemy-branch rework costs ~2× the ALU
+  it replaced, past the ±30% REPLACE law, and Chrome/D3D11 players now ride
+  the cheap preview roughly twice as long before the full swap. Runtime FPS on
+  iGPU/Optimus is still unmeasured (headless can't). OWNER CALL before any
+  merge toward live: accept the longer preview window, dial `RLIM.ENEMIES`
+  20→16 (cuts the unroll), or send the pose rig back for a diet — micro-trims
+  (lollX/paw/tail sins) are noise against 2× and lollX is a 3-site head twin.
+  NOTE: the wave brief's law text said "RLIM.ENEMIES stays 16" while the repo
+  baseline is 20 (pre-wave raise, in 062daab) — reconcile the law or the dial;
+  every budget estimate written against 16 undercounts the loop by 25%.
 
 ### 3. Powder/refund rework — browser verification owed  (rewritten 2026-07-15)
 - The **firing-resolver rework LANDED** just before the wave (3c2430b…bc4445e):
