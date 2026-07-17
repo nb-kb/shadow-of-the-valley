@@ -7245,6 +7245,7 @@ class Zealot{
       }else{
         this.lostSightT+=dt;
         moveTo=this.investigate;
+        if(this.alarmRole==='suppress'&&this.lostSightT<ZAI.supWin&&dist<17&&this.investigate&&this._allyRepo()) this.tryShoot(dt,dist,false,true);   // COVER FIRE (P8): a blind burst into the last-known point — only while a mate is exposed repositioning/wrapping
         if(this.lostSightT>4){ this.state=1; this.detection=0.6; }
       }
       // DUCK (P8): incoming fire or an open bolt sends ANY role to the nearest cover — the gas-fear
@@ -7508,8 +7509,13 @@ class Zealot{
     if(allies===0) return true;                        // a lone zealot has no squad to coordinate with — it fights
     return suppressing||coverCnt>2;
   }
-  tryShoot(dt,dist,seesLOS){
-    if(this._dormant||this.shootCooldown>0||this.reloadT>0||dist>17||!seesLOS) return;
+  _allyRepo(){                                        // P8: any live squadmate within 18m mid-reposition or mid-wrap — the exposure window blind cover fire buys (O(roster), read only inside the supWin)
+    for(const o of enemies){ if(o===this||o.health<=0||o._faction!==this._faction) continue;
+      if((o._repoT>0||o._healT>0)&&o.position.distanceTo(this.position)<18) return true; }
+    return false;
+  }
+  tryShoot(dt,dist,seesLOS,blind){                    // blind (P8): fire WITHOUT eyes — suppression hoses the last-known point instead of the resolved target
+    if(this._dormant||this.shootCooldown>0||this.reloadT>0||dist>17||(!seesLOS&&!blind)) return;
     const mag=toolMagazine(this.tool);
     const pool=this.res.shots.filter(sh=>!sh.pend.laser&&!sh.housed);   // continuous threads are a player verb; housed payloads fire only from their carrier's impact — zealots included
     if(!pool.length) return;
@@ -7525,9 +7531,10 @@ class Zealot{
     }
     const origin=new Vec3(this.position.x+Math.sin(this.yaw)*0.35, this.position.y+1.35, this.position.z+Math.cos(this.yaw)*0.35);
     const _t=this.target;                                 // aim at the resolved hostile (player OR the other faction) — center-mass
-    const _ax=_t?_t.x:playerPos.x, _ay=(_t&&!_t.isPlayer)?_t.y+0.95:playerPos.y+0.85, _az=_t?_t.z:playerPos.z;
+    let _ax=_t?_t.x:playerPos.x, _ay=(_t&&!_t.isPlayer)?_t.y+0.95:playerPos.y+0.85, _az=_t?_t.z:playerPos.z;
+    if(blind){ _ax=this.investigate.x+(runRng()-0.5)*1.5; _ay=this.position.y+1.1; _az=this.investigate.z+(runRng()-0.5)*1.5; }   // SUPPRESSION: jittered rounds into the last-known point — weight of fire, not aim
     const aim=new Vec3(_ax-origin.x,_ay-origin.y,_az-origin.z).normalize();
-    const base={spread:0.075,dmg:P('enemyDamage'),silenced:this.res.silenced};
+    const base={spread:blind?ZAI.supSpread:0.075,dmg:P('enemyDamage'),silenced:this.res.silenced};
     emitProjectile('enemy',origin,aim,shot,base,this);   // src: a boomerang flies home to ITS zealot
     this._coveringFire=1.5;                               // squad-visible: it is actively laying down fire (decays in update)
     this.muzzle=1;
